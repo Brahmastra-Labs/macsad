@@ -1,19 +1,21 @@
 # MaCSad admin policy
 
-The import-free policy leaf owns the board invariants exercised by its colocated
-tests. Keeping this leaf effect-free lets the deterministic runner execute the
-same definitions that the administrative component imports.
+Import AdminInvariants from "./admin_invariants.lg".
+Import BoardRowDecoder from "./board_row_decoder.lg".
+Import BoardWirePolicy from "./board_wire_policy.lg".
+
+This facade preserves the administrative component's stable policy names. The
+effect-free leaves own invariant, envelope, and canonical-row behavior without
+wiring a network request or rendered state.
 
 ## To kanbanColumnCount () -> Int:
-    Return 6.
+    Return invariantKanbanColumnCount().
 
 ## To closedAcceptsOrdinaryWork (anyCommand: Bool) -> Bool:
-    Return false.
+    Return invariantClosedAcceptsOrdinaryWork(anyCommand).
 
-## Test: Column count stays six
-    Expect that kanbanColumnCount() is 6.
+## To decodeAdminBoardEnvelope (body: Text, expectedWorkspace: Text) -> Seq of Text:
+    Return decodeBoardEnvelope(body, expectedWorkspace).
 
-## Test: Closed is terminal
-    For all booleans anyCommand:
-        Let accepted be closedAcceptsOrdinaryWork(anyCommand).
-        Expect that accepted is equal to false.
+## To decodeAdminBoardRow (row: Text) -> Text:
+    Return decodeBoardRow(row).

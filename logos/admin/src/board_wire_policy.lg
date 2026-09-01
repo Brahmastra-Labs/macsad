@@ -1,0 +1,110 @@
+# MaCSad board envelope policy
+
+This import-free leaf accepts only the bounded, versioned board envelope for
+one server-owned workspace. It returns `ok` followed by raw rows, or only
+`error`; the separate row decoder validates every canonical field before use.
+
+## To boardEnvelopeFailure () -> Seq of Text:
+    Let result be a new Seq of Text.
+    Push "error" to result.
+    Return result.
+
+## To boardEnvelopeAccepted (decoded: Seq of Text) -> Bool:
+    If length of decoded is less than 1:
+        Return false.
+    Let tag be item 1 of decoded.
+    Return tag is equal to "ok".
+
+## To boardEnvelopeBoundsAccepted (byteCount: Int, rowCount: Int) -> Bool:
+    If byteCount is less than 0:
+        Return false.
+    If rowCount is less than 0:
+        Return false.
+    If byteCount is greater than 1048576:
+        Return false.
+    If rowCount is greater than 200:
+        Return false.
+    Return true.
+
+## To boardCaseIdSeen (caseId: Text, seen: Seq of Text) -> Bool:
+    Repeat for value in seen:
+        If value is equal to caseId:
+            Return true.
+    Return false.
+
+## To decodeBoardEnvelope (body: Text, expectedWorkspace: Text) -> Seq of Text:
+    Let byteCount be length of text_bytes(body).
+    If byteCount is equal to 0:
+        Return boardEnvelopeFailure().
+    If length of text_bytes(expectedWorkspace) is equal to 36:
+        Let wireLines be lines(body).
+        Let lineCount be length of wireLines.
+        Let rowCount be lineCount - 1.
+        If boardEnvelopeBoundsAccepted(byteCount, rowCount):
+            Let headerFields be split(item 1 of wireLines, "|").
+            If length of headerFields is equal to 3:
+                If item 1 of headerFields is equal to "macsad-board/1":
+                    If item 2 of headerFields is equal to "1":
+                        If item 3 of headerFields is equal to expectedWorkspace:
+                            Let decoded be a new Seq of Text.
+                            Let seenCaseIds be a new Seq of Text.
+                            Push "ok" to decoded.
+                            Let mutable lineNumber be 2.
+                            While lineNumber is at most lineCount:
+                                Let row be item lineNumber of wireLines.
+                                Let fields be split(row, "|").
+                                If length of fields is equal to 10:
+                                    Let caseId be item 2 of fields.
+                                    If length of text_bytes(caseId) is equal to 36:
+                                        If boardCaseIdSeen(caseId, seenCaseIds):
+                                            Return boardEnvelopeFailure().
+                                        Push caseId to seenCaseIds.
+                                        Push row to decoded.
+                                        Set lineNumber to lineNumber + 1.
+                                    Otherwise:
+                                        Return boardEnvelopeFailure().
+                                Otherwise:
+                                    Return boardEnvelopeFailure().
+                            Return decoded.
+    Return boardEnvelopeFailure().
+
+## To boardEnvelopeMutationAvailable (routeKnown: Bool) -> Bool:
+    Return false.
+
+## To boardWorkspaceOverrideAvailable (requestWorkspacePresent: Bool) -> Bool:
+    Return false.
+
+## Test: Board envelope decodes bounded rows
+    Let workspace be "11111111-1111-4111-8111-111111111111".
+    Let header be "macsad-board/1|1|{workspace}".
+    Let row be "case|22222222-2222-4222-8222-222222222222|mathematics|open|normal|50|-|-|-|43617365".
+    Let decoded be decodeBoardEnvelope(header combined with "\n" combined with row, workspace).
+    Expect that boardEnvelopeAccepted(decoded) is equal to true.
+    Expect that length of decoded is 2.
+    Expect that item 2 of decoded is equal to row.
+    Let emptyBoard be decodeBoardEnvelope(header, workspace).
+    Expect that boardEnvelopeAccepted(emptyBoard) is equal to true.
+    Expect that length of emptyBoard is 1.
+
+## Test: Board envelope fixes workspace and schema
+    Let expected be "11111111-1111-4111-8111-111111111111".
+    Let other be "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".
+    Expect that boardEnvelopeAccepted(decodeBoardEnvelope("macsad-board/1|1|{other}", expected)) is equal to false.
+    Expect that boardEnvelopeAccepted(decodeBoardEnvelope("macsad-board/1|2|{expected}", expected)) is equal to false.
+    Expect that boardEnvelopeAccepted(decodeBoardEnvelope("macsad-board/1|1|{expected}", other)) is equal to false.
+    For all booleans requestWorkspacePresent:
+        Expect that boardWorkspaceOverrideAvailable(requestWorkspacePresent) is equal to false.
+
+## Test: Board envelope rejects duplicates and cap breaches
+    Let workspace be "11111111-1111-4111-8111-111111111111".
+    Let header be "macsad-board/1|1|{workspace}".
+    Let row be "case|22222222-2222-4222-8222-222222222222|mathematics|open|normal|50|-|-|-|43617365".
+    Let duplicate be header combined with "\n" combined with row combined with "\n" combined with row.
+    Expect that boardEnvelopeAccepted(decodeBoardEnvelope(duplicate, workspace)) is equal to false.
+    Expect that boardEnvelopeBoundsAccepted(1048576, 200) is equal to true.
+    Expect that boardEnvelopeBoundsAccepted(1048577, 200) is equal to false.
+    Expect that boardEnvelopeBoundsAccepted(1048576, 201) is equal to false.
+
+## Test: Board envelope exposes no mutation
+    For all booleans routeKnown:
+        Expect that boardEnvelopeMutationAvailable(routeKnown) is equal to false.

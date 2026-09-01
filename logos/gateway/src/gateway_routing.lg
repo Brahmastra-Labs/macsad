@@ -1,23 +1,20 @@
 # MaCSad gateway routing policy
 
-This import-free policy leaf classifies the safe health read and proves that the
-baseline exposes no mutation route.
+Import GatewayReadPolicy from "./gateway_read_policy.lg".
+Import SchemaProbePolicy from "./schema_probe_policy.lg".
+
+This facade gives the transport stable names for pure read-route and dependency
+policy. The HTTP adapter still exposes only health; readiness is not wired until
+the PostgreSQL adapter can supply the typed probe values.
 
 ## To isHealthRoute (method: Text, path: Text) -> Bool:
-    If method is equal to "GET":
-        Return path is equal to "/api/v1/health".
-    Return false.
+    Return classifiedHealthRead(method, path).
+
+## To isReadinessRoute (method: Text, path: Text) -> Bool:
+    Return classifiedReadinessRead(method, path).
 
 ## To mutationRouteAvailable (routeKnown: Bool) -> Bool:
-    Return false.
+    Return classifiedMutationRouteAvailable(routeKnown).
 
-## Test: Health route is classified
-    Let safeRoute be isHealthRoute("GET", "/api/v1/health").
-    Let unsafeRoute be isHealthRoute("POST", "/api/v1/health").
-    Expect that safeRoute is equal to true.
-    Expect that unsafeRoute is equal to false.
-
-## Test: Mutation routes are unavailable
-    For all booleans routeKnown:
-        Let available be mutationRouteAvailable(routeKnown).
-        Expect that available is equal to false.
+## To readinessProbeAccepted (rowCount: Int, columnCount: Int, schemaVersion: Int, serverVersionNum: Int) -> Bool:
+    Return schemaProbeAccepted(rowCount, columnCount, schemaVersion, serverVersionNum).
