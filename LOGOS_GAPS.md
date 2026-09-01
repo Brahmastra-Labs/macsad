@@ -11,37 +11,58 @@ unrelated origin. MaCSad does not install or resolve LOGOS from crates.io.
 The commit above remains the **admitted baseline** in the MaCSad toolchain
 lock. A newer LOGOS `0.10.1` snapshot is under evaluation, not promoted:
 
-- commit `cf69fb5a93ba801bedd37066170e5012104fbdf8`;
-- tree `e055d8230b43b49561399aa34101cdc02fc05366`;
+- commit `92c31ecf2ca42ab7d36f6695c550ec24b835b6d5`;
+- tree `434ce407d21dd45d54d3c99890113a2c1143011c`;
 - `Cargo.lock` SHA-256
-  `a4822e3424f1310d9367ab024b67dd75f7738e11afb253569d5c3be2250976c9`; and
+  `76807e6579a73a6771fad5693a2fe98d44afce524fb6152a6d606269f670f41d`; and
 - locally built `largo` SHA-256
-  `456b1a39222946177a83fb7fd1b746ad96312986cd77ce0cb811836725523167`.
+  `49cbeae65af7a27b47d05f0d8f357c7547a4c1583d0c19961de0051b58b4d1b7`.
 
-Current candidate evidence is mixed. The focused `closure_lock` regression is
-green, but `check_deep_regression` is 7/8 with the source-mapped deep-finding
-case red. The upstream `extension` job also failed. These failures block
-promotion, and this ledger update does not change the MaCSad toolchain lock.
+This candidate includes the full-stack LOGOS campaign at `257e9f4f`, followed
+by focused fixes for native-only TCP/Serve tier classification and documented
+reactive-control syntax. The focused `wasm_aot_lock` suite is 6/6 green and the
+extension grammar ratchet plus all four unchanged corpus snapshots are green.
+The official extension job, including its VS Code integration tests, is green
+at the candidate commit. The official workflow is not green overall: its
+archive job failed and other jobs were still running when this snapshot was
+recorded. This ledger update does not change the MaCSad toolchain lock.
 
 Focused Firebat One evidence for this unpromoted snapshot:
 
-- G2: `http_headers_lock` is 16/16 green, while a trusted, overwrite-safe
-  identity boundary is still absent.
-- G3: `postgres_wire` is 33/33 green, but `postgres_protocol` is 11/12; the
-  full SCRAM exchange fails in the VM with `Cannot divide Nothing by Int`.
-- G5: `closure_lock` is 7/7 green.
-- G8: `http_binary_parity_lock` is 2/2 green and `file_io_cross_tier` is 4/4
-  green.
-- G9: `check_deep_regression` is 7/8; the source-mapped deep finding is red.
-- G11: `json_conformance_lock` is 16/16 green, but duplicate object keys are
-  still last-write-wins and bounded typed decoding is absent.
-- G15: `http_workers` is 0/3 because of startup and timeout failures; the
-  production lifecycle contract remains open.
+- G1: correlated browser requests now expose method, body, headers, status,
+  errors, timeout, and abort substrate; the complete bounded adversarial MaCSad
+  contract and stable bound-control behavior remain open.
+- G2: request headers/query values and response-header controls exist, while a
+  trusted, overwrite-safe identity boundary is still absent.
+- G3: a real PostgreSQL 16.15 cleartext round trip and typed getters pass on
+  the interpreter and VM. The serialized live suite then found two blockers:
+  a best-effort cancel can cancel the following query, and a failed SCRAM
+  authentication reaches PostgreSQL's authentication timeout then leaves the
+  client blocked on a closed socket. The run was stopped rather than reported
+  green. Earlier cases in that run passed cleartext, decimal/UUID/enum,
+  SQLSTATE recovery, MD5, and prepared-NULL coverage.
+- G5: project-closure support has landed, but complete MaCSad promotion
+  evidence is pending.
+- G8: binary HTTP and file-I/O parity support has landed; the new exact
+  native-only census classifies only TCP and Serve as unsupported by WASM.
+- G9: deep-check mapping support has advanced; the complete candidate gate is
+  pending.
+- G11: JSON support has advanced, but duplicate object keys are still
+  last-write-wins and bounded typed decoding is absent.
+- G15: native TCP, HTTP workers, and full-stack build/serve are useful
+  substrate, while read deadlines, graceful drain, containment, and production
+  lifecycle evidence remain open.
+- G17: a real browser reproduction proves each bound-input keystroke replaces
+  the active DOM node, losing focus and preventing multi-character entry. A
+  focused same-node reconciliation regression and implementation are in local
+  TDD and are not admitted evidence yet.
 
-The upstream extension grammar job is red on four documented reactive forms.
-None of these focused results overrides the full promotion rule. Isolated
-diagnostic fixes used while locating two failures were discarded rather than
-included in this documentation-only update.
+The safe MaCSad integration boundary remains read-only: process health, exact
+schema readiness, and a fixed, bounded workspace board query. Database
+mutations remain unavailable until authentication, idempotency, expected
+versions, command/event/outbox atomicity, cancellation, and bounded failure
+behavior are proved. None of these focused results overrides the full promotion
+rule.
 
 Status legend:
 
@@ -50,6 +71,8 @@ Status legend:
   required contract remains incomplete.
 - **Upstream candidate / promotion pending** — focused upstream work exists,
   but the promotion rule at the end of this document has not passed.
+- **Local RED / fix in progress** — a reproducible defect and focused test or
+  patch exist locally, but no upstream commit or promotion evidence exists.
 - **Closed** — the complete contract passed the promotion rule and was pinned
   by MaCSad. No gap is closed in the current admitted baseline.
 
@@ -59,12 +82,12 @@ required contract.
 
 | Gap | Status |
 | --- | --- |
-| G1 | Open |
+| G1 | Partial upstream |
 | G2 | Partial upstream |
 | G3 | Partial upstream |
-| G4 | Open |
+| G4 | Partial upstream |
 | G5 | Upstream candidate / promotion pending |
-| G6 | Open |
+| G6 | Partial upstream |
 | G7 | Open |
 | G8 | Upstream candidate / promotion pending |
 | G9 | Upstream candidate / promotion pending |
@@ -75,6 +98,7 @@ required contract.
 | G14 | Open |
 | G15 | Partial upstream |
 | G16 | Open |
+| G17 | Local RED / fix in progress |
 
 The baseline intentionally uses only framework behavior demonstrated by that
 revision. This is the complete gap register found while building Sprint 001.
@@ -92,10 +116,15 @@ must disappear or narrow when LOGOS gains the capability.
 
 ## G1 — typed browser requests
 
-**Status: Open (unchanged).**
+**Status: Partial upstream.** The candidate adds correlated browser requests
+with method, body, headers, response status/body, structured error, timeout,
+and abort substrate. The complete bounded contract and stable bound-control
+behavior are not yet promoted.
 
-Current WASM-DOM exposes `fetchText(url, callback)`, which performs a GET and
-returns only response text.
+The admitted WASM-DOM baseline exposes `fetchText(url, callback)`, which
+performs a GET and returns only response text. The candidate's broader request
+surface still needs the adversarial and browser evidence below before MaCSad
+uses it for commands.
 
 Required contract:
 
@@ -148,7 +177,27 @@ Required contract:
 substrate, but it does not yet provide this typed adapter contract. TCP support
 alone does not close G3.
 
-LOGOS has no PostgreSQL client or linked local path dependency implementation.
+The admitted baseline has no PostgreSQL client. The candidate adds a native
+wire client with simple and prepared queries, text-format parameters, NULL
+masks, typed result getters, transaction/isolation calls, statement timeout,
+and cancellation. It is not yet the bounded typed adapter MaCSad requires:
+
+- transport is plain TCP with no require-SCRAM/TLS policy;
+- credential-bearing URL options are not a complete typed connection contract;
+- connection establishment, protocol frames, result rows, and pools are not
+  bounded by the MaCSad caller;
+- failed SCRAM authentication can block after the server closes the socket;
+- an out-of-band cancel can race and cancel the following query;
+- prepared inputs are parallel text/NULL sequences rather than exact typed
+  statement records; and
+- the example full-stack PostgreSQL list path uses zero-based row indexes even
+  though the public getters are one-based, while its lock test substitutes an
+  in-memory transform instead of exercising the real handler.
+
+MaCSad therefore permits only a fixed, read-only readiness/board slice with
+closed statement text, exact column/name/OID/nullability checks, strict row and
+byte caps, a fixed server-owned workspace, generic errors, and guaranteed
+connection cleanup. It does not permit browser-supplied SQL or mutations.
 
 The first adapter must be narrow and mechanical:
 
@@ -173,7 +222,9 @@ and compare decisions with LOGOS reference fixtures.
 
 ## G4 — routing and navigation
 
-**Status: Open (unchanged).**
+**Status: Partial upstream.** Typed candidate routing exists, but native
+history/location, deep-link refresh, and back/forward browser evidence remain
+open.
 
 WASM-DOM currently has no native history/location router. The baseline uses
 in-memory navigation. Before deep-linkable admin routes ship, LOGOS needs typed
@@ -222,7 +273,9 @@ before the leaf harness can be retired.
 
 ## G6 — honest cross-tier evidence
 
-**Status: Open (unchanged).**
+**Status: Partial upstream.** Candidate AOT/WASM capability classification now
+refuses native-only TCP and Serve explicitly, and focused differential coverage
+has advanced. Complete cross-tier state/DOM/browser evidence remains open.
 
 Current `--tiers all` checks that VM computation does not raise a runtime error;
 it does not compare output, state, DOM operations, AOT, or browser execution.
@@ -271,9 +324,9 @@ working native `readText` and `readBytes` bindings.
 
 ## G9 — deep-check stability
 
-**Status: Upstream candidate / promotion pending.** The current local
-`check_deep_regression` run is 7/8: the source-mapped deep-finding case remains
-red, so this candidate cannot be promoted yet.
+**Status: Upstream candidate / promotion pending.** Deep-check source mapping
+and regression coverage have advanced in the candidate. The complete candidate
+workflow and MaCSad promotion gate are not green yet.
 
 On the pinned source revision, `largo check --deep` panics in
 `apply_prelude` with the invariant that the prelude must prepend before span
@@ -402,9 +455,10 @@ Required contract:
 
 ## G15 — production server and lifecycle
 
-**Status: Partial upstream.** TCP and HTTP worker support is useful substrate,
-but readiness, drain, cancellation, bounded backpressure, and the production
-lifecycle contract remain open. TCP support alone does not close G15.
+**Status: Partial upstream.** TCP, HTTP workers, and full-stack build/serve are
+useful substrate, but readiness, drain, cancellation, read deadlines, bounded
+backpressure, static containment, and the production lifecycle contract remain
+open. TCP support alone does not close G15.
 
 `largo serve --watch` is an interpreter development facility, not production
 evidence. On the pinned revision it does not assemble/watch the same imported
@@ -458,6 +512,33 @@ Required upstream contract:
   across check, interpreter, VM, WASM-DOM, and AOT; and
 - removing the duplicate entry imports produces no diagnostic or behavior
   change after the fixed toolchain is promoted.
+
+## G17 — stable bound-control DOM reconciliation
+
+**Status: Local RED / fix in progress.** A real browser reproduction on the
+candidate proves that the first input event replaces the active input node.
+Focus and selection are lost, so sequential typing stops after one character.
+This is LOGOS host reconciliation behavior, not a Codex browser renderer issue.
+
+A focused regression must prove all of the following while a bound signal and
+the surrounding view update live:
+
+- the connected input remains the exact same DOM node across multiple input
+  events;
+- focus, selection direction/range, and horizontal scroll remain intact;
+- the bound value and derived text update after every character;
+- unrelated page/navigation state remains unchanged;
+- framework-managed handlers are refreshed without duplicate callbacks;
+- compatible text, attributes, style, and children patch in place while stale
+  children and handlers are removed; and
+- the generated host passes deterministic DOM coverage plus a real-browser
+  interaction on the admitted WASM bundle.
+
+The first real-WASM form fixture also exposed an independent candidate emitter
+failure: V8 rejected the generated module because one call expected `i32` and
+received `i64`. The reconciliation test is being kept narrow with a
+deterministic host ABI fixture; a separate exact compiler regression is required
+before the real-WASM browser gate can close G17.
 
 ## Promotion rule
 
