@@ -1,0 +1,19 @@
+# MaCSad admin policy
+
+The import-free policy leaf owns the board invariants exercised by its colocated
+tests. Keeping this leaf effect-free lets the deterministic runner execute the
+same definitions that the administrative component imports.
+
+## To kanbanColumnCount () -> Int:
+    Return 6.
+
+## To closedAcceptsOrdinaryWork (anyCommand: Bool) -> Bool:
+    Return false.
+
+## Test: Column count stays six
+    Expect that kanbanColumnCount() is 6.
+
+## Test: Closed is terminal
+    For all booleans anyCommand:
+        Let accepted be closedAcceptsOrdinaryWork(anyCommand).
+        Expect that accepted is equal to false.

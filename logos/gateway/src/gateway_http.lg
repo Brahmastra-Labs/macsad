@@ -1,0 +1,12 @@
+# MaCSad gateway HTTP adapter
+
+Import GatewayRouting from "./gateway_routing.lg".
+
+The transport adapter imports routing policy and returns one safe health read.
+There are deliberately no mutation routes. The first typed command endpoint waits
+for the complete authenticated, idempotent, transactional command boundary.
+
+## To handle (request: Request) -> Response:
+    If isHealthRoute(request's method, request's path):
+        Return plain("MaCSad gateway ready | persistence: not connected | mutations: disabled").
+    Return notFound().

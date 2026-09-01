@@ -48,8 +48,11 @@ jobs:
           set -Eeuo pipefail
           bash -n scripts/logos.sh scripts/quality-gate.sh database/apply_migrations.sh
           node --check scripts/guardrails.mjs
+          node --check scripts/logos-project.mjs
           node --check scripts/verify-logos-tests.mjs
+          node --test tests/scripts/logos-project.test.mjs
           node scripts/guardrails.mjs
+          node scripts/logos-project.mjs audit
 
       - name: Create clean least-privilege database fixture
         run: |

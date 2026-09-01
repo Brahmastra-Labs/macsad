@@ -120,8 +120,20 @@ Required contract:
 - the report exposes exact discovered test identities; and
 - fixtures prove a nested imported test change rebuilds and reruns.
 
-Until this lands, each MaCSad LOGOS application stays single-file and the wrapper
-compares exact test identities against a committed manifest.
+MaCSad does not hide this gap by invoking `largo test` on a multi-file entry. A
+credential-free module audit discovers the exact explicit import graph, rejects
+every `src/**/*.lg` file outside both the physical entry closure and logical
+application graph, and rejects tests outside registered import-free leaves. The
+private-toolchain gate runs `largo check` against the real assembled production
+entry, then hard-links each exact test-bearing leaf source as the entry of an
+ephemeral zero-skip project. It requires the committed names, nonzero count,
+zero failures/skips, finite properties, and proved properties. No source is
+copied, flattened, or rewritten to manufacture evidence.
+
+This repository scaffold prevents imported tests from silently disappearing;
+it does not close the framework gap. `largo test`, watch mode, runtime smoke,
+and every compiler tier must still consume and report one native module closure
+before the leaf harness can be retired.
 
 ## G6 — honest cross-tier evidence
 
@@ -299,6 +311,38 @@ Required contract:
 
 Sprint 001's LOGOS gateway exposes only an honest read-only health response on
 loopback. It does not claim production CRUD.
+
+## G16 — nested Component scope attribution
+
+The pinned scope checker can attribute a function call inside an imported
+Component body to the entry `main.lg` rather than the Component's defining
+module. A valid local chain such as entry → application Component → policy can
+therefore fail with a claim that the policy function is not imported by the
+entry, even though the Component imports it correctly.
+
+MaCSad preserves the proper local dependency edges and temporarily requires the
+entry to import every non-entry module exactly once. The module audit treats
+these entry edges as a named `pinned-transitive-scope-workaround`, then
+independently traverses from the registered logical root. A module reachable
+only from the redundant entry closure fails as decorative/orphan code. This is
+compiler compatibility scaffolding, not flattened architecture.
+
+The redundant entry edge to each transitive policy/routing leaf currently emits
+an `unused-import` warning. The module manifest allowlists only the exact warning
+code, severity, entry file, and import-alias message observed for that required
+edge. A missing, additional, moved, renamed, or reworded diagnostic fails the
+gate; warnings are recorded compatibility evidence, not globally suppressed.
+
+Required upstream contract:
+
+- scope attribution uses each assembled source segment's defining module,
+  including nested Component Views, event bodies, signals, and interpolations;
+- a transitive local import succeeds without an entry-level duplicate;
+- a genuine transitive scope leak still fails at the correct source file;
+- component, function, type, selective-import, and private-name fixtures agree
+  across check, interpreter, VM, WASM-DOM, and AOT; and
+- removing the duplicate entry imports produces no diagnostic or behavior
+  change after the fixed toolchain is promoted.
 
 ## Promotion rule
 

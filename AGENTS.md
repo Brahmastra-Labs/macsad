@@ -108,8 +108,25 @@ transport or PostgreSQL adapter required for honest CRUD. Do not bypass this gap
 with raw JavaScript, GET mutations, or prose-only claims. The acceptance contract
 is in `LOGOS_GAPS.md`.
 
-Keep each LOGOS application single-entry-file until the upstream serve/test
-module-assembly gaps are fixed and promoted into a new exact toolchain lock.
+Each LOGOS application is an explicit local import graph rooted at the exact
+entry in `Largo.toml`. Every `src/**/*.lg` file must be reachable both through
+the physical entry closure and through the logical application root registered
+in `tests/logos-module-manifest.json`; orphan, decorative, cyclic, symlinked,
+bare-imported, registry-backed, and Markdown-link-imported modules fail the
+gate.
+
+The pinned scope checker currently misattributes nested Component calls to the
+entry module. Until the focused upstream fix is promoted, each entry explicitly
+imports the full physical module closure in addition to the proper local import
+edges. The manifest labels this compatibility lock. Do not mistake those
+redundant entry edges for domain architecture or remove the local edges.
+
+The pinned `largo test` reads only its selected entry and does not assemble
+imports. Put executable properties in registered, import-free leaf modules with
+no `## Main`. The repository test harness hard-links each exact leaf source as
+a temporary entry, checks its exact test names/count/properties/proofs, and
+rejects all tests found outside registered leaves. Never copy, flatten, or
+rewrite product source to manufacture test evidence.
 
 ## Definition of done
 

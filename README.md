@@ -1,5 +1,8 @@
 # MaCSad
 
+Engineering changes follow the exact local-module, test-leaf, and no-false-green
+workflow in [CONTRIBUTING.md](CONTRIBUTING.md).
+
 **MaCSad — Mathematics and Computer Science Auto-Discovery** is a controlled
 research framework for producing reproducible, inspectable progress on bounded
 mathematics and computer-science problems.
@@ -34,6 +37,38 @@ The dependency direction is deliberate: LOGOS owns product views and domain
 decisions; narrow hosts provide mechanical I/O; PostgreSQL owns durable truth.
 Generated bundles, credentials, registry-resolved LOGOS packages, and
 developer-specific absolute paths do not belong in Git.
+
+## LOGOS source map
+
+The frontend code is ordinary, reviewable `.lg` source under `logos/`:
+
+```text
+logos/
+├── admin/src/
+│   ├── main.lg                # browser entry and mount
+│   ├── admin_app.lg           # navigation and application composition
+│   ├── admin_header.lg        # private control-plane masthead
+│   ├── board_workspace.lg     # board, health read, and local draft state
+│   ├── read_only_panels.lg    # organization, research, operations panels
+│   └── admin_policy.lg        # tested Kanban/terminal-state rules
+├── public-site/src/
+│   ├── main.lg                # browser entry and mount
+│   ├── public_app.lg          # public composition root
+│   ├── public_masthead.lg     # public identity and evidence seal
+│   ├── public_hero.lg         # publication empty-state hero
+│   ├── research_ledger.lg     # filter state and evidence-oriented record UI
+│   ├── public_closing.lg      # principles and footer components
+│   └── publication_policy.lg  # tested fail-closed visibility rule
+└── gateway/src/
+    ├── main.lg                # loopback listener
+    ├── gateway_http.lg        # LOGOS request handler
+    └── gateway_routing.lg     # tested read-only route policy
+```
+
+`main.lg` files own process entry only. Application files compose components;
+state-owning components keep state beside the view; import-free policy leaves
+hold executable rules and their exact tests. The module manifest rejects any
+`.lg` file that is not part of the real production import graph.
 
 ## Build from the local LOGOS source
 

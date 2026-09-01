@@ -40,17 +40,19 @@ cd -- "${REPOSITORY_ROOT}"
 
 printf '== Governance and source guardrails ==\n'
 node --check scripts/guardrails.mjs
+node --check scripts/logos-project.mjs
 node --check scripts/verify-logos-tests.mjs
+node --test tests/scripts/logos-project.test.mjs
 node scripts/guardrails.mjs
+node scripts/logos-project.mjs audit
 
 printf '== Mechanical development adapter tests ==\n'
 python3 -m unittest discover --start-directory host_adapters/tests --pattern 'test_*.py'
 
-readonly -a LOGOS_PROJECTS=(
-  'logos/admin'
-  'logos/public-site'
-  'logos/gateway'
-)
+logos_project_output="$(node scripts/logos-project.mjs projects)"
+[[ -n "${logos_project_output}" ]] || die 'module manifest returned no LOGOS projects'
+mapfile -t LOGOS_PROJECTS <<<"${logos_project_output}"
+readonly LOGOS_PROJECTS
 
 printf '== LOGOS format and supported type checks ==\n'
 for project in "${LOGOS_PROJECTS[@]}"; do
@@ -59,7 +61,6 @@ for project in "${LOGOS_PROJECTS[@]}"; do
   (
     cd -- "${project}"
     "${REPOSITORY_ROOT}/scripts/logos.sh" fmt --check --color never
-    "${REPOSITORY_ROOT}/scripts/logos.sh" check --json --color never
   )
 done
 
@@ -87,7 +88,11 @@ assert_dom_bundle_shape() {
 }
 
 printf '== Deterministic WASM-DOM bundles ==\n'
-for project in 'logos/admin' 'logos/public-site'; do
+dom_project_output="$(node scripts/logos-project.mjs dom-projects)"
+[[ -n "${dom_project_output}" ]] || die 'module manifest returned no DOM projects'
+mapfile -t DOM_PROJECTS <<<"${dom_project_output}"
+readonly DOM_PROJECTS
+for project in "${DOM_PROJECTS[@]}"; do
   project_name="${project##*/}"
   first_output="${TEMP_ROOT}/${project_name}-first"
   second_output="${TEMP_ROOT}/${project_name}-second"

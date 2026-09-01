@@ -1,0 +1,23 @@
+# MaCSad gateway routing policy
+
+This import-free policy leaf classifies the safe health read and proves that the
+baseline exposes no mutation route.
+
+## To isHealthRoute (method: Text, path: Text) -> Bool:
+    If method is equal to "GET":
+        Return path is equal to "/api/v1/health".
+    Return false.
+
+## To mutationRouteAvailable (routeKnown: Bool) -> Bool:
+    Return false.
+
+## Test: Health route is classified
+    Let safeRoute be isHealthRoute("GET", "/api/v1/health").
+    Let unsafeRoute be isHealthRoute("POST", "/api/v1/health").
+    Expect that safeRoute is equal to true.
+    Expect that unsafeRoute is equal to false.
+
+## Test: Mutation routes are unavailable
+    For all booleans routeKnown:
+        Let available be mutationRouteAvailable(routeKnown).
+        Expect that available is equal to false.

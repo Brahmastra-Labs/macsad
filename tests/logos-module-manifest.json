@@ -1,0 +1,89 @@
+{
+  "$schema": "https://macsad.invalid/schemas/logos-module-manifest-v1.json",
+  "schema": "macsad-logos-module-manifest/1",
+  "seed": 7,
+  "tiers": "all",
+  "proveFiniteProperties": true,
+  "projects": [
+    {
+      "name": "admin",
+      "directory": "logos/admin",
+      "entry": "src/main.lg",
+      "logicalRoot": "src/admin_app.lg",
+      "entryClosureLock": "pinned-transitive-scope-workaround",
+      "allowedDiagnostics": [
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import AdminPolicy` is unused — no name from it is referenced here."
+        }
+      ],
+      "domBundle": true,
+      "testLeaves": [
+        {
+          "path": "src/admin_policy.lg",
+          "expectedTests": [
+            "Column count stays six",
+            "Closed is terminal"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        }
+      ]
+    },
+    {
+      "name": "public-site",
+      "directory": "logos/public-site",
+      "entry": "src/main.lg",
+      "logicalRoot": "src/public_app.lg",
+      "entryClosureLock": "pinned-transitive-scope-workaround",
+      "allowedDiagnostics": [
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import PublicationPolicy` is unused — no name from it is referenced here."
+        }
+      ],
+      "domBundle": true,
+      "testLeaves": [
+        {
+          "path": "src/publication_policy.lg",
+          "expectedTests": [
+            "Publication visibility is fail closed"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        }
+      ]
+    },
+    {
+      "name": "gateway",
+      "directory": "logos/gateway",
+      "entry": "src/main.lg",
+      "logicalRoot": "src/gateway_http.lg",
+      "entryClosureLock": "pinned-transitive-scope-workaround",
+      "allowedDiagnostics": [
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import GatewayRouting` is unused — no name from it is referenced here."
+        }
+      ],
+      "domBundle": false,
+      "testLeaves": [
+        {
+          "path": "src/gateway_routing.lg",
+          "expectedTests": [
+            "Health route is classified",
+            "Mutation routes are unavailable"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        }
+      ]
+    }
+  ]
+}

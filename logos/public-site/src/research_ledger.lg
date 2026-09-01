@@ -1,0 +1,64 @@
+# MaCSad public research ledger
+
+Import PublicationPolicy from "./publication_policy.lg".
+
+The interactive ledger owns topic selection and imports the fail-closed rule that
+decides whether a publication record may be presented as reviewed output.
+
+## Component ResearchLedger:
+    Let topic be a signal "All".
+    Let publicationReady be publicationVisible(false, false).
+    Let pipelineSteps be ["Question", "Attempt", "Evidence", "Review", "Publication"].
+    View:
+        css ".section-head { display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap; gap: 24px; margin-bottom: 24px; } .section-head > * { flex: 1 1 300px; } .section-head h2 { margin: 0; color: #123342; font: 730 clamp(28px,4vw,42px)/1.05 Georgia, serif; letter-spacing: -.025em; } .section-head p { max-width: 520px; margin: 0; color: #69767c; font-size: 13px; line-height: 1.6; } .filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 24px 0; } .filter { padding: 8px 12px; color: #34505c; background: transparent; border: 1px solid #c9c6bc; border-radius: 999px; font: 700 11px/1 inherit; cursor: pointer; } .filter:hover { color: #f8f4e8; background: #153c4b; border-color: #153c4b; } .feature-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(280px,100%),1fr)); gap: 16px; } .research-card { padding: clamp(24px,4vw,42px); background: #fffdf8; border: 1px solid #d7d2c6; border-radius: 17px; box-shadow: 0 14px 42px rgba(16,44,59,.06); } .record-line { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 25px; } .badge { padding: 6px 8px; color: #12687a; background: #e4f2f3; border-radius: 6px; font: 800 9px/1 ui-monospace, monospace; letter-spacing: .1em; text-transform: uppercase; } .badge-muted { color: #6e685c; background: #eee9dd; } .research-card h3 { max-width: 760px; margin: 0; color: #183440; font: 720 clamp(25px,3.5vw,42px)/1.12 Georgia, serif; letter-spacing: -.025em; } .abstract { margin: 20px 0 0; color: #5c696f; font-size: 14px; line-height: 1.75; } .evidence { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 10px; margin-top: 30px; } .evidence-item { padding: 14px; background: #f2efe7; border-radius: 10px; } .evidence-item span { display: block; color: #758087; font-size: 10px; } .evidence-item strong { display: block; margin-top: 6px; color: #263d48; font-size: 12px; } .notice { margin-top: 25px; padding: 15px; color: #5d5648; background: #faf4df; border-left: 3px solid #d9a72e; font-size: 12px; line-height: 1.6; } .rail { padding: 24px; color: #eaf0ef; background: #173d4b; border-radius: 17px; } .rail h3 { margin: 0 0 18px; font: 700 18px/1.2 Georgia, serif; } .pipeline { margin: 0; padding: 0; list-style: none; } .pipeline li { display: grid; grid-template-columns: 25px 1fr; gap: 10px; align-items: center; padding: 11px 0; color: #b9cbd1; border-bottom: 1px solid rgba(255,255,255,.1); font-size: 12px; } .step { width: 22px; height: 22px; display: grid; place-items: center; color: #d8ff72; border: 1px solid rgba(216,255,114,.42); border-radius: 999px; font: 700 9px/1 ui-monospace, monospace; } button:focus-visible { outline: 3px solid #16758a; outline-offset: 3px; }"
+        div [class="section-head"]:
+            h2: "The research ledger"
+            p: "Browse reviewed outputs without inheriting the private control plane. Every future record will cite its source snapshot, evidence, verifier, and publication decision."
+        div [class="filters"]:
+            button [class="filter"]:
+                on click:
+                    Set topic to "All".
+                span: "All"
+            button [class="filter"]:
+                on click:
+                    Set topic to "Mathematics".
+                span: "Mathematics"
+            button [class="filter"]:
+                on click:
+                    Set topic to "Computer science".
+                span: "Computer science"
+            button [class="filter"]:
+                on click:
+                    Set topic to "Methods".
+                span: "Methods"
+        div [class="feature-grid"]:
+            article [class="research-card"]:
+                div [class="record-line"]:
+                    span [class="badge"]: "Selected: {topic}"
+                    when publicationReady:
+                        span [class="badge badge-muted"]: "Reviewed record"
+                    otherwise:
+                        span [class="badge badge-muted"]: "Template record"
+                h3: "A publication slot reserved for the first reviewed result."
+                p [class="abstract"]: "When the sealed batch is enabled, this card will be generated from approved publication records—not from live administrative data and never directly from an agent chat."
+                div [class="evidence"]:
+                    div [class="evidence-item"]:
+                        span: "Source snapshot"
+                        strong: "Required"
+                    div [class="evidence-item"]:
+                        span: "Evidence bundle"
+                        strong: "Required"
+                    div [class="evidence-item"]:
+                        span: "Independent review"
+                        strong: "Required"
+                    div [class="evidence-item"]:
+                        span: "Decision record"
+                        strong: "Required"
+                div [class="notice"]: "Example only · this template is not a scientific claim and contains no generated research output."
+            aside [class="rail"]:
+                h3: "Path to publication"
+                ol [class="pipeline"]:
+                    for each step in pipelineSteps:
+                        li:
+                            span [class="step"]: "·"
+                            span: "{step}"

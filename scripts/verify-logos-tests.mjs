@@ -1,21 +1,25 @@
 #!/usr/bin/env node
 
 import {
-  copyFileSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
+  realpathSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import {
+  inspectRegisteredProjects,
+  loadModuleManifest,
+  portablePath,
+} from "./logos-project.mjs";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(scriptDirectory, "..");
-const manifestPath = join(repositoryRoot, "tests", "logos-test-manifest.json");
 const logosWrapper = join(repositoryRoot, "scripts", "logos.sh");
 
 function fail(message) {
@@ -37,175 +41,217 @@ function sortedUniqueStrings(values, label) {
     fail(`${label} must contain nonempty strings`);
   }
   const sorted = [...values].sort((left, right) => left.localeCompare(right, "en"));
-  if (new Set(sorted).size !== sorted.length) {
-    fail(`${label} contains a duplicate`);
-  }
+  if (new Set(sorted).size !== sorted.length) fail(`${label} contains a duplicate`);
   return sorted;
 }
 
-let manifest;
-try {
-  manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-} catch (error) {
-  fail(`cannot read ${manifestPath}: ${error.message}`);
-}
-
-if (manifest.schema !== "macsad-logos-test-manifest/1") {
-  fail("unsupported LOGOS test manifest schema");
-}
-requireInteger(manifest.seed, "manifest.seed");
-if (manifest.seed !== 7 || manifest.tiers !== "all" || manifest.proveFiniteProperties !== true) {
-  fail("test manifest must require seed 7, all tiers, and finite-property proof mode");
-}
-if (!Array.isArray(manifest.projects) || manifest.projects.length === 0) {
-  fail("test manifest has no projects");
-}
-
-const projectNames = new Set();
-for (const project of manifest.projects) {
-  if (!project || typeof project !== "object" || Array.isArray(project)) {
-    fail("each project manifest entry must be an object");
-  }
-  if (typeof project.name !== "string" || !/^[a-z][a-z0-9-]*$/.test(project.name)) {
-    fail("each project needs a stable lowercase name");
-  }
-  if (projectNames.has(project.name)) {
-    fail(`duplicate project name: ${project.name}`);
-  }
-  projectNames.add(project.name);
-  if (typeof project.directory !== "string" || !/^logos\/[a-z][a-z0-9-]*$/.test(project.directory)) {
-    fail(`${project.name}.directory must be one direct child of logos/`);
-  }
-  const expectedNames = sortedUniqueStrings(
-    project.expectedTests,
-    `${project.name}.expectedTests`,
-  );
-  requireInteger(project.minimumProperties, `${project.name}.minimumProperties`);
-  requireInteger(project.minimumProven, `${project.name}.minimumProven`);
-  if (typeof project.domBundle !== "boolean") {
-    fail(`${project.name}.domBundle must be a boolean`);
-  }
-
-  const projectDirectory = join(repositoryRoot, project.directory);
-  let testProjectDirectory = projectDirectory;
-  let temporaryProject = null;
-  if (project.testMode !== undefined && project.testMode !== "strip-server-main") {
-    fail(`${project.name}.testMode is unsupported`);
-  }
-  if (project.testMode === "strip-server-main") {
-    const sourcePath = join(projectDirectory, "src", "main.lg");
-    const source = readFileSync(sourcePath, "utf8");
-    const serverMain = /\n## Main\r?\nServe on port 18081 with handle\.\s*$/;
-    if (!serverMain.test(source) || (source.match(/## Main/g) ?? []).length !== 1) {
-      fail(`${project.name}: test wrapper expected exactly the reviewed port-18081 server Main`);
-    }
-    temporaryProject = mkdtempSync(join(tmpdir(), "macsad-logos-tests-"));
-    mkdirSync(join(temporaryProject, "src"), { recursive: true });
-    copyFileSync(join(projectDirectory, "Largo.toml"), join(temporaryProject, "Largo.toml"));
-    writeFileSync(join(temporaryProject, "src", "main.lg"), source.replace(serverMain, "\n"));
-    testProjectDirectory = temporaryProject;
-  }
-  const result = spawnSync(
-    "bash",
-    [
-      logosWrapper,
-      "test",
-      "--seed",
-      String(manifest.seed),
-      "--format",
-      "json",
-      "--prove",
-      "--tiers",
-      manifest.tiers,
-      "--color",
-      "never",
-    ],
-    {
-      cwd: testProjectDirectory,
-      env: process.env,
-      encoding: "utf8",
-      maxBuffer: 16 * 1024 * 1024,
-    },
-  );
-  if (temporaryProject !== null) {
-    rmSync(temporaryProject, { recursive: true, force: true });
-  }
-
-  if (result.error) {
-    fail(`${project.name}: could not start largo: ${result.error.message}`);
-  }
-  if (result.status !== 0) {
+function runLogos(projectName, cwd, arguments_) {
+  const result = spawnSync("bash", [logosWrapper, ...arguments_], {
+    cwd,
+    env: process.env,
+    encoding: "utf8",
+    maxBuffer: 16 * 1024 * 1024,
+  });
+  if (result.error) fail(`${projectName}: could not start largo: ${result.error.message}`);
+  if (result.status !== 0 || result.signal !== null) {
     if (result.stdout) process.stderr.write(result.stdout);
     if (result.stderr) process.stderr.write(result.stderr);
-    fail(`${project.name}: largo test exited ${String(result.status)}`);
-  }
-  if (result.signal !== null) {
-    fail(`${project.name}: largo test terminated on ${result.signal}`);
-  }
-
-  let report;
-  try {
-    report = JSON.parse(result.stdout);
-  } catch (error) {
-    if (result.stderr) process.stderr.write(result.stderr);
-    fail(`${project.name}: stdout was not one JSON report: ${error.message}`);
-  }
-
-  requireInteger(report.seed, `${project.name}.report.seed`);
-  requireInteger(report.passed, `${project.name}.report.passed`);
-  requireInteger(report.failed, `${project.name}.report.failed`);
-  requireInteger(report.skipped, `${project.name}.report.skipped`);
-  requireInteger(report.properties, `${project.name}.report.properties`);
-  requireInteger(report.proven, `${project.name}.report.proven`);
-  if (report.seed !== manifest.seed) {
-    fail(`${project.name}: runner reported seed ${report.seed}, expected ${manifest.seed}`);
-  }
-  if (!Array.isArray(report.outcomes) || report.outcomes.length === 0) {
-    fail(`${project.name}: zero tests were discovered`);
-  }
-
-  const actualNames = sortedUniqueStrings(
-    report.outcomes.map((outcome) => outcome?.name),
-    `${project.name}.reported test names`,
-  );
-  if (JSON.stringify(actualNames) !== JSON.stringify(expectedNames)) {
     fail(
-      `${project.name}: test identity drift; expected ${JSON.stringify(expectedNames)}, received ${JSON.stringify(actualNames)}`,
+      `${projectName}: largo exited ${String(result.status)} with signal ${String(result.signal)}`,
     );
+  }
+  return result;
+}
+
+let manifest;
+let projects;
+try {
+  manifest = loadModuleManifest();
+  projects = inspectRegisteredProjects(manifest, repositoryRoot);
+} catch (error) {
+  fail(error.message);
+}
+
+for (const project of projects) {
+  const projectName = project.registration.name;
+  const check = runLogos(projectName, project.projectDirectory, [
+    "check",
+    "--quiet",
+    "--json",
+    "--color",
+    "never",
+  ]);
+  let checkReport;
+  try {
+    checkReport = JSON.parse(check.stdout);
+  } catch (error) {
+    if (check.stderr) process.stderr.write(check.stderr);
+    fail(`${projectName}: check stdout was not one JSON envelope: ${error.message}`);
   }
   if (
-    report.passed !== expectedNames.length ||
-    report.failed !== 0 ||
-    report.skipped !== 0 ||
-    report.outcomes.length !== expectedNames.length
+    checkReport.schema !== "logos-check/1" ||
+    checkReport.ok !== true ||
+    !Array.isArray(checkReport.diagnostics)
   ) {
+    fail(`${projectName}: malformed or non-green logos-check/1 envelope`);
+  }
+  const actualDiagnostics = checkReport.diagnostics.map((diagnostic) => {
+    if (
+      !diagnostic ||
+      typeof diagnostic !== "object" ||
+      typeof diagnostic.file !== "string" ||
+      typeof diagnostic.code !== "string" ||
+      typeof diagnostic.severity !== "string" ||
+      typeof diagnostic.message !== "string"
+    ) {
+      fail(`${projectName}: malformed compiler diagnostic`);
+    }
+    const diagnosticPath = resolve(project.projectDirectory, diagnostic.file);
+    const sourcePath = portablePath(relative(project.projectDirectory, diagnosticPath));
+    if (sourcePath === ".." || sourcePath.startsWith("../")) {
+      fail(`${projectName}: compiler diagnostic escaped the project: ${diagnostic.file}`);
+    }
+    return {
+      code: diagnostic.code,
+      severity: diagnostic.severity,
+      file: sourcePath,
+      message: diagnostic.message,
+    };
+  });
+  const identity = (diagnostic) =>
+    `${diagnostic.file}\0${diagnostic.code}\0${diagnostic.severity}\0${diagnostic.message}`;
+  actualDiagnostics.sort((left, right) => identity(left).localeCompare(identity(right), "en"));
+  const expectedDiagnostics = project.registration.allowedDiagnostics
+    .map((diagnostic) => ({ ...diagnostic }))
+    .sort((left, right) => identity(left).localeCompare(identity(right), "en"));
+  if (JSON.stringify(actualDiagnostics) !== JSON.stringify(expectedDiagnostics)) {
     fail(
-      `${project.name}: expected ${expectedNames.length} passed, 0 failed, 0 skipped; received ${report.passed} passed, ${report.failed} failed, ${report.skipped} skipped`,
+      `${projectName}: compiler diagnostic identity drift; expected ${JSON.stringify(expectedDiagnostics)}, received ${JSON.stringify(actualDiagnostics)}`,
     );
   }
-  for (const outcome of report.outcomes) {
-    if (
-      outcome.verdict !== "passed" ||
-      !Array.isArray(outcome.failures) ||
-      outcome.failures.length !== 0 ||
-      outcome.skip_reason !== null ||
-      !Number.isSafeInteger(outcome.ops) ||
-      outcome.ops < 0
-    ) {
-      fail(`${project.name}: malformed or non-passing outcome for ${String(outcome.name)}`);
-    }
+  if (check.stderr.trim().length !== 0) {
+    fail(`${projectName}: compiler wrote unexpected diagnostics to stderr: ${check.stderr.trim()}`);
   }
-  if (report.properties < project.minimumProperties) {
-    fail(`${project.name}: expected at least ${project.minimumProperties} exercised properties`);
-  }
-  if (report.proven < project.minimumProven) {
-    fail(`${project.name}: expected at least ${project.minimumProven} proved properties`);
-  }
-  if (report.proven > report.properties) {
-    fail(`${project.name}: proved property count exceeds exercised property count`);
-  }
-
   process.stdout.write(
-    `LOGOS tests: ${project.name}: ${report.passed} passed, 0 failed, 0 skipped, ${report.proven} proved\n`,
+    `LOGOS closure: ${projectName}: ${project.closure.length} reachable module(s), ${actualDiagnostics.length} exact compatibility warning(s), sha256 ${project.closureDigest}\n`,
   );
+
+  for (const suite of project.suites) {
+    const suiteLabel = `${projectName}:${suite.path}`;
+    const targetRoot = join(project.projectDirectory, "target");
+    mkdirSync(targetRoot, { recursive: true });
+    const canonicalTarget = realpathSync(targetRoot);
+    const temporaryProject = mkdtempSync(join(canonicalTarget, "macsad-logos-tests-"));
+    const canonicalTemporary = realpathSync(temporaryProject);
+    if (!canonicalTemporary.startsWith(`${canonicalTarget}${sep}macsad-logos-tests-`)) {
+      fail(`${suiteLabel}: refusing unexpected temporary project path`);
+    }
+
+    let result;
+    try {
+      const temporarySourceDirectory = join(canonicalTemporary, "src");
+      mkdirSync(temporarySourceDirectory);
+      const linkedEntry = join(temporarySourceDirectory, "main.lg");
+      linkSync(suite.absolutePath, linkedEntry);
+      const originalStats = statSync(suite.absolutePath);
+      const linkedStats = statSync(linkedEntry);
+      if (
+        originalStats.dev !== linkedStats.dev ||
+        originalStats.ino !== linkedStats.ino ||
+        originalStats.size !== linkedStats.size
+      ) {
+        fail(`${suiteLabel}: temporary test entry is not the exact hard-linked source file`);
+      }
+      writeFileSync(
+        join(canonicalTemporary, "Largo.toml"),
+        `[package]\nname = "macsad_${projectName.replaceAll("-", "_")}_leaf_test"\nversion = "0.1.0"\nauthors = []\nentry = "src/main.lg"\n\n[test]\nskip_budget = 0\n`,
+        { encoding: "utf8", flag: "wx" },
+      );
+      result = runLogos(suiteLabel, canonicalTemporary, [
+        "test",
+        "--quiet",
+        "--seed",
+        String(manifest.seed),
+        "--format",
+        "json",
+        "--prove",
+        "--tiers",
+        manifest.tiers,
+        "--color",
+        "never",
+      ]);
+    } finally {
+      if (!canonicalTemporary.startsWith(`${canonicalTarget}${sep}macsad-logos-tests-`)) {
+        fail(`${suiteLabel}: refusing to remove unexpected temporary project path`);
+      }
+      rmSync(canonicalTemporary, { recursive: true });
+    }
+
+    let report;
+    try {
+      report = JSON.parse(result.stdout);
+    } catch (error) {
+      if (result.stderr) process.stderr.write(result.stderr);
+      fail(`${suiteLabel}: stdout was not one JSON report: ${error.message}`);
+    }
+
+    requireInteger(report.seed, `${suiteLabel}.report.seed`);
+    requireInteger(report.passed, `${suiteLabel}.report.passed`);
+    requireInteger(report.failed, `${suiteLabel}.report.failed`);
+    requireInteger(report.skipped, `${suiteLabel}.report.skipped`);
+    requireInteger(report.properties, `${suiteLabel}.report.properties`);
+    requireInteger(report.proven, `${suiteLabel}.report.proven`);
+    if (report.seed !== manifest.seed) {
+      fail(`${suiteLabel}: runner reported seed ${report.seed}, expected ${manifest.seed}`);
+    }
+    if (!Array.isArray(report.outcomes) || report.outcomes.length === 0) {
+      fail(`${suiteLabel}: zero tests were discovered`);
+    }
+
+    const expectedNames = sortedUniqueStrings(suite.expectedTests, `${suiteLabel}.expectedTests`);
+    const actualNames = sortedUniqueStrings(
+      report.outcomes.map((outcome) => outcome?.name),
+      `${suiteLabel}.reported test names`,
+    );
+    if (JSON.stringify(actualNames) !== JSON.stringify(expectedNames)) {
+      fail(
+        `${suiteLabel}: test identity drift; expected ${JSON.stringify(expectedNames)}, received ${JSON.stringify(actualNames)}`,
+      );
+    }
+    if (
+      report.passed !== expectedNames.length ||
+      report.failed !== 0 ||
+      report.skipped !== 0 ||
+      report.outcomes.length !== expectedNames.length
+    ) {
+      fail(
+        `${suiteLabel}: expected ${expectedNames.length} passed, 0 failed, 0 skipped; received ${report.passed} passed, ${report.failed} failed, ${report.skipped} skipped`,
+      );
+    }
+    for (const outcome of report.outcomes) {
+      if (
+        outcome.verdict !== "passed" ||
+        !Array.isArray(outcome.failures) ||
+        outcome.failures.length !== 0 ||
+        outcome.skip_reason !== null ||
+        !Number.isSafeInteger(outcome.ops) ||
+        outcome.ops < 0
+      ) {
+        fail(`${suiteLabel}: malformed or non-passing outcome for ${String(outcome.name)}`);
+      }
+    }
+    if (report.properties < suite.minimumProperties) {
+      fail(`${suiteLabel}: expected at least ${suite.minimumProperties} exercised properties`);
+    }
+    if (report.proven < suite.minimumProven) {
+      fail(`${suiteLabel}: expected at least ${suite.minimumProven} proved properties`);
+    }
+    if (report.proven > report.properties) {
+      fail(`${suiteLabel}: proved property count exceeds exercised property count`);
+    }
+
+    process.stdout.write(
+      `LOGOS leaf tests: ${suiteLabel}: ${report.passed} passed, 0 failed, 0 skipped, ${report.proven} proved\n`,
+    );
+  }
 }

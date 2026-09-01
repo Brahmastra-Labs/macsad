@@ -8,6 +8,11 @@ import {
 } from "node:fs";
 import { dirname, extname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  defaultModuleManifestPath,
+  inspectRegisteredProjects,
+  loadModuleManifest,
+} from "./logos-project.mjs";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(scriptDirectory, "..");
@@ -51,9 +56,12 @@ const requiredFiles = [
   ".editorconfig",
   ".gitattributes",
   "AGENTS.md",
+  "CONTRIBUTING.md",
   "LOGOS_GAPS.md",
   ".macsad/toolchains/logos.lock.toml",
-  "tests/logos-test-manifest.json",
+  "tests/logos-module-manifest.json",
+  "scripts/logos.sh",
+  "scripts/logos-project.mjs",
   "database/apply_migrations.sh",
   "database/verify.sql",
 ];
@@ -82,56 +90,30 @@ if (/default_workspace\s*=/.test(lock) || /(?:[A-Za-z]:\\Users\\|\/home\/[^/]+\/
   fail(lockPath, "toolchain lock contains a developer-specific absolute path");
 }
 
-const manifestPath = join(repositoryRoot, "tests", "logos-test-manifest.json");
-let testManifest;
-try {
-  testManifest = JSON.parse(read(manifestPath));
-} catch (error) {
-  fail(manifestPath, `invalid JSON: ${error.message}`);
+const logosWrapperPath = join(repositoryRoot, "scripts", "logos.sh");
+const logosWrapper = read(logosWrapperPath);
+for (const [label, pattern] of [
+  ["required LOGOS_WORKSPACE", /\[\[ -n "\$\{LOGOS_WORKSPACE:-\}" \]\]/],
+  ["exact HEAD commit", /git -C "\$\{logos_workspace\}" rev-parse --verify HEAD/],
+  ["exact HEAD tree", /git -C "\$\{logos_workspace\}" rev-parse --verify 'HEAD\^\{tree\}'/],
+  ["clean tracked source", /git -C "\$\{logos_workspace\}" status --porcelain --untracked-files=no/],
+  ["exact origin identity", /git -C "\$\{logos_workspace\}" remote get-url origin/],
+  ["Cargo lock digest", /sha256sum -- "\$\{cargo_lock\}"/],
+  ["largo binary digest", /sha256sum -- "\$\{largo_binary\}"/],
+  ["largo version", /"\$\{largo_binary\}" --version/],
+]) {
+  if (!pattern.test(logosWrapper)) fail(logosWrapperPath, `${label} enforcement is missing`);
 }
-if (testManifest) {
-  if (testManifest.schema !== "macsad-logos-test-manifest/1") {
-    fail(manifestPath, "unsupported schema");
-  }
-  if (
-    testManifest.seed !== 7 ||
-    testManifest.tiers !== "all" ||
-    testManifest.proveFiniteProperties !== true
-  ) {
-    fail(manifestPath, "seed, tiers, and proof requirements must match the toolchain lock");
-  }
-  if (!Array.isArray(testManifest.projects) || testManifest.projects.length === 0) {
-    fail(manifestPath, "at least one LOGOS project is required");
-  } else {
-    for (const project of testManifest.projects) {
-      const projectDirectory = join(repositoryRoot, String(project.directory ?? ""));
-      const largoManifest = join(projectDirectory, "Largo.toml");
-      const entry = join(projectDirectory, "src", "main.lg");
-      if (!existsSync(largoManifest)) fail(largoManifest, "project manifest is missing");
-      if (!existsSync(entry)) fail(entry, "single LOGOS entry file is missing");
-      if (existsSync(largoManifest)) {
-        const text = read(largoManifest);
-        if (/^\s*\[dependencies\]\s*$/m.test(text)) {
-          fail(largoManifest, "registry or inert manifest dependencies are forbidden; use the locked local LOGOS toolchain");
-        }
-        const budgets = [...text.matchAll(/^skip_budget\s*=\s*(\d+)\s*$/gm)];
-        if (budgets.length !== 1 || budgets[0][1] !== "0") {
-          fail(largoManifest, "must declare exactly one skip_budget = 0");
-        }
-      }
-      if (!Array.isArray(project.expectedTests) || project.expectedTests.length === 0) {
-        fail(manifestPath, `${String(project.name)} has no expected tests`);
-      }
-      if (project.testMode !== undefined && project.testMode !== "strip-server-main") {
-        fail(manifestPath, `${String(project.name)} has an unsupported testMode`);
-      }
-      if (!Number.isSafeInteger(project.minimumProperties) || project.minimumProperties < 1) {
-        fail(manifestPath, `${String(project.name)} must exercise at least one finite property`);
-      }
-      if (!Number.isSafeInteger(project.minimumProven) || project.minimumProven < 1) {
-        fail(manifestPath, `${String(project.name)} must prove at least one finite property`);
-      }
-    }
+if (/LOGOS_WORKSPACE:-[^}]+/.test(logosWrapper)) {
+  fail(logosWrapperPath, "LOGOS_WORKSPACE may not have a fallback checkout");
+}
+
+if (existsSync(defaultModuleManifestPath)) {
+  try {
+    const moduleManifest = loadModuleManifest(defaultModuleManifestPath);
+    inspectRegisteredProjects(moduleManifest, repositoryRoot);
+  } catch (error) {
+    fail(defaultModuleManifestPath, error.message);
   }
 }
 

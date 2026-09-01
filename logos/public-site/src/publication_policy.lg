@@ -1,0 +1,24 @@
+# MaCSad publication policy
+
+The import-free publication policy is the fail-closed leaf shared by the public
+component and its colocated deterministic property test.
+
+## To publicationVisible (evidenceComplete: Bool, approvalGranted: Bool) -> Bool:
+    If evidenceComplete:
+        Return approvalGranted.
+    Return false.
+
+## Test: Publication visibility is fail closed
+    Let completeAndApproved be publicationVisible(true, true).
+    Let completeNotApproved be publicationVisible(true, false).
+    Let incompleteApproved be publicationVisible(false, true).
+    Let incompleteNotApproved be publicationVisible(false, false).
+    Expect that completeAndApproved is equal to true.
+    Expect that completeNotApproved is equal to false.
+    Expect that incompleteApproved is equal to false.
+    Expect that incompleteNotApproved is equal to false.
+    For all booleans evidenceComplete and approvalGranted:
+        Let visible be publicationVisible(evidenceComplete, approvalGranted).
+        If visible:
+            Expect that evidenceComplete is equal to true.
+            Expect that approvalGranted is equal to true.
