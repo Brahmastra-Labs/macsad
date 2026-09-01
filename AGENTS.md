@@ -16,16 +16,27 @@ These rules are requirements, not suggestions.
   memberships, login defaults, and empty-volume database creation.
 - `.macsad/toolchains/logos.lock.toml` owns the exact admitted local LOGOS
   source and runtime identity.
+- `.macsad/policies/logos-source-quality.json` owns LOGOS module, definition,
+  line-length, duplication, unfinished-marker, and exact scoped-style debt limits.
 - `tests/logos-module-manifest.json` owns LOGOS project, module-closure, and
   exact test inventory.
 - `ops/compose/compose.yaml` owns the Firebat service topology.
 - `GETTING_STARTED.md` is the canonical operator/developer quickstart;
   `docs/runbooks/` owns routine and recovery procedures.
+- `docs/runbooks/agent-request-intake.md` owns the bounded request-to-evidence
+  control flow; `docs/runbooks/upgrading-logos.md` owns LOGOS promotion and
+  rollback.
 
 When two sources disagree, stop at the conflict and repair the contract plus
 its executable check. Do not choose the more convenient interpretation.
 
 ## The working loop
+
+Enter every task through `docs/runbooks/agent-request-intake.md`. A pushed
+commit is immutable test input and neither a green check nor Firebat2 evidence
+grants merge, deployment, policy-activation, or toolchain-promotion authority.
+Firebat2 remains disabled while the required ruleset/admission control is a
+visible RED governance gap.
 
 Use RED, GREEN, REFACTOR for every behavior:
 
@@ -108,6 +119,8 @@ raw resource endpoints.
 The gate must remain strict:
 
 - LOGOS `skip_budget` is always zero.
+- LOGOS source must pass the exact size/duplication policy; a new or changed
+  scoped-CSS debt fingerprint is a failure, not an invitation to re-record it.
 - A suite with zero discovered tests fails.
 - A filter matching zero tests fails.
 - Any skipped or failed test fails.

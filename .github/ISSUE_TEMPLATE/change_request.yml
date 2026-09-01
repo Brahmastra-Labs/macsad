@@ -1,0 +1,87 @@
+name: Bounded change request
+description: Admit one MaCSad outcome into the PIT-style request-to-evidence flow.
+title: "[Request] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This form proposes work; it does not authorize deployment, toolchain promotion, policy activation, credential use, or Firebat operations. Read `docs/runbooks/agent-request-intake.md` first.
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Observable outcome
+      description: Name one result a user, reviewer, or operator can verify.
+      placeholder: After this change...
+    validations:
+      required: true
+
+  - type: textarea
+    id: job
+    attributes:
+      label: Job to be done
+      description: Explain why this outcome matters and to whom.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and non-goals
+      description: List exact in-scope behavior and adjacent work that must remain unchanged.
+      placeholder: |
+        In scope:
+        Out of scope:
+    validations:
+      required: true
+
+  - type: textarea
+    id: authority
+    attributes:
+      label: Granted authority
+      description: State whether this request authorizes investigation, edits, commits, pushes, host operations, or deployment. Omitted authority is not granted.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: risk_lane
+    attributes:
+      label: Primary risk lane
+      options:
+        - Documentation only
+        - LOGOS application or policy
+        - PostgreSQL schema or data
+        - Host adapter
+        - GitHub, runner, or control plane
+        - Firebat or Compose operations
+        - LOGOS toolchain promotion
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Executable acceptance evidence
+      description: Name a test, invariant, browser behavior, or operational check that can fail for the right reason. “Looks good” is not evidence.
+    validations:
+      required: true
+
+  - type: textarea
+    id: blockers
+    attributes:
+      label: Known blockers or decisions
+      description: Name missing access, framework primitives, runtime evidence, or human decisions. Write “None known” when appropriate.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Authority boundaries
+      options:
+        - label: I understand that ordinary work must not pull, rebuild, or repin `logicaffeine-private`.
+          required: true
+        - label: I understand that a green test run is evidence, not merge, deployment, publication, or promotion authority.
+          required: true
+        - label: I have not included a secret, credential, private artifact, or reusable authentication token in this request.
+          required: true

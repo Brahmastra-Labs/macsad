@@ -1,0 +1,75 @@
+name: Firebat2 Commit Ingestion
+
+on:
+  workflow_run:
+    workflows:
+      - Foundation CI
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firebat2-macsad-verification-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  admit:
+    name: Admit one trusted main revision
+    if: ${{ vars.FIREBAT2_ENABLED == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      source_sha: ${{ steps.admission.outputs.source_sha }}
+      source_ref: ${{ steps.admission.outputs.source_ref }}
+      foundation_run_id: ${{ steps.admission.outputs.foundation_run_id }}
+    steps:
+      - name: Check out the exact candidate without credentials
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Fail closed unless Foundation admitted a push on main
+        id: admission
+        env:
+          CANDIDATE_SHA: ${{ github.event.workflow_run.head_sha }}
+          CANDIDATE_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          CANDIDATE_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          FOUNDATION_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          FOUNDATION_EVENT: ${{ github.event.workflow_run.event }}
+          FOUNDATION_DEFINITION_PATH: ${{ github.event.workflow.path }}
+          FOUNDATION_RUN_PATH: ${{ github.event.workflow_run.path }}
+          FOUNDATION_RUN_ID: ${{ github.event.workflow_run.id }}
+          EXPECTED_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -Eeuo pipefail
+          [[ "${FOUNDATION_CONCLUSION}" == 'success' ]]
+          [[ "${FOUNDATION_EVENT}" == 'push' ]]
+          [[ "${FOUNDATION_DEFINITION_PATH}" == '.github/workflows/foundation-ci.yml' ]]
+          [[ "${FOUNDATION_RUN_PATH}" == '.github/workflows/foundation-ci.yml@main' ]]
+          [[ "${CANDIDATE_REPOSITORY}" == "${EXPECTED_REPOSITORY}" ]]
+          [[ "${CANDIDATE_BRANCH}" == "${DEFAULT_BRANCH}" ]]
+          [[ "${DEFAULT_BRANCH}" == 'main' ]]
+          [[ "${CANDIDATE_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${FOUNDATION_RUN_ID}" =~ ^[1-9][0-9]*$ ]]
+          [[ "$(git rev-parse --verify HEAD)" == "${CANDIDATE_SHA}" ]]
+          {
+            printf 'source_sha=%s\n' "${CANDIDATE_SHA}"
+            printf 'source_ref=refs/heads/%s\n' "${DEFAULT_BRANCH}"
+            printf 'foundation_run_id=%s\n' "${FOUNDATION_RUN_ID}"
+          } >>"${GITHUB_OUTPUT}"
+
+  verify:
+    name: Queue exact revision on Firebat2
+    needs: admit
+    permissions:
+      contents: read
+    uses: ./.github/workflows/firebat2-verify.yml
+    with:
+      source_sha: ${{ needs.admit.outputs.source_sha }}
+      source_ref: ${{ needs.admit.outputs.source_ref }}
+      foundation_run_id: ${{ needs.admit.outputs.foundation_run_id }}

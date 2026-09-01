@@ -1,0 +1,24 @@
+{
+  "$schema": "https://macsad.invalid/schemas/browser-smoke-contract-v1.json",
+  "schema": "macsad-browser-smoke-contract/1",
+  "projects": [
+    {
+      "name": "admin",
+      "directory": "logos/admin",
+      "bundleStem": "macsad_admin",
+      "expectedText": [
+        "MaCSad",
+        "Research work, made navigable."
+      ]
+    },
+    {
+      "name": "public-site",
+      "directory": "logos/public-site",
+      "bundleStem": "macsad_public",
+      "expectedText": [
+        "MaCSad",
+        "Evidence first"
+      ]
+    }
+  ]
+}

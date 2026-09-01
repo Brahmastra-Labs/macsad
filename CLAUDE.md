@@ -6,8 +6,9 @@ Code and Claude-family tools without creating a second set of rules.
 
 ## Start every task this way
 
-1. Read `AGENTS.md`, `GETTING_STARTED.md`, and the nearest relevant design or
-   runbook document.
+1. Read `AGENTS.md`, `GETTING_STARTED.md`,
+   `docs/runbooks/agent-request-intake.md`, and the nearest relevant design or
+   operations document.
 2. Inspect `git status --short`, the current branch, and the exact files in
    scope. Existing changes belong to the user unless proven otherwise.
 3. State the narrow outcome and identify its executable acceptance test.
@@ -16,6 +17,10 @@ Code and Claude-family tools without creating a second set of rules.
 5. Work RED → GREEN → REFACTOR and run the smallest real test first.
 6. Run `make test` before handoff. If database or browser evidence could not run,
    state that boundary exactly.
+
+An ordinary task must not update `logicaffeine-private`. If a human separately
+authorizes a named toolchain promotion, stop the ordinary flow and follow
+`docs/runbooks/upgrading-logos.md`.
 
 ## Architectural routing
 

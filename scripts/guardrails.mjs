@@ -58,16 +58,61 @@ const requiredFiles = [
   "AGENTS.md",
   "CONTRIBUTING.md",
   "LOGOS_GAPS.md",
+  ".github/ISSUE_TEMPLATE/change_request.yml",
+  ".github/ISSUE_TEMPLATE/config.yml",
+  ".github/pull_request_template.md",
   ".macsad/toolchains/logos.lock.toml",
+  ".macsad/policies/logos-source-quality.json",
+  ".macsad/schemas/logos-source-quality-v1.schema.json",
+  "docs/runbooks/agent-request-intake.md",
+  "docs/runbooks/upgrading-logos.md",
+  "docs/standards/logos-source-quality.md",
   "tests/logos-module-manifest.json",
+  "tests/browser-smoke-contract.json",
   "scripts/logos.sh",
   "scripts/logos-project.mjs",
+  "scripts/logos-source-lint.mjs",
+  "tests/scripts/logos-source-lint.test.mjs",
+  "scripts/ci/firebat2-verify.sh",
+  "scripts/ci/browser-probe.mjs",
+  "scripts/ci/audit-github-actions-settings.mjs",
+  "scripts/ci/verify-firebat2-contract.mjs",
+  "ops/firebat2/verify_verifier_host.sh",
   "database/apply_migrations.sh",
   "database/verify.sql",
 ];
 for (const requiredFile of requiredFiles) {
   const path = join(repositoryRoot, requiredFile);
   if (!existsSync(path)) fail(path, "required governance file is missing");
+}
+
+const intakeTemplatePath = join(
+  repositoryRoot,
+  ".github",
+  "ISSUE_TEMPLATE",
+  "change_request.yml",
+);
+const intakeTemplate = read(intakeTemplatePath);
+for (const requiredField of [
+  "outcome",
+  "job",
+  "scope",
+  "authority",
+  "risk_lane",
+  "acceptance",
+  "blockers",
+  "boundaries",
+]) {
+  if (!new RegExp(`^\\s+id:\\s*${requiredField}\\s*$`, "m").test(intakeTemplate)) {
+    fail(intakeTemplatePath, `required intake field is missing: ${requiredField}`);
+  }
+}
+if ((intakeTemplate.match(/^\s+required:\s*true\s*$/gm) ?? []).length < 10) {
+  fail(intakeTemplatePath, "request intake fields and authority checks must fail closed");
+}
+const issueConfigPath = join(repositoryRoot, ".github", "ISSUE_TEMPLATE", "config.yml");
+if (!/^blank_issues_enabled:\s*false\s*$/m.test(read(issueConfigPath))) {
+  fail(issueConfigPath, "blank issues must remain disabled");
 }
 
 const lockPath = join(repositoryRoot, ".macsad", "toolchains", "logos.lock.toml");
@@ -96,7 +141,7 @@ for (const [label, pattern] of [
   ["required LOGOS_WORKSPACE", /\[\[ -n "\$\{LOGOS_WORKSPACE:-\}" \]\]/],
   ["exact HEAD commit", /git -C "\$\{logos_workspace\}" rev-parse --verify HEAD/],
   ["exact HEAD tree", /git -C "\$\{logos_workspace\}" rev-parse --verify 'HEAD\^\{tree\}'/],
-  ["clean tracked source", /git -C "\$\{logos_workspace\}" status --porcelain --untracked-files=no/],
+  ["clean complete source", /git -C "\$\{logos_workspace\}" status --porcelain --untracked-files=all/],
   ["exact origin identity", /git -C "\$\{logos_workspace\}" remote get-url origin/],
   ["Cargo lock digest", /sha256sum -- "\$\{cargo_lock\}"/],
   ["largo binary digest", /sha256sum -- "\$\{largo_binary\}"/],
@@ -160,6 +205,7 @@ for (const workflow of filesBelow(join(repositoryRoot, ".github", "workflows")))
   const text = read(workflow);
   for (const match of text.matchAll(/^\s*uses:\s*([^\s#]+)(?:\s+#.*)?$/gm)) {
     const reference = match[1];
+    if (reference === "./.github/workflows/firebat2-verify.yml") continue;
     const separator = reference.lastIndexOf("@");
     if (separator < 1 || !/^[0-9a-f]{40}$/.test(reference.slice(separator + 1))) {
       fail(workflow, `action is not pinned to a full commit SHA: ${reference}`);

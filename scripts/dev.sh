@@ -21,6 +21,8 @@ Development:
   doctor             Inspect prerequisites and exact local toolchain state.
   test               Run the complete LOGOS/host/Compose gate; DB when configured.
   test-foundation    Run credential-free source, host, and Compose guardrails.
+  lint-logos         Run the standalone LOGOS size, duplication, and debt gate.
+  audit-actions      Read back GitHub Actions policy and disabled Firebat2 flag.
 
 Firebat stack:
   configure          Create ignored tailnet/runtime config and generated secrets.
@@ -152,15 +154,33 @@ test_foundation() {
     ops/compose/stack.sh \
     ops/compose/run-migrations.sh \
     ops/compose/postgres/010-bootstrap-macsad.sh \
-    ops/firebat/bootstrap_container_host.sh
+    ops/firebat/bootstrap_container_host.sh \
+    ops/firebat2/verify_verifier_host.sh \
+    scripts/ci/browser-smoke.sh \
+    scripts/ci/build-logos-evidence.sh \
+    scripts/ci/firebat2-verify.sh
   node --check scripts/guardrails.mjs
   node --check scripts/logos-project.mjs
+  node --check scripts/logos-source-lint.mjs
   node --check scripts/verify-logos-tests.mjs
   node --check scripts/compose-guardrails.mjs
-  node --test tests/scripts/logos-project.test.mjs tests/scripts/compose-guardrails.test.mjs
+  node --check scripts/ci/artifact-manifest.mjs
+  node --check scripts/ci/audit-github-actions-settings.mjs
+  node --check scripts/ci/browser-probe.mjs
+  node --check scripts/ci/verify-firebat2-contract.mjs
+  python3 -c 'compile(open("scripts/ci/static_server.py", encoding="utf-8").read(), "scripts/ci/static_server.py", "exec")'
+  node --test \
+    tests/scripts/logos-project.test.mjs \
+    tests/scripts/logos-source-lint.test.mjs \
+    tests/scripts/compose-guardrails.test.mjs \
+    tests/scripts/artifact-manifest.test.mjs \
+    tests/scripts/browser-probe.test.mjs \
+    tests/scripts/firebat2-contract.test.mjs
   node scripts/guardrails.mjs
   node scripts/logos-project.mjs audit
+  node scripts/logos-source-lint.mjs
   node scripts/compose-guardrails.mjs
+  node scripts/ci/verify-firebat2-contract.mjs
   python3 -m unittest discover --start-directory host_adapters/tests --pattern 'test_*.py'
 }
 
@@ -194,6 +214,8 @@ main() {
     doctor) (($# == 0)) || die 'doctor accepts no arguments'; doctor ;;
     test) (($# == 0)) || die 'test accepts no arguments'; test_all ;;
     test-foundation) (($# == 0)) || die 'test-foundation accepts no arguments'; test_foundation ;;
+    lint-logos) (($# == 0)) || die 'lint-logos accepts no arguments'; exec node "${REPOSITORY_ROOT}/scripts/logos-source-lint.mjs" ;;
+    audit-actions) (($# == 0)) || die 'audit-actions accepts no arguments'; exec node "${REPOSITORY_ROOT}/scripts/ci/audit-github-actions-settings.mjs" ;;
     configure) exec "${STACK}" configure "$@" ;;
     prepare) (($# == 0)) || die 'prepare accepts no arguments'; exec "${STACK}" prepare ;;
     compose-config) (($# == 0)) || die 'compose-config accepts no arguments'; exec "${STACK}" config ;;

@@ -33,6 +33,7 @@ that URL or place it in a shell transcript.
 
 | Command | Intended use | Evidence |
 |---|---|---|
+| `make lint-logos` | Fast LOGOS source-shape iteration | Exact module/definition/line limits, behavior duplication, markers, orphan audit, and immutable scoped-CSS debt |
 | `make test-foundation` | Fast credential-free iteration | Source/module/Compose guardrails and host-adapter unit contracts |
 | `make test` | Required local handoff gate | Exact private LOGOS tests and deterministic bundles, plus the foundation gate |
 | `MACSAD_REQUIRE_DATABASE=1 DATABASE_URL=… make test` | Schema or persistence work | Fresh PG16 migrate/repeat/verify/invariants in addition to the full gate |
@@ -68,8 +69,10 @@ including environment contents, connection strings, or secrets.
 5. Put `## Test` blocks only in import-free leaf modules with no `## Main`.
    Register the leaf and its exact test names in the module manifest. A new or
    moved test that is not registered fails before LOGOS runs.
-6. Run `node scripts/logos-project.mjs audit` to inspect closure sizes/digests,
-   then run the complete quality gate. The gate checks the real assembled entry,
+6. Run `make lint-logos`, then `node scripts/logos-project.mjs audit` to inspect
+   closure sizes/digests. The source policy and its honest baseline-debt rules
+   are documented in `docs/standards/logos-source-quality.md`.
+7. Run the complete quality gate. The gate checks the real assembled entry,
    rejects every diagnostic outside the exact compatibility-warning identities
    committed beside the entry lock, and runs each exact leaf source through a
    hard-linked temporary project so imported tests cannot disappear.

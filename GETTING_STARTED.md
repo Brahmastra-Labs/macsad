@@ -179,6 +179,7 @@ Do not reset volumes, edit migration history, switch to a wildcard bind, or
 weaken a test. Use the runbooks:
 
 - `docs/runbooks/firebat-stack.md`
+- `docs/runbooks/firebat2-verification.md`
 - `docs/runbooks/database-operations.md`
 - `docs/runbooks/testing-and-ci.md`
 - `docs/runbooks/incident-response.md`

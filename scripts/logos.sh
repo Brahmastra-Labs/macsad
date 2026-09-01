@@ -92,8 +92,8 @@ actual_commit="$(git -C "${logos_workspace}" rev-parse --verify HEAD)"
 actual_tree="$(git -C "${logos_workspace}" rev-parse --verify 'HEAD^{tree}')"
 [[ "${actual_tree}" == "${expected_tree}" ]] ||
   die "local LOGOS source tree mismatch: expected ${expected_tree}, received ${actual_tree}"
-[[ -z "$(git -C "${logos_workspace}" status --porcelain --untracked-files=no)" ]] ||
-  die 'local LOGOS source has tracked modifications'
+[[ -z "$(git -C "${logos_workspace}" status --porcelain --untracked-files=all)" ]] ||
+  die 'local LOGOS source has tracked or untracked modifications'
 origin_url="$(git -C "${logos_workspace}" remote get-url origin)"
 case "${origin_url}" in
   *"${expected_repository}"|*"${expected_repository}.git") ;;

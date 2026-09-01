@@ -1,7 +1,7 @@
 SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := help
 
-.PHONY: help doctor test test-foundation configure prepare compose-config build up verify status logs down db-shell
+.PHONY: help doctor test test-foundation lint-logos audit-actions configure prepare compose-config build up verify status logs down db-shell
 
 help:
 	@bash scripts/dev.sh help
@@ -14,6 +14,12 @@ test:
 
 test-foundation:
 	@bash scripts/dev.sh test-foundation
+
+lint-logos:
+	@bash scripts/dev.sh lint-logos
+
+audit-actions:
+	@bash scripts/dev.sh audit-actions
 
 configure:
 	@bash scripts/dev.sh configure

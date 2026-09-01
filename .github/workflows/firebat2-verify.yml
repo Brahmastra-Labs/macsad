@@ -1,0 +1,149 @@
+name: Firebat2 Reusable Verification
+
+on:
+  workflow_call:
+    inputs:
+      source_sha:
+        description: Exact Foundation-admitted commit to verify.
+        required: true
+        type: string
+      source_ref:
+        description: Source ref; currently refs/heads/main only.
+        required: true
+        type: string
+      foundation_run_id:
+        description: Successful Foundation CI run that admitted the commit.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Deterministic LOGOS, WASM, and browser evidence
+    if: >-
+      ${{
+        github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow.path == '.github/workflows/foundation-ci.yml' &&
+        github.event.workflow_run.path == '.github/workflows/foundation-ci.yml@main' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository &&
+        inputs.source_sha == github.event.workflow_run.head_sha
+      }}
+    runs-on:
+      group: macsad-firebat2
+      labels:
+        - self-hosted
+        - linux
+        - x64
+        - firebat2
+        - macsad-verifier
+    defaults:
+      run:
+        shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+    timeout-minutes: 15
+    env:
+      LOGOS_WORKSPACE: /opt/macsad/toolchains/logicaffeine-private
+      PATH: /usr/bin:/bin
+      MACSAD_EVENT_FOUNDATION_RUN_ID: ${{ github.event.workflow_run.id }}
+      MACSAD_EVENT_SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+      MACSAD_EVIDENCE_DIR: ${{ runner.temp }}/macsad-firebat2-${{ github.run_id }}-${{ github.run_attempt }}
+      MACSAD_FOUNDATION_RUN_ID: ${{ inputs.foundation_run_id }}
+      MACSAD_SOURCE_REF: ${{ inputs.source_ref }}
+      MACSAD_SOURCE_SHA: ${{ inputs.source_sha }}
+    steps:
+      - name: Prove the dedicated runner boundary before checkout
+        run: |
+          set -Eeuo pipefail
+          export PATH='/usr/bin:/bin'
+          [[ "$(uname -s)" == 'Linux' ]]
+          [[ "$(id -u)" -ne 0 ]]
+          [[ "$(id -un)" == 'macsad-verifier' ]]
+          [[ "$(id -gn)" == 'macsad-verifier' ]]
+          [[ "$(id -nG)" == 'macsad-verifier' ]]
+          awk '
+            /^Cap(Inh|Prm|Eff|Amb):/ {
+              count += 1
+              if ($2 !~ /^0+$/) unsafe = 1
+            }
+            END { exit !(count == 4 && unsafe != 1) }
+          ' /proc/self/status
+          grep -Eq '^NoNewPrivs:[[:space:]]+1$' /proc/self/status
+          [[ "${MACSAD_SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${MACSAD_SOURCE_SHA}" == "${MACSAD_EVENT_SOURCE_SHA}" ]]
+          [[ "${MACSAD_SOURCE_REF}" == 'refs/heads/main' ]]
+          [[ "${MACSAD_FOUNDATION_RUN_ID}" =~ ^[1-9][0-9]*$ ]]
+          [[ "${MACSAD_FOUNDATION_RUN_ID}" == "${MACSAD_EVENT_FOUNDATION_RUN_ID}" ]]
+          [[ "${LOGOS_WORKSPACE}" == '/opt/macsad/toolchains/logicaffeine-private' ]]
+          [[ -f /etc/macsad/firebat2-runner-role ]]
+          [[ ! -L /etc/macsad/firebat2-runner-role ]]
+          [[ "$(cat /etc/macsad/firebat2-runner-role)" == 'macsad-firebat2-verifier-v1' ]]
+          [[ "$(stat -c '%u' /etc/macsad/firebat2-runner-role)" == '0' ]]
+          role_mode="$(stat -c '%a' /etc/macsad/firebat2-runner-role)"
+          [[ "${role_mode}" == '444' || "${role_mode}" == '644' ]]
+          virtualization="$(/usr/bin/systemd-detect-virt --vm)"
+          [[ "${virtualization}" == 'kvm' || "${virtualization}" == 'qemu' ]]
+          [[ -f /etc/macsad/firebat2-ephemeral-image ]]
+          [[ ! -L /etc/macsad/firebat2-ephemeral-image ]]
+          [[ "$(cat /etc/macsad/firebat2-ephemeral-image)" == 'macsad-firebat2-ephemeral-vm-v1' ]]
+          [[ "$(stat -c '%u' /etc/macsad/firebat2-ephemeral-image)" == '0' ]]
+          [[ -d "${LOGOS_WORKSPACE}" && ! -L "${LOGOS_WORKSPACE}" ]]
+          [[ "$(realpath -- "${LOGOS_WORKSPACE}")" == "${LOGOS_WORKSPACE}" ]]
+          [[ ! -w "${LOGOS_WORKSPACE}" ]]
+          if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+            printf 'runner account has noninteractive sudo\n' >&2
+            exit 1
+          fi
+          if [[ -S /var/run/docker.sock && -w /var/run/docker.sock ]]; then
+            printf 'runner account can write the Docker socket\n' >&2
+            exit 1
+          fi
+          install -d -m 0700 "${MACSAD_EVIDENCE_DIR}"
+
+      - name: Check out only the admitted revision
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify the exact admitted revision independently
+        run: |
+          set -Eeuo pipefail
+          export PATH='/usr/bin:/bin'
+          [[ "$(git rev-parse --verify HEAD)" == "${MACSAD_SOURCE_SHA}" ]]
+          [[ -z "$(git status --porcelain --untracked-files=all)" ]]
+          git cat-file -e "${MACSAD_SOURCE_SHA}^{commit}"
+
+      - name: Verify Firebat2 host invariants without mutation
+        run: /usr/bin/bash ops/firebat2/verify_verifier_host.sh
+
+      - name: Exercise LOGOS, deterministic WASM sites, and browser smoke
+        run: /usr/bin/bash scripts/ci/firebat2-verify.sh
+
+      - name: Upload bounded verification evidence
+        if: ${{ success() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: firebat2-${{ inputs.source_sha }}-attempt-${{ github.run_attempt }}
+          path: ${{ env.MACSAD_EVIDENCE_DIR }}
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 6
+          overwrite: false
+
+      - name: Remove per-run evidence from the disposable guest
+        if: ${{ always() }}
+        run: |
+          set -Eeuo pipefail
+          export PATH='/usr/bin:/bin'
+          expected_prefix="$(realpath -- "${RUNNER_TEMP}")/macsad-firebat2-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          candidate="$(realpath -m -- "${MACSAD_EVIDENCE_DIR}")"
+          [[ "${candidate}" == "${expected_prefix}" ]]
+          [[ -e "${candidate}" ]] || exit 0
+          [[ -d "${candidate}" && ! -L "${candidate}" ]]
+          find "${candidate}" -depth -mindepth 1 -delete
+          rmdir -- "${candidate}"
