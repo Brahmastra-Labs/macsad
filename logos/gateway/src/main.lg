@@ -1,0 +1,34 @@
+# MaCSad read-only development gateway
+
+The gateway serves the generated administrative bundle and one safe health read.
+There are deliberately no mutation routes. The first typed command endpoint must
+wait for authorization, idempotency, optimistic concurrency, PostgreSQL, events,
+and outbox writes to exist as one tested transaction boundary.
+
+## To isHealthRoute (method: Text, path: Text) -> Bool:
+    If method is equal to "GET":
+        Return path is equal to "/api/v1/health".
+    Return false.
+
+## To mutationRouteAvailable (routeKnown: Bool) -> Bool:
+    Return false.
+
+## To handle (request: Request) -> Response:
+    If request's method is equal to "GET":
+        If request's path is equal to "/api/v1/health":
+            Return plain("MaCSad gateway ready | persistence: not connected | mutations: disabled").
+    Return notFound().
+
+## Test: Health route is classified
+    Let safeRoute be isHealthRoute("GET", "/api/v1/health").
+    Let unsafeRoute be isHealthRoute("POST", "/api/v1/health").
+    Expect that safeRoute is equal to true.
+    Expect that unsafeRoute is equal to false.
+
+## Test: Mutation routes are unavailable
+    For all booleans routeKnown:
+        Let available be mutationRouteAvailable(routeKnown).
+        Expect that available is equal to false.
+
+## Main
+Serve on port 18081 with handle.

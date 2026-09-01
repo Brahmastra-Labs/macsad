@@ -1,0 +1,155 @@
+# MaCSad admin console
+
+The first administrative surface is intentionally a truthful shell. Navigation,
+drafting, and health inspection are live LOGOS interactions. Drafts remain in the
+browser until the typed command and PostgreSQL adapter exist; no button pretends
+to persist work.
+
+## To kanbanColumnCount () -> Int:
+    Return 6.
+
+## To closedAcceptsOrdinaryWork (anyCommand: Bool) -> Bool:
+    Return false.
+
+## Component MacsAdAdmin:
+    Let currentView be a signal "Board".
+    Let draftTitle be a signal "".
+    Let draftState be a signal "Nothing staged yet".
+    Let healthState be a signal "Not checked".
+    Let phases be ["Inbox", "Ready", "Running", "Verify", "Review", "Closed"].
+    View:
+        css r"* { box-sizing: border-box; } .app-shell { min-height: 100vh; color: #14202b; background: #f2f0e9; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; } .topbar { min-height: 74px; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px clamp(20px,4vw,56px); color: #f8f6ef; background: #102c3b; border-bottom: 1px solid rgba(255,255,255,.14); } .brand { display: flex; align-items: center; gap: 14px; } .brand-mark { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.32); border-radius: 12px; color: #102c3b; background: #d8ff72; font: 800 14px/1 ui-monospace, monospace; box-shadow: 0 8px 30px rgba(216,255,114,.16); } .brand-copy strong { display: block; font-size: 16px; letter-spacing: .02em; } .brand-copy span { display: block; margin-top: 2px; color: #b8cad1; font-size: 12px; } .top-status { display: flex; align-items: center; gap: 10px; color: #c9d7dc; font-size: 12px; } .pulse { width: 8px; height: 8px; border-radius: 999px; background: #d8ff72; box-shadow: 0 0 0 5px rgba(216,255,114,.12); } .workspace { display: grid; grid-template-columns: 224px minmax(0,1fr); min-height: calc(100vh - 74px); } .sidebar { padding: 30px 18px; background: #e8e5db; border-right: 1px solid #d4d0c4; } .eyebrow { margin: 0 10px 12px; color: #66737c; font: 700 10px/1.2 ui-monospace, monospace; letter-spacing: .16em; text-transform: uppercase; } .nav-button { width: 100%; display: flex; align-items: center; justify-content: space-between; margin: 5px 0; padding: 12px 13px; color: #253746; background: transparent; border: 1px solid transparent; border-radius: 10px; font: 650 13px/1.2 inherit; text-align: left; cursor: pointer; } .nav-button:hover { background: rgba(255,255,255,.7); border-color: #d5d1c5; } .nav-button span { color: #7b878d; font-family: ui-monospace, monospace; } .sidebar-note { margin: 30px 5px 0; padding: 16px; color: #3f4e57; background: #f7f4ec; border: 1px solid #d7d2c5; border-radius: 12px; font-size: 12px; line-height: 1.55; } .sidebar-note strong { display: block; margin-bottom: 6px; color: #102c3b; } .main { min-width: 0; padding: clamp(24px,4vw,54px); overflow: hidden; } .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 28px; } .kicker { margin: 0 0 9px; color: #146878; font: 800 11px/1 ui-monospace, monospace; letter-spacing: .15em; text-transform: uppercase; } h1 { margin: 0; color: #102c3b; font: 750 clamp(30px,4vw,48px)/1.04 Georgia, serif; letter-spacing: -.035em; } .lede { max-width: 680px; margin: 12px 0 0; color: #59666d; font-size: 14px; line-height: 1.65; } .health-card { min-width: 250px; padding: 14px 15px; background: #fffdf7; border: 1px solid #d9d5c9; border-radius: 12px; box-shadow: 0 8px 28px rgba(16,44,59,.06); } .health-card small { display: block; margin-bottom: 8px; color: #6c787e; font: 700 10px/1 ui-monospace, monospace; letter-spacing: .12em; text-transform: uppercase; } .health-readout { min-height: 34px; margin: 0 0 10px; color: #1d3b48; font: 600 11px/1.45 ui-monospace, monospace; overflow-wrap: anywhere; } .secondary-button { padding: 8px 11px; color: #f8f6ef; background: #153d4d; border: 0; border-radius: 8px; font: 700 11px/1 inherit; cursor: pointer; } .metric-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(145px,1fr)); gap: 12px; margin-bottom: 22px; } .metric { padding: 16px; background: rgba(255,255,255,.68); border: 1px solid #d9d5c9; border-radius: 12px; } .metric span { display: block; color: #6e7a80; font-size: 11px; } .metric strong { display: block; margin-top: 7px; color: #173442; font: 750 22px/1 Georgia, serif; } .draft-panel { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 12px; align-items: end; margin-bottom: 24px; padding: 16px; background: #fffdf7; border: 1px solid #d8d3c6; border-radius: 14px; } .field label { display: block; margin-bottom: 7px; color: #35464f; font-size: 12px; font-weight: 700; } .field input { width: 100%; min-height: 42px; padding: 10px 12px; color: #19333f; background: #fff; border: 1px solid #c8c5bb; border-radius: 8px; outline: none; font: 13px/1.2 inherit; } .field input:focus { border-color: #16758a; box-shadow: 0 0 0 3px rgba(22,117,138,.12); } .draft-action { min-height: 42px; padding: 10px 16px; color: #102c3b; background: #d8ff72; border: 1px solid #bbdf5a; border-radius: 9px; font: 800 12px/1 inherit; cursor: pointer; } .draft-truth { grid-column: 1 / -1; display: flex; align-items: center; gap: 9px; color: #68747a; font-size: 11px; } .truth-dot { width: 7px; height: 7px; border-radius: 999px; background: #e3a52a; } .board-scroll { width: 100%; overflow-x: auto; padding: 2px 2px 16px; } .board { min-width: 1460px; display: grid; grid-template-columns: repeat(6,minmax(220px,1fr)); gap: 12px; } .column { min-height: 400px; padding: 13px; background: #e6e3da; border: 1px solid #d3cfc3; border-radius: 14px; } .column-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 2px 12px; } .column-head h3 { margin: 0; color: #283c47; font-size: 12px; letter-spacing: .02em; } .count { min-width: 24px; padding: 4px 7px; color: #627078; background: #f7f4ec; border: 1px solid #d3cfc3; border-radius: 999px; font: 700 10px/1 ui-monospace, monospace; text-align: center; } .card { margin-bottom: 10px; padding: 14px; background: #fffdf8; border: 1px solid #d6d2c7; border-radius: 11px; box-shadow: 0 6px 18px rgba(16,44,59,.05); } .card-tag { margin: 0 0 9px; color: #16758a; font: 800 9px/1 ui-monospace, monospace; letter-spacing: .11em; text-transform: uppercase; } .card h4 { margin: 0 0 8px; color: #1b3440; font-size: 13px; line-height: 1.35; } .card p { margin: 0; color: #69757b; font-size: 11px; line-height: 1.5; } .empty { padding: 18px 10px; color: #869096; border: 1px dashed #c7c3b8; border-radius: 9px; font-size: 11px; line-height: 1.45; text-align: center; } .panel { max-width: 940px; padding: clamp(24px,4vw,42px); background: #fffdf8; border: 1px solid #d7d2c6; border-radius: 16px; box-shadow: 0 14px 45px rgba(16,44,59,.07); } .panel h2 { margin: 0 0 12px; color: #123342; font: 750 30px/1.1 Georgia, serif; } .panel p { color: #5e6c73; line-height: 1.7; } .boundary { margin-top: 22px; padding: 16px; color: #3d4c55; background: #f2efe6; border-left: 3px solid #16758a; font-size: 12px; line-height: 1.6; } button:focus-visible, input:focus-visible { outline: 3px solid #16758a; outline-offset: 3px; } @media (max-width: 820px) { .workspace { grid-template-columns: 1fr; } .sidebar { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; padding: 10px; border-right: 0; border-bottom: 1px solid #d4d0c4; } .sidebar .eyebrow, .sidebar-note { display: none; } .nav-button { justify-content: center; padding: 10px 5px; font-size: 11px; } .nav-button span { display: none; } .page-head { align-items: stretch; flex-direction: column; } .health-card { min-width: 0; } .draft-panel { grid-template-columns: 1fr; } .draft-truth { grid-column: auto; } .top-status { display: none; } }"
+        css ".workspace { display: flex; flex-wrap: wrap; } .sidebar { flex: 1 1 224px; display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); align-content: start; gap: 6px; } .sidebar .eyebrow, .sidebar-note { grid-column: 1 / -1; } .main { flex: 999 1 600px; } .topbar, .page-head { flex-wrap: wrap; } .page-head > div { flex: 1 1 320px; } .health-card { flex: 1 1 250px; min-width: min(250px,100%); max-width: 360px; } .draft-panel { grid-template-columns: repeat(auto-fit,minmax(min(210px,100%),1fr)); }"
+        div [class="app-shell"]:
+            header [class="topbar"]:
+                div [class="brand"]:
+                    div [class="brand-mark"]: "M∴"
+                    div [class="brand-copy"]:
+                        strong: "MaCSad"
+                        span: "Math + computer science auto-discovery"
+                div [class="top-status"]:
+                    span [class="pulse"]: ""
+                    span: "Firebat One · local control plane"
+            div [class="workspace"]:
+                aside [class="sidebar"]:
+                    p [class="eyebrow"]: "Workspace"
+                    button [class="nav-button"]:
+                        on click:
+                            Set currentView to "Board".
+                        strong: "Board"
+                        span: "01"
+                    button [class="nav-button"]:
+                        on click:
+                            Set currentView to "Organization".
+                        strong: "Organization"
+                        span: "02"
+                    button [class="nav-button"]:
+                        on click:
+                            Set currentView to "Research".
+                        strong: "Research"
+                        span: "03"
+                    button [class="nav-button"]:
+                        on click:
+                            Set currentView to "Operations".
+                        strong: "Operations"
+                        span: "04"
+                    div [class="sidebar-note"]:
+                        strong: "Guardrail"
+                        span: "This baseline exposes no mutation route. A local draft is not durable work."
+                main [class="main"]:
+                    when currentView is equal to "Board":
+                        div [class="page-head"]:
+                            div:
+                                p [class="kicker"]: "Process control / six states"
+                                h1: "Research work, made navigable."
+                                p [class="lede"]: "A quiet control surface for cases, roles, evidence, and handoffs. Every future transition will be an explicit command with policy, version, and audit checks."
+                            div [class="health-card"]:
+                                small: "Gateway health · GET only"
+                                p [class="health-readout"]: "{healthState}"
+                                button [class="secondary-button"]:
+                                    on click:
+                                        Set healthState to "Checking /api/v1/health …".
+                                        Let onHealth be (requestId: Int) ->:
+                                            Set healthState to responseText().
+                                        Call fetchText with "/api/v1/health" and onHealth.
+                                    span: "Check connection"
+                        div [class="metric-grid"]:
+                            div [class="metric"]:
+                                span: "Open cases"
+                                strong: "03"
+                            div [class="metric"]:
+                                span: "Active agents"
+                                strong: "00"
+                            div [class="metric"]:
+                                span: "Awaiting evidence"
+                                strong: "01"
+                            div [class="metric"]:
+                                span: "Published today"
+                                strong: "00"
+                        div [class="draft-panel"]:
+                            div [class="field"]:
+                                label: "Draft a research question"
+                                input [type="text", aria-label="Draft a research question", placeholder="e.g. Find a minimal counterexample…", bound to draftTitle]:
+                            button [class="draft-action"]:
+                                on click:
+                                    Set draftState to "Draft staged in this browser only — no command was sent".
+                                span: "Stage local draft"
+                            div [class="draft-truth"]:
+                                span [class="truth-dot"]: ""
+                                span: "{draftState}"
+                        div [class="board-scroll"]:
+                            div [class="board"]:
+                                for each phase in phases:
+                                    section [class="column"]:
+                                        div [class="column-head"]:
+                                            h3: "{phase}"
+                                            span [class="count"]: "0"
+                                        when phase is equal to "Inbox":
+                                            article [class="card"]:
+                                                p [class="card-tag"]: "Case · seed"
+                                                h4: "Characterize sparse verifier search"
+                                                p: "Example fixture only · unassigned · not persisted"
+                                        when phase is equal to "Ready":
+                                            article [class="card"]:
+                                                p [class="card-tag"]: "Policy check"
+                                                h4: "Define admissible evidence"
+                                                p: "Example fixture only · awaiting human approval"
+                                        when phase is equal to "Running":
+                                            div [class="empty"]: "No agent run has been started."
+                                        when phase is equal to "Verify":
+                                            div [class="empty"]: "Evidence gates will appear here."
+                                        when phase is equal to "Review":
+                                            div [class="empty"]: "Human decisions remain explicit."
+                                        when phase is equal to "Closed":
+                                            div [class="empty"]: "Closed work is terminal unless an authorized reopen command succeeds."
+                    when currentView is equal to "Organization":
+                        section [class="panel"]:
+                            p [class="kicker"]: "Virtual organization"
+                            h2: "Roles are capability bundles, not costumes."
+                            p: "This surface will map actors, role assignments, handoff contracts, and escalation paths. The baseline keeps it read-only until identity and authorization are wired end to end."
+                            div [class="boundary"]: "Sprint boundary · no actor creation, role mutation, or delegated authority is implemented yet."
+                    when currentView is equal to "Research":
+                        section [class="panel"]:
+                            p [class="kicker"]: "Discovery record"
+                            h2: "Claims travel with evidence."
+                            p: "Problems, conjectures, experiments, proof attempts, artifacts, and review decisions will form a traceable research graph rooted in the watched GitHub repository."
+                            div [class="boundary"]: "Sprint boundary · the theorem-prover and repository adapters are planned seams, not simulated services."
+                    when currentView is equal to "Operations":
+                        section [class="panel"]:
+                            p [class="kicker"]: "System truth"
+                            h2: "Boring operations are trustworthy operations."
+                            p: "Deployments, worker leases, outbox delivery, budgets, and publication batches will report concrete state here. The only live call in this shell is the safe gateway health read."
+                            div [class="boundary"]: "Sprint boundary · PostgreSQL is not yet connected to LOGOS, and Cloudflare credentials have not been supplied."
+
+## Test: Column count stays six
+    Expect that kanbanColumnCount() is 6.
+
+## Test: Closed is terminal
+    For all booleans anyCommand:
+        Let accepted be closedAcceptsOrdinaryWork(anyCommand).
+        Expect that accepted is equal to false.
+
+## Main
+Render:
+    css "html, body, #root { width: 100%; min-height: 100%; } body { max-width: none; margin: 0; padding: 0; }"
+Mount MacsAdAdmin at "#root".

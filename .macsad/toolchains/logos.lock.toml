@@ -1,0 +1,19 @@
+schema = "macsad-logos-toolchain-lock/1"
+
+[source]
+repository = "Brahmastra-Labs/logicaffeine-private"
+version = "0.10.1"
+commit = "132dc5346728e2d204df798dd7544e6405306a2c"
+tree = "9f251ad38ed49834d8224bbf6b928cb5ba1aa1c5"
+cargo_lock_sha256 = "e92ad213de9cb29e8956baf82701d27a244a8cfb6a23d08380532bdbe2ed3148"
+
+[runtime]
+workspace_environment = "LOGOS_WORKSPACE"
+binary_relative_path = "target/debug/largo"
+observed_binary_sha256 = "8c75eeb6180a7f4692ad5abba32b562d4a1cbc08792da95ae58770d4a3cc77f1"
+
+[requirements]
+skip_budget = 0
+deterministic_seed = 7
+test_tiers = "all"
+prove_finite_properties = true

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://macsad.invalid/schemas/logos-test-manifest-v1.json",
+  "schema": "macsad-logos-test-manifest/1",
+  "seed": 7,
+  "tiers": "all",
+  "proveFiniteProperties": true,
+  "projects": [
+    {
+      "name": "admin",
+      "directory": "logos/admin",
+      "expectedTests": [
+        "Column count stays six",
+        "Closed is terminal"
+      ],
+      "minimumProperties": 1,
+      "minimumProven": 1,
+      "domBundle": true
+    },
+    {
+      "name": "public-site",
+      "directory": "logos/public-site",
+      "expectedTests": [
+        "Publication visibility is fail closed"
+      ],
+      "minimumProperties": 1,
+      "minimumProven": 1,
+      "domBundle": true
+    },
+    {
+      "name": "gateway",
+      "directory": "logos/gateway",
+      "expectedTests": [
+        "Health route is classified",
+        "Mutation routes are unavailable"
+      ],
+      "minimumProperties": 1,
+      "minimumProven": 1,
+      "domBundle": false,
+      "testMode": "strip-server-main"
+    }
+  ]
+}

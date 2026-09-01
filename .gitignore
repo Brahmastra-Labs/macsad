@@ -1,0 +1,25 @@
+# LOGOS build output
+logos/*/target/
+logos/*/dist/
+
+# Local toolchain and service configuration
+.env
+.env.*
+!.env.example
+.dev.vars
+*.local.toml
+
+# Test and browser artifacts
+artifacts/
+coverage/
+playwright-report/
+test-results/
+.tmp/
+
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+__pycache__/
+*.pyc

@@ -1,0 +1,226 @@
+#!/usr/bin/env node
+
+import {
+  existsSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+} from "node:fs";
+import { dirname, extname, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const scriptDirectory = dirname(fileURLToPath(import.meta.url));
+const repositoryRoot = resolve(scriptDirectory, "..");
+const failures = [];
+
+function repositoryPath(path) {
+  return relative(repositoryRoot, path).split(sep).join("/");
+}
+
+function fail(path, message) {
+  failures.push(`${repositoryPath(path)}: ${message}`);
+}
+
+function read(path) {
+  try {
+    return readFileSync(path, "utf8");
+  } catch (error) {
+    fail(path, `cannot be read: ${error.message}`);
+    return "";
+  }
+}
+
+function filesBelow(path) {
+  if (!existsSync(path)) return [];
+  const result = [];
+  for (const entry of readdirSync(path).sort()) {
+    const child = join(path, entry);
+    const stats = statSync(child);
+    if (stats.isDirectory()) {
+      if (entry !== "target" && entry !== "node_modules" && entry !== ".git") {
+        result.push(...filesBelow(child));
+      }
+    } else if (stats.isFile()) {
+      result.push(child);
+    }
+  }
+  return result;
+}
+
+const requiredFiles = [
+  ".editorconfig",
+  ".gitattributes",
+  "AGENTS.md",
+  "LOGOS_GAPS.md",
+  ".macsad/toolchains/logos.lock.toml",
+  "tests/logos-test-manifest.json",
+  "database/apply_migrations.sh",
+  "database/verify.sql",
+];
+for (const requiredFile of requiredFiles) {
+  const path = join(repositoryRoot, requiredFile);
+  if (!existsSync(path)) fail(path, "required governance file is missing");
+}
+
+const lockPath = join(repositoryRoot, ".macsad", "toolchains", "logos.lock.toml");
+const lock = read(lockPath);
+for (const [label, pattern] of [
+  ["lock schema", /^schema\s*=\s*"macsad-logos-toolchain-lock\/1"\s*$/m],
+  ["exact source version", /^version\s*=\s*"\d+\.\d+\.\d+"\s*$/m],
+  ["source commit", /^commit\s*=\s*"[0-9a-f]{40}"\s*$/m],
+  ["source tree", /^tree\s*=\s*"[0-9a-f]{40}"\s*$/m],
+  ["Cargo.lock digest", /^cargo_lock_sha256\s*=\s*"[0-9a-f]{64}"\s*$/m],
+  ["runtime binary digest", /^observed_binary_sha256\s*=\s*"[0-9a-f]{64}"\s*$/m],
+  ["zero skip budget", /^skip_budget\s*=\s*0\s*$/m],
+  ["fixed seed", /^deterministic_seed\s*=\s*7\s*$/m],
+  ["all tiers", /^test_tiers\s*=\s*"all"\s*$/m],
+  ["finite proof mode", /^prove_finite_properties\s*=\s*true\s*$/m],
+]) {
+  if (!pattern.test(lock)) fail(lockPath, `${label} is absent or unpinned`);
+}
+if (/default_workspace\s*=/.test(lock) || /(?:[A-Za-z]:\\Users\\|\/home\/[^/]+\/)/.test(lock)) {
+  fail(lockPath, "toolchain lock contains a developer-specific absolute path");
+}
+
+const manifestPath = join(repositoryRoot, "tests", "logos-test-manifest.json");
+let testManifest;
+try {
+  testManifest = JSON.parse(read(manifestPath));
+} catch (error) {
+  fail(manifestPath, `invalid JSON: ${error.message}`);
+}
+if (testManifest) {
+  if (testManifest.schema !== "macsad-logos-test-manifest/1") {
+    fail(manifestPath, "unsupported schema");
+  }
+  if (
+    testManifest.seed !== 7 ||
+    testManifest.tiers !== "all" ||
+    testManifest.proveFiniteProperties !== true
+  ) {
+    fail(manifestPath, "seed, tiers, and proof requirements must match the toolchain lock");
+  }
+  if (!Array.isArray(testManifest.projects) || testManifest.projects.length === 0) {
+    fail(manifestPath, "at least one LOGOS project is required");
+  } else {
+    for (const project of testManifest.projects) {
+      const projectDirectory = join(repositoryRoot, String(project.directory ?? ""));
+      const largoManifest = join(projectDirectory, "Largo.toml");
+      const entry = join(projectDirectory, "src", "main.lg");
+      if (!existsSync(largoManifest)) fail(largoManifest, "project manifest is missing");
+      if (!existsSync(entry)) fail(entry, "single LOGOS entry file is missing");
+      if (existsSync(largoManifest)) {
+        const text = read(largoManifest);
+        if (/^\s*\[dependencies\]\s*$/m.test(text)) {
+          fail(largoManifest, "registry or inert manifest dependencies are forbidden; use the locked local LOGOS toolchain");
+        }
+        const budgets = [...text.matchAll(/^skip_budget\s*=\s*(\d+)\s*$/gm)];
+        if (budgets.length !== 1 || budgets[0][1] !== "0") {
+          fail(largoManifest, "must declare exactly one skip_budget = 0");
+        }
+      }
+      if (!Array.isArray(project.expectedTests) || project.expectedTests.length === 0) {
+        fail(manifestPath, `${String(project.name)} has no expected tests`);
+      }
+      if (project.testMode !== undefined && project.testMode !== "strip-server-main") {
+        fail(manifestPath, `${String(project.name)} has an unsupported testMode`);
+      }
+      if (!Number.isSafeInteger(project.minimumProperties) || project.minimumProperties < 1) {
+        fail(manifestPath, `${String(project.name)} must exercise at least one finite property`);
+      }
+      if (!Number.isSafeInteger(project.minimumProven) || project.minimumProven < 1) {
+        fail(manifestPath, `${String(project.name)} must prove at least one finite property`);
+      }
+    }
+  }
+}
+
+const executableCandidates = [
+  ...filesBelow(join(repositoryRoot, "scripts")),
+  ...filesBelow(join(repositoryRoot, ".github", "workflows")),
+  ...filesBelow(join(repositoryRoot, "logos")),
+  ...filesBelow(join(repositoryRoot, "host_adapters")),
+].filter((path) => path !== join(repositoryRoot, "scripts", "guardrails.mjs"));
+
+for (const path of executableCandidates) {
+  const extension = extname(path).toLowerCase();
+  if (![".sh", ".mjs", ".js", ".py", ".yml", ".yaml", ".lg", ".toml"].includes(extension)) {
+    continue;
+  }
+  const text = read(path);
+  for (const [label, pattern] of [
+    ["continue-on-error", /continue-on-error\s*:/i],
+    ["allow_failure", /allow_failure\s*[:=]/i],
+    ["disabled shell error handling", /(^|[;&|]\s*)set\s+\+e(?:\s|$)/m],
+    ["swallowed shell failure", /\|\|\s*true(?:\s|$)/m],
+    ["pull_request_target", /\bpull_request_target\s*:/],
+    ["write-all permission", /permissions\s*:\s*write-all/i],
+    ["developer Windows path", /[A-Za-z]:\\Users\\/],
+    ["developer Unix home", /\/home\/[^/]+\//],
+    ["remote install pipe", /(?:curl|wget)[^\n|]*\|\s*(?:ba)?sh\b/],
+    ["registry LOGOS installation", /cargo\s+(?:add|install)\s+[^\n]*(?:logos|logicaffeine|largo)/i],
+  ]) {
+    if (pattern.test(text)) fail(path, `forbidden ${label}`);
+  }
+  if (extension === ".js" && repositoryPath(path).startsWith("logos/")) {
+    fail(path, "handwritten JavaScript is forbidden in a LOGOS application");
+  }
+  if (extension === ".lg" && /fetchText\s*\([^)]*(?:delete|patch|post|put)/i.test(text)) {
+    fail(path, "fetchText cannot be presented as mutation transport");
+  }
+  if (extension === ".lg" && /^\s*##\s+Requires\b/m.test(text)) {
+    fail(path, "## Requires resolves registry crates on this LOGOS revision; MaCSad must use the locked local source closure");
+  }
+}
+
+for (const workflow of filesBelow(join(repositoryRoot, ".github", "workflows"))) {
+  if (![".yml", ".yaml"].includes(extname(workflow).toLowerCase())) continue;
+  const text = read(workflow);
+  for (const match of text.matchAll(/^\s*uses:\s*([^\s#]+)(?:\s+#.*)?$/gm)) {
+    const reference = match[1];
+    const separator = reference.lastIndexOf("@");
+    if (separator < 1 || !/^[0-9a-f]{40}$/.test(reference.slice(separator + 1))) {
+      fail(workflow, `action is not pinned to a full commit SHA: ${reference}`);
+    }
+  }
+  for (const match of text.matchAll(/^\s*image:\s*([^\s#]+)(?:\s+#.*)?$/gm)) {
+    if (!/@sha256:[0-9a-f]{64}$/.test(match[1])) {
+      fail(workflow, `container is not pinned to an image digest: ${match[1]}`);
+    }
+  }
+}
+
+const migrationsDirectory = join(repositoryRoot, "database", "migrations");
+const migrations = filesBelow(migrationsDirectory)
+  .filter((path) => /[\\/]\d{4}_[a-z0-9_]+\.sql$/.test(path))
+  .sort();
+if (migrations.length === 0) {
+  fail(migrationsDirectory, "no numbered migrations found");
+} else {
+  migrations.forEach((path, index) => {
+    const expectedPrefix = String(index + 1).padStart(4, "0");
+    if (!repositoryPath(path).split("/").at(-1).startsWith(`${expectedPrefix}_`)) {
+      fail(path, `migration sequence is not contiguous at ${expectedPrefix}`);
+    }
+    const text = read(path);
+    const begins = text.match(/^\s*BEGIN\s*;\s*(?:--.*)?$/gim) ?? [];
+    const commits = text.match(/^\s*COMMIT\s*;\s*(?:--.*)?$/gim) ?? [];
+    if (begins.length !== 1 || commits.length !== 1) {
+      fail(path, "migration must own exactly one BEGIN and COMMIT");
+    }
+    if (!/pg_advisory_xact_lock\s*\(/i.test(text) || !/macsad:schema-migration/i.test(text)) {
+      fail(path, "migration advisory-lock contract is missing");
+    }
+    if (!/macsad_meta\.schema_migration/i.test(text) || !/migration_sha256/i.test(text)) {
+      fail(path, "migration ledger/checksum contract is missing");
+    }
+  });
+}
+
+if (failures.length > 0) {
+  for (const failure of failures.sort()) process.stderr.write(`error: ${failure}\n`);
+  process.stderr.write(`guardrails failed with ${failures.length} violation(s)\n`);
+  process.exit(1);
+}
+
+process.stdout.write("guardrails passed\n");

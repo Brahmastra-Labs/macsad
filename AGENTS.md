@@ -1,0 +1,125 @@
+# MaCSad engineering constitution
+
+This repository is the trusted platform for MaCSad. Its application code is
+authored in LOGOS. PostgreSQL is the sole authority for mutable domain state.
+Generated public output is an immutable projection, never a second control
+plane.
+
+These rules are requirements, not suggestions.
+
+## The working loop
+
+Use RED, GREEN, REFACTOR for every behavior:
+
+1. Write or select the failing acceptance test.
+2. Observe the expected failure for the expected reason.
+3. Implement the smallest correct behavior at the proper architectural layer.
+4. Run the targeted test.
+5. Run `scripts/quality-gate.sh` before handing work off.
+6. Refactor only while the complete gate remains green.
+
+Never weaken, delete, skip, ignore, quarantine, or silently re-record a failing
+test to make an implementation pass. If the product contract genuinely changes,
+surface the conflict and obtain an explicit decision before changing its RED
+test.
+
+Run one test suite at a time. Do not leave duplicate suites or servers running.
+
+## Truth and authority
+
+- PostgreSQL constraints and transactions are the final live-state guard.
+- LOGOS owns domain policy, workflow decisions, authorization decisions, and
+  deterministic generation.
+- Host adapters may perform typed mechanical effects only. They may not contain
+  domain decisions or reinterpret outcomes.
+- Kanban columns are projections of pinned process nodes. A UI drag is never
+  itself a state transition.
+- Immutable facts are corrected by a new superseding fact, never overwritten.
+- Browser state may cache preferences and read projections. It may not become
+  authoritative domain state.
+- Agents never receive database, GitHub deployment, Cloudflare, OpenRouter, or
+  private-repository credentials.
+
+## Every mutation
+
+Every accepted mutation must be:
+
+- authenticated from transport identity;
+- authorized by an active narrow capability;
+- bound to one workspace and aggregate;
+- expected-version checked;
+- idempotent under a request key and canonical request digest;
+- committed atomically with its domain event;
+- atomically outboxed when an external effect follows; and
+- replayable to the same result for the same accepted command.
+
+There are no GET mutations and no generic table CRUD. Append-only, compiled,
+sealed, financial, evidence, audit, and publication-closure tables never receive
+raw resource endpoints.
+
+## Tests are the scaffold
+
+The gate must remain strict:
+
+- LOGOS `skip_budget` is always zero.
+- A suite with zero discovered tests fails.
+- A filter matching zero tests fails.
+- Any skipped or failed test fails.
+- Every LOGOS suite runs with a fixed seed, deterministic operation budget,
+  finite-domain proof mode, and the available cross-tier check.
+- Real PostgreSQL integration tests use a fresh PostgreSQL 16 database.
+- Mocked ports require a separate real-adapter contract suite.
+- Generated bundles are built twice and their digests must match.
+- Snapshot changes are reviewed artifacts; CI never blesses snapshots.
+- Network is disabled in deterministic tests unless a test declares a live
+  capability and the separate live gate is deliberately invoked.
+- Browser tests cover loading, empty, success, validation, stale-version,
+  duplicate-submit, denial, and failure states.
+- Accessibility tests cover keyboard operation, focus, names, contrast, reduced
+  motion, and responsive layouts.
+- Publication tests prove that private or unclassified material fails closed.
+
+## Forbidden shortcuts
+
+Do not introduce:
+
+- `Skip this test`, ignored tests, focused-only tests, `xfail`, or a nonzero skip
+  budget;
+- `continue-on-error`, `allow_failure`, `set +e`, swallowed exit codes, or
+  fallback success paths;
+- floating branches, tags, action versions, model aliases, or unpinned toolchains;
+- handwritten JavaScript or Rust containing MaCSad domain policy;
+- GET endpoints that change state;
+- broad `DELETE`, raw SQL, or generic PATCH endpoints;
+- optimistic UI changes that pretend a command committed before the server says
+  it did;
+- secrets, tokens, database URLs, private keys, or developer absolute paths in
+  Git;
+- test-only production branches or mocks presented as integration evidence;
+- automatic policy activation, self-verification, or automatic publication; or
+- changes to an applied migration. Add the next numbered migration instead.
+
+## Current LOGOS boundary
+
+The pinned LOGOS release provides Components, Views, signals, bound inputs,
+events, scoped CSS, WASM-DOM emission, deterministic tests, proof tooling, and a
+LOGOS HTTP server. It does not yet provide the authenticated browser mutation
+transport or PostgreSQL adapter required for honest CRUD. Do not bypass this gap
+with raw JavaScript, GET mutations, or prose-only claims. The acceptance contract
+is in `LOGOS_GAPS.md`.
+
+Keep each LOGOS application single-entry-file until the upstream serve/test
+module-assembly gaps are fixed and promoted into a new exact toolchain lock.
+
+## Definition of done
+
+Work is done only when:
+
+1. the acceptance test existed and was observed RED when practical;
+2. targeted tests pass;
+3. the complete quality gate passes without skips;
+4. generated outputs are deterministic;
+5. security and failure behavior are tested, not merely described;
+6. documentation and machine contracts agree;
+7. no secret or machine-specific path entered Git; and
+8. the repository is clean at the pushed commit.

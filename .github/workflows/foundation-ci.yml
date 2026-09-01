@@ -1,0 +1,93 @@
+name: Foundation CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  credential-free-foundation:
+    name: Credential-free governance and PostgreSQL 16
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres@sha256:38471f330eb885e04de130b768d6db4e10469e2311879c7e5c699f6d2d8a1c74 # 16.10-bookworm index
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready --username=postgres --dbname=postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: postgres
+      PGDATABASE: macsad
+      PGAPPNAME: macsad-foundation-ci
+    steps:
+      - name: Check out exact revision
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Validate credential-free contracts
+        run: |
+          set -Eeuo pipefail
+          bash -n scripts/logos.sh scripts/quality-gate.sh database/apply_migrations.sh
+          node --check scripts/guardrails.mjs
+          node --check scripts/verify-logos-tests.mjs
+          node scripts/guardrails.mjs
+
+      - name: Create clean least-privilege database fixture
+        run: |
+          set -Eeuo pipefail
+          psql --no-psqlrc --set=ON_ERROR_STOP=1 --dbname=postgres <<'SQL'
+          CREATE ROLE macsad_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
+          CREATE ROLE macsad_migrator NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
+          CREATE ROLE macsad_app NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
+          CREATE ROLE macsad_reader NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
+          CREATE ROLE alejandro LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
+
+          GRANT macsad_owner TO macsad_migrator WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;
+          GRANT macsad_owner, macsad_migrator TO alejandro WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;
+
+          CREATE DATABASE macsad OWNER macsad_owner ENCODING 'UTF8';
+          REVOKE ALL ON DATABASE macsad FROM PUBLIC;
+          GRANT CONNECT ON DATABASE macsad TO macsad_owner, macsad_migrator, macsad_app, macsad_reader, alejandro;
+          ALTER DATABASE macsad SET search_path = pg_catalog;
+          ALTER ROLE alejandro IN DATABASE macsad SET search_path = pg_catalog;
+          ALTER ROLE macsad_owner IN DATABASE macsad SET search_path = macsad, macsad_meta, pg_catalog;
+          ALTER ROLE macsad_migrator IN DATABASE macsad SET search_path = macsad, macsad_meta, pg_catalog;
+          ALTER ROLE macsad_app IN DATABASE macsad SET search_path = macsad, pg_catalog;
+          ALTER ROLE macsad_reader IN DATABASE macsad SET search_path = macsad, pg_catalog;
+          SQL
+          schema_count="$(psql --no-psqlrc --set=ON_ERROR_STOP=1 --tuples-only --no-align --command "SELECT count(*) FROM pg_namespace WHERE nspname IN ('macsad', 'macsad_meta');")"
+          [[ "${schema_count}" == '0' ]]
+
+      - name: Migrate, repeat, verify, and exercise invariants
+        run: |
+          set -Eeuo pipefail
+          bash database/apply_migrations.sh
+          bash database/apply_migrations.sh
+          psql --no-psqlrc --set=ON_ERROR_STOP=1 --file=database/verify.sql
+          psql --no-psqlrc --set=ON_ERROR_STOP=1 --file=database/tests/0001_invariants.sql
+
+      - name: State the evidence boundary
+        run: |
+          set -Eeuo pipefail
+          printf '%s\n' \
+            'Foundation CI proves repository guardrails and a clean PostgreSQL 16 migration/repeat/verify/invariant run.' \
+            'It does not claim private LOGOS, browser, Firebat runtime, Cloudflare Access, or deployment evidence.'
