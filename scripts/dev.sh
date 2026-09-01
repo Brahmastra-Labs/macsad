@@ -22,7 +22,8 @@ Development:
   test               Run the complete LOGOS/host/Compose gate; DB when configured.
   test-foundation    Run credential-free source, host, and Compose guardrails.
   lint-logos         Run the standalone LOGOS size, duplication, and debt gate.
-  audit-actions      Read back GitHub Actions policy and disabled Firebat2 flag.
+  audit-actions MODE Read back GitHub Actions policy against an explicit state:
+                     --expect-firebat2=disabled|disabled-ready|enabled-ready.
 
 Firebat stack:
   configure          Create ignored tailnet/runtime config and generated secrets.
@@ -215,7 +216,7 @@ main() {
     test) (($# == 0)) || die 'test accepts no arguments'; test_all ;;
     test-foundation) (($# == 0)) || die 'test-foundation accepts no arguments'; test_foundation ;;
     lint-logos) (($# == 0)) || die 'lint-logos accepts no arguments'; exec node "${REPOSITORY_ROOT}/scripts/logos-source-lint.mjs" ;;
-    audit-actions) (($# == 0)) || die 'audit-actions accepts no arguments'; exec node "${REPOSITORY_ROOT}/scripts/ci/audit-github-actions-settings.mjs" ;;
+    audit-actions) exec node "${REPOSITORY_ROOT}/scripts/ci/audit-github-actions-settings.mjs" "$@" ;;
     configure) exec "${STACK}" configure "$@" ;;
     prepare) (($# == 0)) || die 'prepare accepts no arguments'; exec "${STACK}" prepare ;;
     compose-config) (($# == 0)) || die 'compose-config accepts no arguments'; exec "${STACK}" config ;;

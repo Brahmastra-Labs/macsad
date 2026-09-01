@@ -14,6 +14,7 @@ const paths = {
   ingestion: ".github/workflows/firebat2-ingestion.yml",
   reusable: ".github/workflows/firebat2-verify.yml",
   host: "ops/firebat2/verify_verifier_host.sh",
+  runnerLock: "ops/firebat2/actions-runner-lock.json",
   runbook: "docs/runbooks/firebat2-verification.md",
   guardrails: "scripts/guardrails.mjs",
   builder: "scripts/ci/build-logos-evidence.sh",
@@ -48,6 +49,28 @@ export function verifyFirebat2Contract(overrides = new Map()) {
   const rejectPattern = (relativePath, text, label, pattern) => {
     if (pattern.test(activeContractText(text))) failures.push(`${relativePath}: ${label}`);
   };
+
+  const expectedRunnerLock = {
+    schema_version: 1,
+    release: "2.337.0",
+    platform: "linux-x64",
+    archive_name: "actions-runner-linux-x64-2.337.0.tar.gz",
+    source_url:
+      "https://github.com/actions/runner/releases/download/v2.337.0/actions-runner-linux-x64-2.337.0.tar.gz",
+    archive_sha256: "70920811a4f8ad4328818682bca5c6469c1c942fab52448868071d0063816613",
+    guest_archive_path:
+      "/opt/macsad/actions-runner-archives/actions-runner-linux-x64-2.337.0.tar.gz",
+    guest_install_root: "/opt/macsad/actions-runner",
+    guest_lock_path: "/etc/macsad/actions-runner-lock.json",
+  };
+  try {
+    const actualRunnerLock = JSON.parse(read(paths.runnerLock));
+    if (JSON.stringify(actualRunnerLock) !== JSON.stringify(expectedRunnerLock)) {
+      failures.push(`${paths.runnerLock}: Actions Runner release lock must remain exact`);
+    }
+  } catch (error) {
+    failures.push(`${paths.runnerLock}: invalid Actions Runner release lock: ${error.message}`);
+  }
 
   const foundation = read(paths.foundation);
   requirePattern(
@@ -214,7 +237,18 @@ export function verifyFirebat2Contract(overrides = new Map()) {
     ["root-owned identity marker", /ROLE_FILE='\/etc\/macsad\/firebat2-runner-role'/],
     ["KVM or QEMU VM proof", /systemd-detect-virt[\s\S]*'kvm'[\s\S]*'qemu'/],
     ["ephemeral image marker", /EXPECTED_IMAGE_MARKER='macsad-firebat2-ephemeral-vm-v1'/],
-    ["exact runner version", /EXPECTED_RUNNER_VERSION='2\.334\.0'/],
+    ["exact runner version", /EXPECTED_RUNNER_VERSION='2\.337\.0'/],
+    ["exact runner archive digest", /EXPECTED_RUNNER_ARCHIVE_SHA256='70920811a4f8ad4328818682bca5c6469c1c942fab52448868071d0063816613'/],
+    ["root-owned runner release lock", /RUNNER_LOCK='\/etc\/macsad\/actions-runner-lock\.json'[\s\S]*root_owned_read_only_path "\$\{RUNNER_LOCK\}"/],
+    ["root-owned official runner archive", /RUNNER_ARCHIVE='\/opt\/macsad\/actions-runner-archives\/actions-runner-linux-x64-2\.337\.0\.tar\.gz'[\s\S]*root_owned_read_only_path "\$\{RUNNER_ARCHIVE\}"/],
+    ["exact runner lock fields", /expected_lock = \{[\s\S]*"archive_sha256": expected_archive_sha256[\s\S]*actual_lock != expected_lock/],
+    ["official runner archive checksum", /actual_archive_sha256 = digest_file\(archive_path\)[\s\S]*actual_archive_sha256 != expected_archive_sha256/],
+    ["archive manifest extracted-tree membership", /actual_static != expected_names/],
+    ["archive manifest extracted-file digest", /digest\.hexdigest\(\) != digest_file\(candidate\)/],
+    ["archive manifest exact symlink target", /os\.readlink\(candidate\) != member\.linkname/],
+    ["archive manifest symlink containment", /resolved\.relative_to\(root\)/],
+    ["runner release integrity gate invocation", /root_owned_runner_tree "\$\{RUNNER_ROOT\}"\n  verify_runner_release_integrity/],
+    ["immutable runner archive parent", /root_owned_immutable_directory_node '\/opt\/macsad\/actions-runner-archives'/],
     ["ephemeral registration setting", /get\("ephemeral", "Ephemeral"\) is not True/],
     ["disabled runner update setting", /get\("disableUpdate", "DisableUpdate"\) is not True/],
     ["Node 24", /\^v24\\\.\[0-9\]\+\\\.\[0-9\]\+\$/],
@@ -323,6 +357,13 @@ export function verifyFirebat2Contract(overrides = new Map()) {
     /verified_allowed !== false/,
     /default_workflow_permissions !== "read"/,
     /can_approve_pull_request_reviews !== false/,
+    /expectedStateModes = new Map/,
+    /\["disabled", \{ enabled: false, requireRunnerGroup: false \}\]/,
+    /\["disabled-ready", \{ enabled: false, requireRunnerGroup: true \}\]/,
+    /\["enabled-ready", \{ enabled: true, requireRunnerGroup: true \}\]/,
+    /arguments_\.length !== 1/,
+    /variable\.value !== expectedVariableValue/,
+    /!expectedState\.requireRunnerGroup/,
     /!\["false", "true"\]\.includes\(variable\.value\)/,
     /group\.inherited !== false/,
     /group\.visibility !== "selected"/,
@@ -331,6 +372,14 @@ export function verifyFirebat2Contract(overrides = new Map()) {
     /group\.selected_workflows\[0\] !== admittedWorkflow/,
     /selectedRepositories\.repositories\[0\]\.full_name !== repository/,
     /selectedRepositories\.repositories\[0\]\.private !== true/,
+    /actions\/runner-groups\/\$\{group\.id\}\/runners/,
+    /groupRunners\.total_count !== 1/,
+    /groupRunners\.runners\.length !== 1/,
+    /runner\.status !== "online"/,
+    /runner\.busy !== false/,
+    /typeof runner\.os !== "string"/,
+    /runner\.os\.toLowerCase\(\) !== "linux"/,
+    /JSON\.stringify\(actualRunnerLabels\) !== JSON\.stringify\(expectedRunnerLabels\)/,
   ]) requirePattern(paths.actionsAudit, actionsAudit, "GitHub Actions read-only audit is incomplete", pattern);
   requirePattern(
     paths.actionsAudit,

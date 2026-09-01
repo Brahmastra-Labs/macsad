@@ -7,6 +7,12 @@ const organization = "Brahmastra-Labs";
 const runnerGroupName = "macsad-firebat2";
 const admittedWorkflow =
   "Brahmastra-Labs/macsad/.github/workflows/firebat2-verify.yml@refs/heads/main";
+const expectedRunnerLabels = ["firebat2", "linux", "macsad-verifier", "self-hosted", "x64"];
+const expectedStateModes = new Map([
+  ["disabled", { enabled: false, requireRunnerGroup: false }],
+  ["disabled-ready", { enabled: false, requireRunnerGroup: true }],
+  ["enabled-ready", { enabled: true, requireRunnerGroup: true }],
+]);
 
 function stop(message) {
   process.stderr.write(`error: ${message}\n`);
@@ -30,6 +36,25 @@ function get(path) {
     stop(`GitHub returned invalid JSON for ${path}: ${error.message}`);
   }
 }
+
+function parseExpectedState(arguments_) {
+  if (arguments_.length !== 1 || !arguments_[0].startsWith("--expect-firebat2=")) {
+    stop(
+      "supply exactly one expected-state contract: " +
+        "--expect-firebat2=disabled|disabled-ready|enabled-ready",
+    );
+  }
+  const modeName = arguments_[0].slice("--expect-firebat2=".length);
+  const mode = expectedStateModes.get(modeName);
+  if (!mode) {
+    stop(
+      "unknown Firebat2 expected state; use disabled, disabled-ready, or enabled-ready",
+    );
+  }
+  return { modeName, ...mode };
+}
+
+const expectedState = parseExpectedState(process.argv.slice(2));
 
 const permissions = get(`repos/${repository}/actions/permissions`);
 if (
@@ -66,9 +91,16 @@ if (
   stop("FIREBAT2_ENABLED must be a canonical boolean repository variable");
 }
 
-if (variable.value === "false") {
+const expectedVariableValue = expectedState.enabled ? "true" : "false";
+if (variable.value !== expectedVariableValue) {
+  stop(
+    `FIREBAT2_ENABLED is ${variable.value}; expected ${expectedVariableValue} for ${expectedState.modeName}`,
+  );
+}
+
+if (!expectedState.requireRunnerGroup) {
   process.stdout.write(
-    "GitHub Actions audit passed: GitHub-owned/full-SHA actions, read-only token, no PR approval; Firebat2 remains disabled.\n",
+    "GitHub Actions audit passed: GitHub-owned/full-SHA actions, read-only token, no PR approval; Firebat2 is explicitly expected to remain disabled.\n",
   );
 } else {
   const runnerGroups = get(`orgs/${organization}/actions/runner-groups`);
@@ -108,7 +140,39 @@ if (variable.value === "false") {
     stop("macsad-firebat2 must be assigned only to the private Brahmastra-Labs/macsad repository");
   }
 
+  const groupRunners = get(
+    `orgs/${organization}/actions/runner-groups/${group.id}/runners`,
+  );
+  if (
+    groupRunners.total_count !== 1 ||
+    !Array.isArray(groupRunners.runners) ||
+    groupRunners.runners.length !== 1
+  ) {
+    stop("macsad-firebat2 must contain exactly one clean standby runner");
+  }
+  const runner = groupRunners.runners[0];
+  if (
+    runner.status !== "online" ||
+    runner.busy !== false ||
+    typeof runner.os !== "string" ||
+    runner.os.toLowerCase() !== "linux" ||
+    !Array.isArray(runner.labels)
+  ) {
+    stop("the Firebat2 standby runner must be online, Linux, idle, and labeled");
+  }
+  const actualRunnerLabels = runner.labels
+    .map((label) =>
+      typeof label?.name === "string" ? label.name.toLowerCase() : null,
+    )
+    .sort();
+  if (
+    actualRunnerLabels.some((label) => typeof label !== "string") ||
+    JSON.stringify(actualRunnerLabels) !== JSON.stringify(expectedRunnerLabels)
+  ) {
+    stop("the Firebat2 standby runner labels must match the exact admitted set");
+  }
+
   process.stdout.write(
-    "GitHub Actions audit passed: Firebat2 enabled with an exact private repository/workflow runner-group boundary.\n",
+    `GitHub Actions audit passed: Firebat2 is ${expectedState.enabled ? "enabled" : "disabled before activation"} with an exact private repository/workflow runner-group boundary.\n`,
   );
 }

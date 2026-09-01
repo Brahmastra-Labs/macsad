@@ -108,8 +108,10 @@ At sprint review a developer can:
 
 - Add no-secret CI with strict aggregate required check design.
 - Pin every third-party action to a full commit.
-- Keep production deploy workflows manual and fail-fast until Cloudflare
-  account, Access, Tunnel, domains, environments, and tokens are provisioned.
+- Add no production deploy workflow until the Cloudflare account, Access,
+  Tunnel, domains, environments, tokens, exact-artifact gate, smoke test, and
+  rollback path are provisioned. Once those machine contracts are green, an
+  ordinary application release may promote autonomously without a human click.
 
 ## Acceptance criteria
 
