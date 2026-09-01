@@ -55,5 +55,38 @@ BEGIN
   IF bad_count <> 0 THEN
     RAISE EXCEPTION 'PUBLIC retains privileges on restore target database';
   END IF;
+
+  SELECT pg_catalog.count(*) INTO bad_count
+  FROM pg_catalog.pg_namespace AS namespace
+  CROSS JOIN LATERAL pg_catalog.aclexplode(
+    COALESCE(
+      namespace.nspacl,
+      pg_catalog.acldefault('n', namespace.nspowner)
+    )
+  ) AS privilege
+  WHERE namespace.nspname = 'public'
+    AND privilege.grantee = 0
+    AND privilege.privilege_type IN ('USAGE', 'CREATE');
+  IF bad_count <> 0 THEN
+    RAISE EXCEPTION 'PUBLIC retains privileges on restore target public schema';
+  END IF;
+
+  IF (
+    SELECT pg_catalog.pg_get_userbyid(namespace.nspowner)
+    FROM pg_catalog.pg_namespace AS namespace
+    WHERE namespace.nspname = 'public'
+  ) IS DISTINCT FROM 'pg_database_owner'::name THEN
+    RAISE EXCEPTION 'restore target public schema has an unsafe owner';
+  END IF;
+
+  SELECT pg_catalog.count(*) INTO bad_count
+  FROM pg_catalog.pg_type AS type_record
+  JOIN pg_catalog.pg_namespace AS namespace
+    ON namespace.oid = type_record.typnamespace
+  WHERE namespace.nspname = 'public'
+    AND type_record.typtype IN ('c', 'd', 'e', 'm', 'r');
+  IF bad_count <> 0 THEN
+    RAISE EXCEPTION 'restore target public schema contains types';
+  END IF;
 END
 $preflight$;

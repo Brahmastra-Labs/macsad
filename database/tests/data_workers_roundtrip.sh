@@ -13,6 +13,8 @@ readonly TEMP_BASE="$(realpath -- "${TMPDIR:-/tmp}")"
 readonly TEMP_ROOT="$(mktemp -d "${TEMP_BASE}/macsad-worker-roundtrip.XXXXXXXX")"
 TARGET_CREATED=0
 SECOND_SEED_CREATED=0
+SOURCE_SENTINEL_CREATED=0
+CAS_WATCHER_PID=''
 
 die() {
   printf 'error: %s\n' "$*" >&2
@@ -20,6 +22,16 @@ die() {
 }
 
 cleanup() {
+  if [[ -n "${CAS_WATCHER_PID:-}" ]] && kill -0 "${CAS_WATCHER_PID}" 2>/dev/null; then
+    kill "${CAS_WATCHER_PID}" 2>/dev/null || true
+    wait "${CAS_WATCHER_PID}" 2>/dev/null || true
+  fi
+  if (( SOURCE_SENTINEL_CREATED == 1 )); then
+    PGUSER="${SOURCE_USER}" PGDATABASE="${SOURCE_DATABASE}" psql \
+      --no-psqlrc --set=ON_ERROR_STOP=1 \
+      --command='SET ROLE macsad_owner; DROP SCHEMA macsad_unreviewed_sentinel CASCADE' \
+      >/dev/null || true
+  fi
   if (( TARGET_CREATED == 1 )); then
     PGUSER="${ADMIN_USER}" PGDATABASE=postgres dropdb --if-exists -- "${TARGET_DATABASE}" || true
   fi
@@ -34,6 +46,40 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+
+replace_cas_after_staging() {
+  local stage_parent="$1"
+  local stage_directory_prefix="$2"
+  local staged_name="$3"
+  local caller_manifest="$4"
+  local deadline=$((SECONDS + 15))
+  local candidate
+  local -a candidates=()
+  shopt -s nullglob
+  while (( SECONDS < deadline )); do
+    candidates=("${stage_parent}/${stage_directory_prefix}"*/"${staged_name}")
+    for candidate in "${candidates[@]}"; do
+      if [[ -f "${candidate}" ]] &&
+          cmp --silent "${TEMP_ROOT}/cas.tsv" "${candidate}"; then
+        printf 'format\tmacsad-cas-manifest/1\n' >"${caller_manifest}"
+        return 0
+      fi
+    done
+  done
+  return 1
+}
+
+assert_no_macsad_schemas() {
+  local failure_label="$1"
+  local schema_count
+  schema_count="$(
+    PGUSER="${SOURCE_USER}" PGDATABASE="${TARGET_DATABASE}" psql \
+      --no-psqlrc --set=ON_ERROR_STOP=1 --tuples-only --no-align \
+      --command="SELECT count(*) FROM pg_namespace WHERE nspname IN ('macsad', 'macsad_meta')"
+  )"
+  [[ "${schema_count}" == '0' ]] ||
+    die "${failure_label} changed the scratch database"
+}
 
 create_scratch_database() {
   local database_name="$1"
@@ -56,7 +102,7 @@ create_scratch_database() {
   die 'generated restore database name is unsafe'
 [[ "${SECOND_SEED_DATABASE}" =~ ^macsad_seed_contract_[0-9]+_[0-9]+$ ]] ||
   die 'generated independent-seed database name is unsafe'
-for command_name in awk bash cmp createdb dropdb mktemp psql python3 realpath sed sha256sum; do
+for command_name in awk bash cmp cp createdb dropdb mktemp psql python3 realpath sed sha256sum; do
   command -v "${command_name}" >/dev/null 2>&1 ||
     die "required command not found: ${command_name}"
 done
@@ -178,23 +224,73 @@ PGUSER="${SOURCE_USER}" PGDATABASE="${SOURCE_DATABASE}" psql \
   --field-separator=$'\t' \
   --file="${WORKER_DIR}/sql/referenced_blobs.sql" |
   awk '{ print "blob\t" $0 }' >>"${TEMP_ROOT}/cas.tsv"
+WRITE_FENCE_SHA256_LINE="$(
+  printf '%s' 'macsad-roundtrip externally enforced write fence v1' | sha256sum
+)"
+readonly WRITE_FENCE_SHA256_LINE
+readonly WRITE_FENCE_SHA256="${WRITE_FENCE_SHA256_LINE%% *}"
+[[ "${WRITE_FENCE_SHA256}" =~ ^[0-9a-f]{64}$ ]] ||
+  die 'could not calculate the round-trip write-fence evidence digest'
+
+# A whole-database recovery archive must reject code or data in an unreviewed
+# source schema, even though normal MaCSad verification ignores that namespace.
+PGUSER="${SOURCE_USER}" PGDATABASE="${SOURCE_DATABASE}" psql \
+  --no-psqlrc --set=ON_ERROR_STOP=1 --quiet <<'SQL'
+SET ROLE macsad_owner;
+CREATE SCHEMA macsad_unreviewed_sentinel AUTHORIZATION macsad_owner;
+CREATE TABLE macsad_unreviewed_sentinel.payload (value text NOT NULL);
+CREATE FUNCTION macsad_unreviewed_sentinel.effect()
+RETURNS integer LANGUAGE sql AS 'SELECT 1';
+SQL
+SOURCE_SENTINEL_CREATED=1
+if PGUSER="${SOURCE_USER}" PGDATABASE="${SOURCE_DATABASE}" \
+    "${WORKER_DIR}/backup_database.sh" \
+    "${TEMP_ROOT}/unreviewed-schema-backup" "${TEMP_ROOT}/cas.tsv" \
+    "${WRITE_FENCE_SHA256}" \
+    >"${TEMP_ROOT}/unreviewed-schema-backup.log" 2>&1; then
+  die 'backup accepted an unreviewed source schema'
+fi
+[[ ! -e "${TEMP_ROOT}/unreviewed-schema-backup" ]] ||
+  die 'unreviewed source schema failure published a backup directory'
+PGUSER="${SOURCE_USER}" PGDATABASE="${SOURCE_DATABASE}" psql \
+  --no-psqlrc --set=ON_ERROR_STOP=1 --quiet \
+  --command='SET ROLE macsad_owner; DROP SCHEMA macsad_unreviewed_sentinel CASCADE'
+SOURCE_SENTINEL_CREATED=0
 
 sed '$d' "${TEMP_ROOT}/cas.tsv" >"${TEMP_ROOT}/incomplete-cas.tsv"
-readonly WRITE_FENCE_SHA256="$({
-  printf '%s' 'macsad-roundtrip externally enforced write fence v1'
-} | sha256sum)"
 if PGUSER="${SOURCE_USER}" PGDATABASE="${SOURCE_DATABASE}" \
     "${WORKER_DIR}/backup_database.sh" \
     "${TEMP_ROOT}/incomplete-backup" "${TEMP_ROOT}/incomplete-cas.tsv" \
-    "${WRITE_FENCE_SHA256%% *}" >"${TEMP_ROOT}/incomplete-backup.log" 2>&1; then
+    "${WRITE_FENCE_SHA256}" >"${TEMP_ROOT}/incomplete-backup.log" 2>&1; then
   die 'backup accepted an incomplete CAS manifest'
 fi
 [[ ! -e "${TEMP_ROOT}/incomplete-backup" ]] ||
   die 'failed CAS preflight published a backup directory'
 
+# Once the caller-owned CAS manifest has been copied, replacing that caller
+# path must not change the bytes hashed or used by the backup.
+cp -- "${TEMP_ROOT}/cas.tsv" "${TEMP_ROOT}/backup-race-cas.tsv"
+replace_cas_after_staging \
+  "${TEMP_ROOT}" '.cas-race-backup.' '.input-cas-manifest.tsv' \
+  "${TEMP_ROOT}/backup-race-cas.tsv" &
+CAS_WATCHER_PID=$!
 PGUSER="${SOURCE_USER}" PGDATABASE="${SOURCE_DATABASE}" \
   "${WORKER_DIR}/backup_database.sh" \
-  "${TEMP_ROOT}/backup" "${TEMP_ROOT}/cas.tsv" "${WRITE_FENCE_SHA256%% *}"
+  "${TEMP_ROOT}/cas-race-backup" "${TEMP_ROOT}/backup-race-cas.tsv" \
+  "${WRITE_FENCE_SHA256}"
+wait "${CAS_WATCHER_PID}" || die 'backup did not privately stage its CAS manifest'
+CAS_WATCHER_PID=''
+CANONICAL_CAS_SHA256_LINE="$(sha256sum "${TEMP_ROOT}/cas.tsv")"
+BACKUP_RACE_CAS_SHA256="$(
+  awk -F '\t' '$1 == "cas_manifest_sha256" { print $2 }' \
+    "${TEMP_ROOT}/cas-race-backup/manifest.tsv"
+)"
+[[ "${BACKUP_RACE_CAS_SHA256}" == "${CANONICAL_CAS_SHA256_LINE%% *}" ]] ||
+  die 'backup manifest did not bind the privately staged CAS bytes'
+
+PGUSER="${SOURCE_USER}" PGDATABASE="${SOURCE_DATABASE}" \
+  "${WORKER_DIR}/backup_database.sh" \
+  "${TEMP_ROOT}/backup" "${TEMP_ROOT}/cas.tsv" "${WRITE_FENCE_SHA256}"
 readonly TRUSTED_MANIFEST_SHA256_LINE="$(sha256sum "${TEMP_ROOT}/backup/manifest.tsv")"
 readonly TRUSTED_MANIFEST_SHA256="${TRUSTED_MANIFEST_SHA256_LINE%% *}"
 
@@ -208,17 +304,49 @@ if PGUSER="${SOURCE_USER}" PGDATABASE="${TARGET_DATABASE}" \
     >"${TEMP_ROOT}/untrusted-restore.log" 2>&1; then
   die 'restore accepted an untrusted manifest digest'
 fi
-readonly SCHEMA_COUNT_AFTER_REJECTION="$(
-  PGUSER="${SOURCE_USER}" PGDATABASE="${TARGET_DATABASE}" psql \
-    --no-psqlrc --set=ON_ERROR_STOP=1 --tuples-only --no-align \
-    --command="SELECT count(*) FROM pg_namespace WHERE nspname IN ('macsad', 'macsad_meta')"
-)"
-[[ "${SCHEMA_COUNT_AFTER_REJECTION}" == '0' ]] ||
-  die 'untrusted restore changed the scratch database'
+assert_no_macsad_schemas 'untrusted restore'
 
-PGUSER="${SOURCE_USER}" PGDATABASE="${TARGET_DATABASE}" \
+PGUSER="${SOURCE_USER}" PGDATABASE="${TARGET_DATABASE}" psql \
+  --no-psqlrc --set=ON_ERROR_STOP=1 --quiet \
+  --command="SET ROLE macsad_owner; CREATE TYPE public.restore_preflight_sentinel AS ENUM ('dirty')"
+if PGUSER="${SOURCE_USER}" PGDATABASE="${TARGET_DATABASE}" \
+    "${WORKER_DIR}/restore_database.sh" \
+    "${TEMP_ROOT}/backup" "${TEMP_ROOT}/cas.tsv" \
+    "${TRUSTED_MANIFEST_SHA256}" >"${TEMP_ROOT}/dirty-type-restore.log" 2>&1; then
+  die 'restore accepted a public type in the scratch database'
+fi
+assert_no_macsad_schemas 'dirty-public-type restore'
+PGUSER="${SOURCE_USER}" PGDATABASE="${TARGET_DATABASE}" psql \
+  --no-psqlrc --set=ON_ERROR_STOP=1 --quiet \
+  --command='SET ROLE macsad_owner; DROP TYPE public.restore_preflight_sentinel'
+
+PGUSER="${SOURCE_USER}" PGDATABASE="${TARGET_DATABASE}" psql \
+  --no-psqlrc --set=ON_ERROR_STOP=1 --quiet \
+  --command='SET ROLE macsad_owner; GRANT USAGE ON SCHEMA public TO PUBLIC'
+if PGUSER="${SOURCE_USER}" PGDATABASE="${TARGET_DATABASE}" \
+    "${WORKER_DIR}/restore_database.sh" \
+    "${TEMP_ROOT}/backup" "${TEMP_ROOT}/cas.tsv" \
+    "${TRUSTED_MANIFEST_SHA256}" >"${TEMP_ROOT}/dirty-acl-restore.log" 2>&1; then
+  die 'restore accepted PUBLIC privileges on the scratch public schema'
+fi
+assert_no_macsad_schemas 'dirty-public-ACL restore'
+PGUSER="${SOURCE_USER}" PGDATABASE="${TARGET_DATABASE}" psql \
+  --no-psqlrc --set=ON_ERROR_STOP=1 --quiet \
+  --command='SET ROLE macsad_owner; REVOKE ALL ON SCHEMA public FROM PUBLIC'
+
+mkdir -- "${TEMP_ROOT}/restore-stage-parent"
+cp -- "${TEMP_ROOT}/cas.tsv" "${TEMP_ROOT}/restore-race-cas.tsv"
+replace_cas_after_staging \
+  "${TEMP_ROOT}/restore-stage-parent" 'macsad-restore-stage.' \
+  'input_cas_manifest.tsv' "${TEMP_ROOT}/restore-race-cas.tsv" &
+CAS_WATCHER_PID=$!
+TMPDIR="${TEMP_ROOT}/restore-stage-parent" \
+  PGUSER="${SOURCE_USER}" PGDATABASE="${TARGET_DATABASE}" \
   "${WORKER_DIR}/restore_database.sh" \
-  "${TEMP_ROOT}/backup" "${TEMP_ROOT}/cas.tsv" "${TRUSTED_MANIFEST_SHA256}"
+  "${TEMP_ROOT}/backup" "${TEMP_ROOT}/restore-race-cas.tsv" \
+  "${TRUSTED_MANIFEST_SHA256}"
+wait "${CAS_WATCHER_PID}" || die 'restore did not privately stage its CAS manifest'
+CAS_WATCHER_PID=''
 PGUSER="${SOURCE_USER}" PGDATABASE="${TARGET_DATABASE}" \
   "${WORKER_DIR}/export_workspace_views.sh" \
   10000000-0000-4000-8000-000000000001 "${TEMP_ROOT}/restored-export.ndjson"

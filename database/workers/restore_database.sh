@@ -51,7 +51,14 @@ trap cleanup EXIT
 # archive read, and restore uses this stable copy rather than caller paths.
 for expected_name in manifest.tsv database.dump boundary.tsv referenced_blobs.tsv; do
   cp --no-dereference -- "${SOURCE_BUNDLE_PATH}/${expected_name}" "${TEMP_ROOT}/${expected_name}"
+  [[ -f "${TEMP_ROOT}/${expected_name}" && ! -L "${TEMP_ROOT}/${expected_name}" ]] ||
+    die "staged backup member is not a regular non-symlink file: ${expected_name}"
 done
+readonly STAGED_CAS_MANIFEST_PATH="${TEMP_ROOT}/input_cas_manifest.tsv"
+cp --no-dereference -- "${CAS_MANIFEST_PATH}" "${STAGED_CAS_MANIFEST_PATH}"
+[[ -f "${STAGED_CAS_MANIFEST_PATH}" && ! -L "${STAGED_CAS_MANIFEST_PATH}" ]] ||
+  die 'staged CAS manifest is not a regular non-symlink file'
+require_cas_manifest "${STAGED_CAS_MANIFEST_PATH}"
 readonly MANIFEST_PATH="${TEMP_ROOT}/manifest.tsv"
 readonly ARCHIVE_PATH="${TEMP_ROOT}/database.dump"
 readonly BOUNDARY_PATH="${TEMP_ROOT}/boundary.tsv"
@@ -102,7 +109,7 @@ ACTUAL_BOUNDARY_SHA256_LINE="$(sha256sum "${BOUNDARY_PATH}")" ||
   die 'could not hash staged boundary.tsv'
 ACTUAL_REFERENCED_BLOBS_SHA256_LINE="$(sha256sum "${REFERENCED_BLOBS_PATH}")" ||
   die 'could not hash staged referenced_blobs.tsv'
-ACTUAL_CAS_MANIFEST_SHA256_LINE="$(sha256sum "${CAS_MANIFEST_PATH}")" ||
+ACTUAL_CAS_MANIFEST_SHA256_LINE="$(sha256sum "${STAGED_CAS_MANIFEST_PATH}")" ||
   die 'could not hash the supplied CAS manifest'
 ACTUAL_ARCHIVE_SIZE="$(stat --format='%s' "${ARCHIVE_PATH}")" ||
   die 'could not read staged database.dump size'
@@ -118,7 +125,7 @@ ACTUAL_ARCHIVE_SIZE="$(stat --format='%s' "${ARCHIVE_PATH}")" ||
   die 'supplied CAS manifest digest does not match backup manifest'
 
 awk -F '\t' '$1 == "blob" { print $2 "\t" $3 "\t" $4 "\t" $5 }' \
-  "${CAS_MANIFEST_PATH}" | LC_ALL=C sort >"${TEMP_ROOT}/cas_blobs.tsv"
+  "${STAGED_CAS_MANIFEST_PATH}" | LC_ALL=C sort >"${TEMP_ROOT}/cas_blobs.tsv"
 LC_ALL=C comm -23 \
   "${REFERENCED_BLOBS_PATH}" "${TEMP_ROOT}/cas_blobs.tsv" \
   >"${TEMP_ROOT}/missing_cas_blobs.tsv"

@@ -14,6 +14,7 @@ readonly WRITE_FENCE_SHA256="$3"
 require_command awk
 require_command comm
 require_command cmp
+require_command cp
 require_command mktemp
 require_command mv
 require_command pg_dump
@@ -35,7 +36,12 @@ readonly OUTPUT_PARENT="$(realpath -- "$(dirname -- "${OUTPUT_PATH}")")"
 readonly OUTPUT_NAME="$(basename -- "${OUTPUT_PATH}")"
 readonly TEMP_ROOT="$(mktemp -d "${OUTPUT_PARENT}/.${OUTPUT_NAME}.XXXXXXXX")"
 chmod 0700 -- "${TEMP_ROOT}"
-CAS_MANIFEST_SHA256_LINE="$(sha256sum "${CAS_MANIFEST_PATH}")" ||
+readonly STAGED_CAS_MANIFEST_PATH="${TEMP_ROOT}/.input-cas-manifest.tsv"
+cp --no-dereference -- "${CAS_MANIFEST_PATH}" "${STAGED_CAS_MANIFEST_PATH}"
+[[ -f "${STAGED_CAS_MANIFEST_PATH}" && ! -L "${STAGED_CAS_MANIFEST_PATH}" ]] ||
+  die 'staged CAS manifest is not a regular non-symlink file'
+require_cas_manifest "${STAGED_CAS_MANIFEST_PATH}"
+CAS_MANIFEST_SHA256_LINE="$(sha256sum "${STAGED_CAS_MANIFEST_PATH}")" ||
   die 'could not hash the CAS manifest'
 readonly CAS_MANIFEST_SHA256_LINE
 readonly CAS_MANIFEST_SHA256="${CAS_MANIFEST_SHA256_LINE%% *}"
@@ -103,6 +109,12 @@ readonly SNAPSHOT_ID
 psql \
   --no-psqlrc \
   --set=ON_ERROR_STOP=1 \
+  --set=snapshot_id="${SNAPSHOT_ID}" \
+  --file="${REPOSITORY_ROOT}/database/workers/sql/backup_source_preflight.sql"
+
+psql \
+  --no-psqlrc \
+  --set=ON_ERROR_STOP=1 \
   --tuples-only \
   --no-align \
   --field-separator=$'\t' \
@@ -120,19 +132,23 @@ psql \
   --file="${REPOSITORY_ROOT}/database/workers/sql/referenced_blobs.sql" \
   >"${TEMP_ROOT}/referenced_blobs.tsv"
 awk -F '\t' '$1 == "blob" { print $2 "\t" $3 "\t" $4 "\t" $5 }' \
-  "${CAS_MANIFEST_PATH}" | LC_ALL=C sort >"${TEMP_ROOT}/cas_blobs.tsv"
+  "${STAGED_CAS_MANIFEST_PATH}" | LC_ALL=C sort >"${TEMP_ROOT}/cas_blobs.tsv"
 LC_ALL=C comm -23 \
   "${TEMP_ROOT}/referenced_blobs.tsv" "${TEMP_ROOT}/cas_blobs.tsv" \
   >"${TEMP_ROOT}/missing_cas_blobs.tsv"
 [[ ! -s "${TEMP_ROOT}/missing_cas_blobs.tsv" ]] ||
   die 'CAS manifest does not cover every referenced database blob'
 rm -f -- "${TEMP_ROOT}/cas_blobs.tsv" "${TEMP_ROOT}/missing_cas_blobs.tsv"
+rm -f -- "${STAGED_CAS_MANIFEST_PATH}"
 
 pg_dump \
   --format=custom \
   --compress=none \
   --no-owner \
   --role=macsad_owner \
+  --schema=macsad \
+  --schema=macsad_meta \
+  --strict-names \
   --snapshot="${SNAPSHOT_ID}" \
   --file="${TEMP_ROOT}/database.dump"
 pg_restore --list "${TEMP_ROOT}/database.dump" >/dev/null
@@ -153,6 +169,10 @@ psql \
   >"${TEMP_ROOT}/boundary.after.tsv"
 cmp --silent "${TEMP_ROOT}/boundary.before.tsv" "${TEMP_ROOT}/boundary.after.tsv" ||
   die 'database boundary changed while the fenced backup was running'
+psql \
+  --no-psqlrc \
+  --set=ON_ERROR_STOP=1 \
+  --file="${REPOSITORY_ROOT}/database/workers/sql/backup_source_preflight.sql"
 mv -- "${TEMP_ROOT}/boundary.before.tsv" "${TEMP_ROOT}/boundary.tsv"
 rm -f -- "${TEMP_ROOT}/boundary.after.tsv"
 
@@ -163,11 +183,16 @@ REFERENCED_BLOBS_SHA256="$(sha256sum "${TEMP_ROOT}/referenced_blobs.tsv")" ||
 ARCHIVE_SIZE="$(stat --format='%s' "${TEMP_ROOT}/database.dump")" ||
   die 'could not read database.dump size'
 readonly ARCHIVE_SHA256 BOUNDARY_SHA256 REFERENCED_BLOBS_SHA256 ARCHIVE_SIZE
+PG_DUMP_VERSION="$(pg_dump --version | awk '{ print $3 }')" ||
+  die 'could not read pg_dump version for the backup manifest'
+readonly PG_DUMP_VERSION
+[[ "${PG_DUMP_VERSION}" =~ ^16([.][0-9]+)*$ ]] ||
+  die 'pg_dump returned an invalid PostgreSQL 16 version'
 {
   printf 'format\tmacsad-database-backup/1\n'
   printf 'postgresql_major\t16\n'
   printf 'server_version_num\t%s\n' "${SERVER_VERSION_NUM}"
-  printf 'pg_dump_version\t%s\n' "$(pg_dump --version | awk '{ print $3 }')"
+  printf 'pg_dump_version\t%s\n' "${PG_DUMP_VERSION}"
   printf 'schema_version\t%s\n' "${SCHEMA_VERSION}"
   printf 'schema_fingerprint\t%s\n' "${SCHEMA_FINGERPRINT}"
   printf 'archive_sha256\t%s\n' "${ARCHIVE_SHA256%% *}"
