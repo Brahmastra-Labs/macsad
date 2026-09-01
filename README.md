@@ -30,6 +30,7 @@ output or successful execution as verified truth.
 | `logos/public-site/` | Evidence-first public site, authored in LOGOS |
 | `logos/gateway/` | Narrow LOGOS HTTP boundary; health only in Sprint 001 |
 | `host_adapters/` | Mechanical capabilities that LOGOS cannot yet provide |
+| `demo/` | Deterministic, read-only frontend storyboard and local preview contract |
 | `database/` | PostgreSQL schema, migrations, verification, and invariant tests |
 | `tests/` | Cross-project test manifests and governance fixtures |
 | `scripts/` | Reproducible local build and quality entry points |
@@ -120,6 +121,9 @@ GET mutations, raw JavaScript, generic CRUD, or a registry crate.
   incomplete.
 - Gateway: `GET /api/v1/health` only; it reports that persistence is not
   connected and mutations are disabled.
+- Local demo adapter: optionally serves the versioned, read-only
+  `GET /api/v1/demo/snapshot` storyboard; it provides no command or persistence
+  behavior and is not part of the production API.
 - Firebat runtime: PostgreSQL, generated LOGOS sites, the health-only LOGOS
   gateway, and read-only pgAdmin are defined as a tailnet-bound Compose stack.
 
