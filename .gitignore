@@ -16,6 +16,12 @@ playwright-report/
 test-results/
 .tmp/
 
+# Database recovery artifacts must remain private and outside the repository.
+*.dump
+*.pgdump
+*.backup-manifest.tsv
+macsad-database-backup-*/
+
 # Editor and operating-system files
 .DS_Store
 Thumbs.db
