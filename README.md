@@ -10,8 +10,9 @@ output or successful execution as verified truth.
 
 > **Current status: Sprint 001 foundation.** The repository contains responsive
 > LOGOS admin and public templates, a read-only LOGOS health gateway, the
-> canonical PostgreSQL 16 schema, and strict build/test guardrails. Domain
-> mutations, PostgreSQL connectivity, agent workers, and live Cloudflare
+> canonical PostgreSQL 16 schema, a representative database scenario and narrow
+> operator data-worker contracts, and strict build/test guardrails. Application
+> domain mutations, live PostgreSQL connectivity, agent workers, and Cloudflare
 > deployment are intentionally not claimed yet.
 
 ## Repository map
@@ -23,7 +24,7 @@ output or successful execution as verified truth.
 | `logos/public-site/` | Evidence-first public site, authored in LOGOS |
 | `logos/gateway/` | Narrow LOGOS HTTP boundary; health only in Sprint 001 |
 | `host_adapters/` | Mechanical capabilities that LOGOS cannot yet provide |
-| `database/` | PostgreSQL schema, migrations, verification, and invariant tests |
+| `database/` | PostgreSQL schema, migrations, fixtures, verification, recovery workers, and tests |
 | `tests/` | Cross-project test manifests and governance fixtures |
 | `scripts/` | Reproducible local build and quality entry points |
 | `ops/firebat/` | Firebat One provisioning and always-on service operations |
@@ -80,6 +81,8 @@ GET mutations, raw JavaScript, generic CRUD, or a registry crate.
   connected and mutations are disabled.
 - Development host: loopback-only static serving for generated LOGOS bytes and
   the allowlisted health read.
+- Data: a deterministic representative-v1 seed, exact 792-field coverage gate,
+  deterministic operator view export, and scratch-only backup/restore drill.
 
 These templates are visible and testable; they are not presented as CRUD. The
 first mutation slice is the typed append-message command in
@@ -109,6 +112,8 @@ The bounded baseline and deploy contracts are:
   ERDs, and schema-management policy.
 - [`database/README.md`](database/README.md) — PostgreSQL 16 migration,
   verification, backup, and operations runbook.
+- [`database/DATA_WORKERS.md`](database/DATA_WORKERS.md) — representative data,
+  typed export, CAS, backup/restore, and schema-audit contracts.
 
 ## Core model
 

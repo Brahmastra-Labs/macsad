@@ -76,9 +76,11 @@ psql --no-psqlrc --set=ON_ERROR_STOP=1 --dbname=macsad \
 
 ## Backup and restore discipline
 
-A dump is not a backup until a clean restore has passed verification. Before MaCSad contains valuable state, establish a scheduled custom-format `pg_dump`, retain it outside Firebat, and regularly restore it into a separately named scratch database on the same PostgreSQL major version. Run `database/verify.sql`, application-level row-count checks, and a representative read-only query against that restore before declaring it usable. The bootstrap intentionally does not pretend to install a backup service.
+A dump is not a backup until a clean restore has passed verification. The reviewed seed, deterministic workspace export, CAS manifest, whole-database backup, and scratch-only restore contracts are specified in [`DATA_WORKERS.md`](DATA_WORKERS.md). The bootstrap intentionally does not pretend to install a backup service or scheduler.
 
 PostgreSQL and the CAS cannot be snapshotted atomically. At a backup boundary, stop new write-producing work (or establish a controller fence), record the highest durable domain-event/outbox positions and a CAS manifest digest, take both snapshots, then resume. Restore succeeds only when every database artifact reference resolves in the restored CAS; unreferenced CAS bytes are harmless, but missing referenced bytes are a failed restore. Never garbage-collect CAS content newer than the oldest retained database backup boundary.
+
+The worker enforces one exported PostgreSQL snapshot for the database boundary, blob-reference list, and custom-format dump, then rejects a changed post-backup boundary. Cross-store quiescence is still an external controller responsibility. Retain the printed backup-manifest SHA-256 in an independent trusted ledger; do not trust a digest supplied only by the bundle it describes.
 
 ## Routine checks
 
@@ -89,6 +91,7 @@ sudo -u postgres pg_isready -h /var/run/postgresql -d postgres
 PGDATABASE=macsad bash database/apply_migrations.sh
 psql --no-psqlrc --set=ON_ERROR_STOP=1 --dbname=macsad \
   --file=database/verify.sql
+bash database/tests/data_workers_contract.sh
 ```
 
 `apply_migrations.sh` is safe to rerun: with no pending migrations it only revalidates history and the live schema.

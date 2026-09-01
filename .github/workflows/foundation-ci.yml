@@ -46,10 +46,14 @@ jobs:
       - name: Validate credential-free contracts
         run: |
           set -Eeuo pipefail
-          bash -n scripts/logos.sh scripts/quality-gate.sh database/apply_migrations.sh
+          bash -n scripts/logos.sh scripts/quality-gate.sh \
+            database/apply_migrations.sh database/workers/*.sh \
+            database/tests/data_workers*.sh \
+            database/tests/representative_v1_field_coverage.sh
           node --check scripts/guardrails.mjs
           node --check scripts/verify-logos-tests.mjs
           node scripts/guardrails.mjs
+          bash database/tests/data_workers_contract.sh
 
       - name: Create clean least-privilege database fixture
         run: |
@@ -77,17 +81,18 @@ jobs:
           schema_count="$(psql --no-psqlrc --set=ON_ERROR_STOP=1 --tuples-only --no-align --command "SELECT count(*) FROM pg_namespace WHERE nspname IN ('macsad', 'macsad_meta');")"
           [[ "${schema_count}" == '0' ]]
 
-      - name: Migrate, repeat, verify, and exercise invariants
+      - name: Migrate, exercise invariants, and drill data recovery
         run: |
           set -Eeuo pipefail
           bash database/apply_migrations.sh
           bash database/apply_migrations.sh
           psql --no-psqlrc --set=ON_ERROR_STOP=1 --file=database/verify.sql
           psql --no-psqlrc --set=ON_ERROR_STOP=1 --file=database/tests/0001_invariants.sql
+          MACSAD_TEST_ADMIN_USER=postgres bash database/tests/data_workers_roundtrip.sh
 
       - name: State the evidence boundary
         run: |
           set -Eeuo pipefail
           printf '%s\n' \
-            'Foundation CI proves repository guardrails and a clean PostgreSQL 16 migration/repeat/verify/invariant run.' \
+            'Foundation CI proves repository guardrails, PostgreSQL 16 migration/invariants, representative field coverage, deterministic tenant-scoped export, and a trusted-manifest/CAS backup-restore drill.' \
             'It does not claim private LOGOS, browser, Firebat runtime, Cloudflare Access, or deployment evidence.'
