@@ -2,7 +2,10 @@
 
 Import AdminApp from "./admin_app.lg".
 Import AdminHeader from "./admin_header.lg".
+Import AdminInvariants from "./admin_invariants.lg".
 Import AdminPolicy from "./admin_policy.lg".
+Import BoardRowDecoder from "./board_row_decoder.lg".
+Import BoardWirePolicy from "./board_wire_policy.lg".
 Import BoardWorkspace from "./board_workspace.lg".
 Import ReadOnlyPanels from "./read_only_panels.lg".
 

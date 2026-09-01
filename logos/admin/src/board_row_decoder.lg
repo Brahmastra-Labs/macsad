@@ -1,0 +1,120 @@
+# MaCSad canonical board row decoder
+## To boardExactByteLength (value: Text, expected: Int) -> Bool:
+    Return length of text_bytes(value) is equal to expected.
+## To boardLowerHexAccepted (value: Text, minimumBytes: Int, maximumBytes: Int) -> Bool:
+    Let bytes be text_bytes(value).
+    Let count be length of bytes.
+    If count is less than minimumBytes * 2:
+        Return false.
+    If count is greater than maximumBytes * 2:
+        Return false.
+    If count % 2 is equal to 1:
+        Return false.
+    Repeat for byteValue in bytes:
+        Let mutable valid be false.
+        If byteValue is at least 48:
+            If byteValue is at most 57:
+                Set valid to true.
+        If byteValue is at least 97:
+            If byteValue is at most 102:
+                Set valid to true.
+        If valid is equal to false:
+            Return false.
+    Return true.
+## To boardTitleHexAccepted (value: Text) -> Bool:
+    If boardLowerHexAccepted(value, 1, 4096) is equal to false:
+        Return false.
+    Return toHex(fromHex(value)) is equal to value.
+## To boardCanonicalUuid (value: Text) -> Bool:
+    Let parts be split(value, "-").
+    If length of parts is equal to 5:
+        If boardExactByteLength(item 1 of parts, 8) is equal to false:
+            Return false.
+        If boardExactByteLength(item 2 of parts, 4) is equal to false:
+            Return false.
+        If boardExactByteLength(item 3 of parts, 4) is equal to false:
+            Return false.
+        If boardExactByteLength(item 4 of parts, 4) is equal to false:
+            Return false.
+        If boardExactByteLength(item 5 of parts, 12) is equal to false:
+            Return false.
+        Return boardLowerHexAccepted(join(parts, ""), 16, 16).
+    Return false.
+## To boardValueAllowed (value: Text, allowed: Text) -> Bool:
+    Return indexOf("|" combined with allowed combined with "|", "|" combined with value combined with "|") is greater than 0.
+## To boardPriorityAccepted (value: Text) -> Bool:
+    If allDigits(value) is equal to false:
+        Return false.
+    If length of text_bytes(value) is greater than 3:
+        Return false.
+    Let priority be parseInt(value).
+    If priority is greater than 100:
+        Return false.
+    Return numText(priority) is equal to value.
+## To decodeBoardRow (row: Text) -> Text:
+    Let fields be split(row, "|").
+    If length of fields is equal to 10:
+        Let caseId be item 2 of fields.
+        Let caseState be item 4 of fields.
+        Let taskId be item 7 of fields.
+        Let phase be item 8 of fields.
+        Let taskState be item 9 of fields.
+        If item 1 of fields is equal to "case":
+            If boardCanonicalUuid(caseId) is equal to false:
+                Return "".
+            If boardValueAllowed(item 3 of fields, "mathematics|computer_science") is equal to false:
+                Return "".
+            If boardValueAllowed(caseState, "open|closed") is equal to false:
+                Return "".
+            If boardValueAllowed(item 5 of fields, "normal|paused|blocked") is equal to false:
+                Return "".
+            If boardPriorityAccepted(item 6 of fields) is equal to false:
+                Return "".
+            If boardTitleHexAccepted(item 10 of fields) is equal to false:
+                Return "".
+            If taskId is equal to "-":
+                If phase is equal to "-":
+                    If taskState is equal to "-":
+                        Return row.
+                Return "".
+            If caseState is equal to "closed":
+                Return "".
+            If boardCanonicalUuid(taskId) is equal to false:
+                Return "".
+            If boardValueAllowed(phase, "inbox|ready|running|verify|review|closed") is equal to false:
+                Return "".
+            If boardValueAllowed(taskState, "offered|ready|running|waiting") is equal to false:
+                Return "".
+            Return row.
+    Return "".
+## Test: Board row decodes canonical fields
+    Let row be "case|22222222-2222-4222-8222-222222222222|mathematics|open|normal|50|33333333-3333-4333-8333-333333333333|ready|offered|436173652041".
+    Expect that decodeBoardRow(row) is equal to row.
+    Let closedRow be "case|44444444-4444-4444-8444-444444444444|computer_science|closed|blocked|0|-|-|-|436c6f736564".
+    Expect that decodeBoardRow(closedRow) is equal to closedRow.
+## Test: Board row rejects noncanonical fields
+    Let prefix be "case|22222222-2222-4222-8222-222222222222|mathematics|open|normal|".
+    Expect that decodeBoardRow(prefix combined with "050|-|-|-|43617365") is equal to "".
+    Expect that decodeBoardRow(prefix combined with "50|-|ready|-|43617365") is equal to "".
+    Expect that decodeBoardRow(prefix combined with "50|-|-|-|4361736A") is equal to "".
+    Let upperId be "case|AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA|mathematics|open|normal|50|-|-|-|43617365".
+    Expect that decodeBoardRow(upperId) is equal to "".
+    Let largestTitle be repeatText("61", 4096).
+    Let oversizedTitle be repeatText("61", 4097).
+    Expect that boardTitleHexAccepted(largestTitle) is equal to true.
+    Expect that boardTitleHexAccepted(oversizedTitle) is equal to false.
+## Test: Closed board rows have no live task
+    For all booleans taskPresent:
+        Let mutable taskId be "-".
+        Let mutable phase be "-".
+        Let mutable taskState be "-".
+        If taskPresent:
+            Set taskId to "33333333-3333-4333-8333-333333333333".
+            Set phase to "closed".
+            Set taskState to "waiting".
+        Let row be "case|44444444-4444-4444-8444-444444444444|mathematics|closed|normal|50|{taskId}|{phase}|{taskState}|43617365".
+        Let decoded be decodeBoardRow(row).
+        If taskPresent:
+            Expect that decoded is equal to "".
+        Otherwise:
+            Expect that decoded is equal to row.

@@ -1,0 +1,41 @@
+# MaCSad gateway read-route policy
+
+This import-free leaf classifies the two exact read-only operational routes.
+It does not expose either route through the HTTP adapter; it only defines the
+policy that a later dependency-aware handler must use.
+
+## To classifiedHealthRead (method: Text, path: Text) -> Bool:
+    If method is equal to "GET":
+        Return path is equal to "/api/v1/health".
+    Return false.
+
+## To classifiedReadinessRead (method: Text, path: Text) -> Bool:
+    If method is equal to "GET":
+        Return path is equal to "/api/v1/ready".
+    Return false.
+
+## To classifiedMutationRouteAvailable (routeKnown: Bool) -> Bool:
+    Return false.
+
+## Test: Health route is classified
+    Let safeRoute be classifiedHealthRead("GET", "/api/v1/health").
+    Let unsafeRoute be classifiedHealthRead("POST", "/api/v1/health").
+    Expect that safeRoute is equal to true.
+    Expect that unsafeRoute is equal to false.
+
+## Test: Readiness route is exact GET only
+    Let safeRoute be classifiedReadinessRead("GET", "/api/v1/ready").
+    Let wrongMethod be classifiedReadinessRead("POST", "/api/v1/ready").
+    Let lowerMethod be classifiedReadinessRead("get", "/api/v1/ready").
+    Let trailingPath be classifiedReadinessRead("GET", "/api/v1/ready/").
+    Let healthPath be classifiedReadinessRead("GET", "/api/v1/health").
+    Expect that safeRoute is equal to true.
+    Expect that wrongMethod is equal to false.
+    Expect that lowerMethod is equal to false.
+    Expect that trailingPath is equal to false.
+    Expect that healthPath is equal to false.
+
+## Test: Mutation routes are unavailable
+    For all booleans routeKnown:
+        Let available be classifiedMutationRouteAvailable(routeKnown).
+        Expect that available is equal to false.

@@ -1,0 +1,52 @@
+# MaCSad schema probe policy
+
+This import-free leaf owns the exact dependency probe result shape. A caller
+may become ready only after one typed row reports two columns: schema version
+and PostgreSQL server_version_num. MaCSad schema 1 and PostgreSQL 16 are the
+only versions admitted by this slice.
+
+## To schemaProbeRowCountAccepted (rowCount: Int) -> Bool:
+    Return rowCount is equal to 1.
+
+## To schemaProbeColumnCountAccepted (columnCount: Int) -> Bool:
+    Return columnCount is equal to 2.
+
+## To schemaVersionAccepted (schemaVersion: Int) -> Bool:
+    Return schemaVersion is equal to 1.
+
+## To postgresVersionAccepted (serverVersionNum: Int) -> Bool:
+    If serverVersionNum is less than 160000:
+        Return false.
+    Return serverVersionNum is less than 170000.
+
+## To schemaProbeAccepted (rowCount: Int, columnCount: Int, schemaVersion: Int, serverVersionNum: Int) -> Bool:
+    If schemaProbeRowCountAccepted(rowCount) is equal to false:
+        Return false.
+    If schemaProbeColumnCountAccepted(columnCount) is equal to false:
+        Return false.
+    If schemaVersionAccepted(schemaVersion) is equal to false:
+        Return false.
+    Return postgresVersionAccepted(serverVersionNum).
+
+## Test: Schema probe shape is exact
+    For all booleans exactShape:
+        Let mutable rowCount be 0.
+        Let mutable columnCount be 1.
+        If exactShape:
+            Set rowCount to 1.
+            Set columnCount to 2.
+        Let accepted be schemaProbeAccepted(rowCount, columnCount, 1, 160015).
+        Expect that accepted is equal to exactShape.
+    Expect that schemaProbeAccepted(2, 2, 1, 160015) is equal to false.
+    Expect that schemaProbeAccepted(1, 3, 1, 160015) is equal to false.
+
+## Test: Schema version one is required
+    Expect that schemaProbeAccepted(1, 2, 1, 160015) is equal to true.
+    Expect that schemaProbeAccepted(1, 2, 0, 160015) is equal to false.
+    Expect that schemaProbeAccepted(1, 2, 2, 160015) is equal to false.
+
+## Test: PostgreSQL sixteen is required
+    Expect that schemaProbeAccepted(1, 2, 1, 160000) is equal to true.
+    Expect that schemaProbeAccepted(1, 2, 1, 169999) is equal to true.
+    Expect that schemaProbeAccepted(1, 2, 1, 159999) is equal to false.
+    Expect that schemaProbeAccepted(1, 2, 1, 170000) is equal to false.

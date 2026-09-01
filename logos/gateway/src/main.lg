@@ -1,7 +1,9 @@
 # MaCSad read-only development gateway
 
 Import GatewayHttp from "./gateway_http.lg".
+Import GatewayReadPolicy from "./gateway_read_policy.lg".
 Import GatewayRouting from "./gateway_routing.lg".
+Import SchemaProbePolicy from "./schema_probe_policy.lg".
 
 The production entry composes the imported LOGOS request handler and owns the
 development listener. No mutation transport is present in this baseline.

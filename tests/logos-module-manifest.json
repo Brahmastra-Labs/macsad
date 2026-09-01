@@ -17,15 +17,54 @@
           "severity": "warning",
           "file": "src/main.lg",
           "message": "`Import AdminPolicy` is unused — no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import AdminInvariants` is unused — no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import BoardRowDecoder` is unused — no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import BoardWirePolicy` is unused — no name from it is referenced here."
         }
       ],
       "domBundle": true,
       "testLeaves": [
         {
-          "path": "src/admin_policy.lg",
+          "path": "src/admin_invariants.lg",
           "expectedTests": [
             "Column count stays six",
             "Closed is terminal"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/board_wire_policy.lg",
+          "expectedTests": [
+            "Board envelope decodes bounded rows",
+            "Board envelope exposes no mutation",
+            "Board envelope fixes workspace and schema",
+            "Board envelope rejects duplicates and cap breaches"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/board_row_decoder.lg",
+          "expectedTests": [
+            "Board row decodes canonical fields",
+            "Board row rejects noncanonical fields",
+            "Closed board rows have no live task"
           ],
           "minimumProperties": 1,
           "minimumProven": 1
@@ -70,15 +109,38 @@
           "severity": "warning",
           "file": "src/main.lg",
           "message": "`Import GatewayRouting` is unused — no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import GatewayReadPolicy` is unused — no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import SchemaProbePolicy` is unused — no name from it is referenced here."
         }
       ],
       "domBundle": false,
       "testLeaves": [
         {
-          "path": "src/gateway_routing.lg",
+          "path": "src/gateway_read_policy.lg",
           "expectedTests": [
             "Health route is classified",
+            "Readiness route is exact GET only",
             "Mutation routes are unavailable"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/schema_probe_policy.lg",
+          "expectedTests": [
+            "PostgreSQL sixteen is required",
+            "Schema probe shape is exact",
+            "Schema version one is required"
           ],
           "minimumProperties": 1,
           "minimumProven": 1
