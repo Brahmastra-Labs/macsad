@@ -1,0 +1,41 @@
+digraph G {
+  graph [label="Publication closure, deployment reconciliation, and audit history",
+         labelloc=t, fontsize=22, fontname="Arial Bold", rankdir=LR,
+         splines=ortho, nodesep=0.5, ranksep=0.9, pad=0.3, bgcolor="white"];
+  node [shape=record, style="rounded,filled", fontname="Arial", fontsize=10,
+        color="#64748b", fillcolor="#ffffff", fontcolor="#0f172a", margin="0.10,0.07"];
+  edge [fontname="Arial", fontsize=8, color="#64748b", fontcolor="#334155", arrowsize=0.65];
+
+  rcase [label="{research_case|closed\ltyped human disposition attestation\leligibility attestation = eligible\l}", fillcolor="#dcfce7"];
+  claim [label="{claim|same problem revision\lexact public claim\l}", fillcolor="#ecfdf5"];
+  attest [label="{attestation|human issuer + membership\lexact outcome_code\lappend-only decision evidence\l}", fillcolor="#ecfdf5"];
+  artifact [label="{artifact|public_candidate / public\lsecret scan passed\lnot quarantined\lredistribution allowed\l}", fillcolor="#f8fafc"];
+  dossier [label="{publication_dossier|case + problem + claim + artifact composite FK\lclosure schema/body/digest\lcreated_by_actor\l}", fillcolor="#dcfce7"];
+  rcase -> dossier;
+  claim -> dossier;
+  artifact -> dossier;
+  attest -> rcase [label="disposition + eligibility"];
+
+  batch [label="{publication_batch|workspace + policy FK\ldraft -> previewed -> sealed -> published -> superseded\lsequence allocated at preview\lgenerator/tool/evidence/artifact closure digests\lcurrent audit head at preview\lmanifest + signature at seal\l}", fillcolor="#dbeafe"];
+  item [label="{publication_item|batch + ordinal\lcase/problem/claim/attestations FK\lpublication_dossier composite FK\litem_digest\l}", fillcolor="#dbeafe"];
+  dossier -> item [label="exact closure"];
+  batch -> item [label="1:N; insert only while draft"];
+
+  attempt [label="{publication_attempt|batch + attempt_no\lexact release request + target\lGitHub run identity\lCloudflare version/deployment identity\lpending -> running -> succeeded/failed\lterminal immutable\l}", fillcolor="#ffedd5"];
+  head [label="{publication_head|workspace_id PK\lpublished batch FK\lsuccessful attempt FK\lversioned public latest pointer\l}", fillcolor="#f0fdf4"];
+  batch -> attempt [label="1:N retries are new rows"];
+  attempt -> head [label="only succeeded"];
+  batch -> head [label="published / superseded"];
+
+  command [label="{command_receipt|workspace + actor identity\lcommand + idempotency key + request digest\lprocessing -> completed/rejected\l}", fillcolor="#fef3c7"];
+  delivery [label="{inbound_delivery|provider + external_delivery_id UK\lpayload artifact + digest\lreceived -> processing -> terminal\l}", fillcolor="#fef3c7"];
+  stream [label="{audit_stream|workspace_id PK\llast sequence + event hash\lrow-locked serialization head\l}", fillcolor="#fef3c7"];
+  event [label="{domain_event|workspace sequence UK\laggregate identity + version UK\levent kind + actor/correlation\ltyped payload + digest\lprevious hash + event hash\l}", fillcolor="#fef3c7"];
+  outbox [label="{outbox_message|domain_event_id + topic UK\ltyped payload + digest\lattempt/lease state\lpending -> publishing -> delivered/dead_letter\l}", fillcolor="#fef3c7"];
+  delivery -> command [label="0:1 accepted command"];
+  command -> event [label="1:N correlated events"];
+  stream -> event [label="serializes append"];
+  event -> outbox [label="0:N effects"];
+  event -> batch [label="exact audit head"];
+  outbox -> attempt [label="exact manifest dispatch", style=dashed];
+}

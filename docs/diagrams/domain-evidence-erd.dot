@@ -1,0 +1,47 @@
+digraph G {
+  graph [label="Execution, evidence, OpenRouter usage, and conserved budget",
+         labelloc=t, fontsize=22, fontname="Arial Bold", rankdir=LR,
+         splines=ortho, nodesep=0.5, ranksep=0.9, pad=0.3, bgcolor="white"];
+  node [shape=record, style="rounded,filled", fontname="Arial", fontsize=10,
+        color="#64748b", fillcolor="#ffffff", fontcolor="#0f172a", margin="0.10,0.07"];
+  edge [fontname="Arial", fontsize=8, color="#64748b", fontcolor="#334155", arrowsize=0.65];
+
+  task [label="{task + accepted assignment|exact case / node / actor\linput closure + limits\l}", fillcolor="#dcfce7"];
+  execution [label="{execution|id PK\lcase_id + task_id + assignment_id FK\lsnapshot/policy/problem/profile closure\lrequest/environment/resource digests\lstate + lease owner + fencing token\ltransport / termination / claim outcomes\l}", fillcolor="#dbeafe"];
+  tooluse [label="{execution_tool_use|execution + admitted policy operation FK\lcase tool revision FK\linvocation sequence\lrequest/response artifact + digest\lstate + outcomes\l}", fillcolor="#ffedd5"];
+  pin [label="{research_case_tool_revision|exact revision\laccess_mode = operation_invoke\lpromoted + compatible + sealed\l}", fillcolor="#ffedd5"];
+  operation [label="{policy_node_tool_operation|exact manifest\lmax invocations\leffect_class\l}", fillcolor="#ffedd5"];
+  task -> execution [label="1:N retries are new rows"];
+  execution -> tooluse [label="1:N"];
+  pin -> tooluse [label="authorizes revision"];
+  operation -> tooluse [label="authorizes operation"];
+
+  blob [label="{blob|sha256 digest PK\lbytes + media/storage metadata\lverified immutable bytes\l}", fillcolor="#f8fafc"];
+  artifact [label="{artifact|id PK + blob_digest FK\lproducer/provenance\lclassification + scans + rights\l}", fillcolor="#f8fafc"];
+  exartifact [label="{execution_artifact|execution_id + artifact_id\linput/output/log/certificate/...\lordinal\l}", fillcolor="#f8fafc"];
+  blob -> artifact [label="1:N semantic artifacts"];
+  execution -> exartifact;
+  artifact -> exartifact;
+  tooluse -> artifact [label="request / response", style=dashed];
+
+  claim [label="{claim|problem_revision_id FK\lformal / counterexample / observation / reproduction\lcanonical text + scope + digest\lproducer + optional execution\l}", fillcolor="#ecfdf5"];
+  attest [label="{attestation|problem + optional claim/execution FK\lissuer actor + matching membership\lkind + authority class + outcome_code\lmethod / independence / limitations\lcontent digest + supersession\l}", fillcolor="#ecfdf5"];
+  support [label="{attestation_artifact|attestation_id + artifact_id\lsupport_role\l}", fillcolor="#ecfdf5"];
+  execution -> claim [label="proposes"];
+  claim -> attest [label="0:N typed judgments"];
+  execution -> attest [label="observed / reviewed", style=dashed];
+  attest -> support;
+  artifact -> support;
+
+  modelcall [label="{model_call|execution + task + tool_use FK\lrequesting/controller actors\lOpenRouter request/generation IDs\lrequested/resolved model/provider\lpricing/routing/request digests\lreserved -> ... -> reconciled\l}", fillcolor="#fef3c7"];
+  usage [label="{model_usage_observation|model_call_id + sequence\lsupersedes prior observation\lresponse / final SSE / reconcile\ltokens/cache/reasoning/media\lexact billed amount + currency\l}", fillcolor="#fef3c7"];
+  account [label="{budget_account|workspace / optional case scope\lresource + unit + active period\linitial/current limit\lreserved + spent projections\l}", fillcolor="#fee2e2"];
+  ledger [label="{budget_entry|account + optional execution/call/usage FK\lreserve / commit / release\lspend_adjustment / usage_reconciliation\llimit_adjustment\lexact numeric(30,12)\l}", fillcolor="#fee2e2"];
+  tooluse -> modelcall [label="effect_class = model_call"];
+  execution -> modelcall [label="same exact task"];
+  modelcall -> usage [label="1:N append-only correction chain"];
+  account -> modelcall [label="currency authority"];
+  account -> ledger [label="serialized projection"];
+  modelcall -> ledger [label="exact reservation + settlement"];
+  usage -> ledger [label="actual cost / correction"];
+}

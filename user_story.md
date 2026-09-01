@@ -1,12 +1,14 @@
 # MaCSad user stories and feature map
 
-> **Status:** Draft v1 product contract
+> **Status:** Greenfield v1 product contract
 >
 > **Date:** 2026-08-31
 >
 > **Source:** [`design_document.md`](./design_document.md)
 >
 > **Companion:** [`domain_model.md`](./domain_model.md)
+>
+> **Database contract:** [`database/README.md`](./database/README.md)
 
 ## 1. Purpose
 
@@ -20,7 +22,7 @@ That single journey is the scope test. A proposed feature belongs in v1 only whe
 
 ## 2. Simplicity rules
 
-1. **One project is one watched GitHub repository.** MaCSad never invents a second workspace identity.
+1. **One project is one watched GitHub repository.** Approved read-only tool repositories are exact dependencies, never extra projects, workspaces, or policy authorities.
 2. **One research case is one card.** The card, task drawer, process position, and thread are views of the same aggregate.
 3. **One sequential workflow first.** No user-authored loops, forks, joins, or subworkflows in v1.
 4. **One active Investigator attempt at a time.** Global worker concurrency begins at one.
@@ -51,7 +53,7 @@ Roles guide work. Permissions come from authenticated principals and explicit ca
 
 1. The Director connects one approved GitHub repository and activates one reviewed policy revision.
 2. The Director freezes one problem revision and approves a bounded budget.
-3. The Investigator accepts the assignment and completes one bounded attempt against an exact repository snapshot.
+3. The Investigator accepts the assignment and completes one bounded attempt against an exact primary-repository snapshot and approved tool-revision closure.
 4. The Investigator registers immutable artifacts and proposes a transition to verification.
 5. A different Verifier receives a fresh-context evidence closure, checks or replays it, and records an immutable attestation.
 6. The Director reviews the evidence and chooses an honest research disposition.
@@ -65,15 +67,15 @@ The first release is successful when this journey works for one adjudicated math
 
 | ID | Feature | Job completed | Included in v1 | Explicitly not included |
 |---|---|---|---|---|
-| **F1** | Repository workspace | Establish one exact, reconcilable project boundary | Stable GitHub repository ID, authenticated events, default-branch reconciliation, immutable snapshots, candidate policy changes | Multiple watched repositories, direct agent pushes, automatic policy activation |
+| **F1** | Repository workspace | Establish one exact, reconcilable project boundary | Stable primary GitHub repository ID, authenticated events, immutable snapshots, candidate policy changes, and explicitly approved read-only tool repositories pinned to exact revisions | Multiple watched project repositories, tool-repository webhooks or writes, direct agent pushes, automatic policy activation |
 | **F2** | Problem intake | Turn an idea into a question that cannot drift silently | Math/CS kind, statement, definitions, assumptions, bounds, success/refutation/inconclusive criteria, permitted sources/tools, initial budget | General knowledge intake, unrestricted web research, arbitrary problem types |
-| **F3** | Work control | Make ownership and legal next steps obvious | Fixed `Inbox → Ready → Running → Verify → Review → Closed` board derived from the live task's pinned `board_phase`, active workflow node, assignment, typed handoff, task thread, process ribbon, WIP=1, pause/resume/block/cancel | General workflow builder, graph canvas, teams, DMs, presence, realtime editing |
-| **F4** | Bounded investigation | Let one agent try useful work without ambient authority | Exact snapshot, allowlisted typed MaCSad MCP/LOGOS tool adapters, one lease, resource limits, model budget, immutable outputs, transition proposal | Generic shell, raw ambient MCP, credentials in workers, recursive agents, swarms, unrestricted plugins |
+| **F3** | Work control | Make ownership and legal next steps obvious | Fixed `Inbox → Ready → Running → Verify → Review → Closed` board derived from the live policy node, active node/ordered decision row, assignment, typed handoff, task thread, zoomable process ribbon, transition record, WIP=1, pause/resume/block/cancel | Free-form workflow builder, mutable graph canvas, teams, DMs, presence, realtime editing |
+| **F4** | Bounded investigation | Let one agent try useful work without ambient authority | Exact primary snapshot and tool closure, allowlisted typed MaCSad MCP/LOGOS operations, one lease, resource limits, OpenRouter reservation/reconciliation, immutable outputs, transition proposal | Generic shell, raw ambient MCP, credentials or live private checkouts in workers, recursive agents, swarms, unrestricted plugins |
 | **F5** | Independent verification | Separate candidate generation from belief | Different verifier, fresh/blind context record, checker/replay/attack method, immutable attestation | Self-verification, mutable attestations, universal claims from a test pass |
 | **F6** | Human disposition | Close work without confusing completion with truth | Exact evidence review, typed math/CS outcome, limitations, editorial eligibility as a separate decision | One scalar score, agent-declared breakthrough, automatic publication |
 | **F7** | Batch publication | Release only an exact, safe, reproducible closure | Preview checks, signed manifest, monotonic batch, exact deployment attempt, retry, erratum | Live database-backed public pages, silent rewrites, donations, public accounts |
 | **F8** | Public reading | Let readers judge what was actually established | Static discovery pages, claim kind, evidence, method, limitations, provenance, hashes, corrections | Draft/private data, comments, voting, live control-plane API |
-| **F9** | Essential operations | Keep a one-worker system safe and understandable | Health, lease, spend, reconciliation, audit trail, emergency stop, scheduled digest/compaction trigger | Fleet management, multi-region scheduler, standalone observability platform |
+| **F9** | Essential operations | Keep a one-worker system safe and understandable | PostgreSQL readiness, lease, estimated/reserved/actual OpenRouter spend and variance, reconciliation, audit trail, emergency stop, scheduled digest/compaction trigger | Fleet management, multi-region scheduler, standalone observability platform |
 
 ## 6. User stories and jobs to be done
 
@@ -81,16 +83,20 @@ The first release is successful when this journey works for one adjudicated math
 
 #### US-D1 — Connect the workspace
 
-**When** I begin a campaign, **I want** to connect one approved GitHub repository, **so that** every decision and artifact belongs to one unambiguous workspace.
+**When** I begin a campaign, **I want** to connect one approved GitHub repository and explicitly approve any read-only tool dependencies, **so that** every decision and artifact belongs to one unambiguous project and exact dependency closure.
 
 Maps to: **F1**
 
 Accepted when:
 
-- MaCSad records the stable numeric repository ID, display owner/name, default branch, and installation identity;
+- MaCSad records the stable numeric repository ID as immutable workspace identity; display owner/name and default branch may reconcile after a rename or transfer;
 - webhook signatures are verified against the original body and delivery IDs are deduplicated;
 - reconciliation resolves an exact commit and preserves an immutable snapshot independently of a floating branch;
-- repository rename does not create a new project; and
+- repository rename does not create a new project;
+- each tool repository has a unique logical key, purpose, default classification/exposure, exact commit/tree, preserved source bundle, and revision digest;
+- an operation catalogue is admitted only before its revision is sealed, then seals once with exact count/digest/actor/time;
+- each case pin chooses `source_read` or `operation_invoke`; invocation requires a promoted bundle, compatibility evidence, and sealed operation catalogue;
+- a tool repository receives no project webhook, cannot activate `.macsad` policy, cannot become a card/workspace, and is never mounted from its live controller-side path; and
 - no worker receives a long-lived GitHub credential.
 
 #### US-D2 — Freeze a research question
@@ -103,7 +109,7 @@ Accepted when:
 
 - the original question, domain kind, definitions, assumptions, bounds, and allowed methods are explicit;
 - success, refutation, and inconclusive criteria are all present;
-- the problem pins an exact workspace snapshot and active policy revision;
+- the resulting case pins an exact primary-workspace snapshot, active validated policy revision, process, and approved tool-revision closure;
 - math intake records a formalization/reverse-paraphrase path, while CS intake records an executable protocol; and
 - any semantic edit creates a new revision with a visible diff and supersession link.
 
@@ -118,6 +124,8 @@ Accepted when:
 - the case cannot enter `Ready` until required intake fields and assignments exist;
 - `Ready → Running` atomically reserves budget, creates one execution, and issues one fenced lease;
 - inability to reserve worst-case cost prevents the execution from starting;
+- every OpenRouter call is persisted against the same task/execution before dispatch and later reconciled to its provider generation and full reported usage; reservations require an active account period, and a delayed overage is recorded rather than clamped and exposed by the budget view;
+- model settlement commits that same call's exact reservation; corrected billed cost appends `spend_adjustment`, while a cost-equivalent corrected usage record appends `usage_reconciliation`;
 - one Investigator cannot exceed WIP=1; and
 - raising a ceiling requires a narrow human capability, reason, and audit event.
 
@@ -131,10 +139,12 @@ Accepted when:
 
 - the board, task drawer, process ribbon, and member inbox agree because they project the same state;
 - the board phase is derived from the active task and cannot be edited independently;
+- the first task is the compiled entry node, and each successor is the next sequence reached through the preceding finished task's exact compiled transition;
+- every accepted edge identifies the immutable policy transition, ordered decision row, fact-snapshot digest, and exact `task.transitioned` event for the source task version;
 - pause, resume, block, cancel, and emergency stop are expected-version checked, reasoned, idempotent, and audited;
-- late worker results cannot revive a cancelled or superseded execution;
+- late worker results cannot mutate a completed, failed, or expired execution;
 - chat messages can discuss an action but cannot perform it; and
-- a compact morning/operations digest shows completed, failed, blocked, verification/review, proposed-budget, spend, and next-action items; compaction may summarize context but never deletes the raw event or artifact history.
+- a compact morning/operations digest shows completed, failed, blocked, verification/review, proposed-budget, estimated/reserved/actual spend, variance, and next-action items; compaction may summarize context but never deletes the raw event or artifact history.
 
 #### US-D5 — Decide the research disposition
 
@@ -149,7 +159,7 @@ Accepted when:
 - CS outcomes distinguish `observed_under_frozen_protocol`, `exactly_reproduced`, `refuted`, `inconclusive`, and `invalid_experiment`;
 - administrative closure distinguishes `superseded`, `cancelled`, and `policy_denied` from research conclusions;
 - timeout, parser success, model confidence, and ordinary test success cannot satisfy stronger gates; and
-- the narrow `publication.eligibility.decide` capability, not role name or generic admin status, records `private` or `eligible` in the same closing transaction.
+- the disposition and eligibility each reference a `human_decided` attestation from an active human membership whose `outcome_code` exactly matches the selected typed value; the narrow `publication.eligibility.decide` capability, not role name or generic admin status, records `private` or `eligible`.
 
 #### US-D6 — Review a process change
 
@@ -160,15 +170,16 @@ Maps to: **F1, F9**
 Accepted when:
 
 - a push creates only a schema-validated candidate policy revision;
-- broken references, cycles, unsupported node kinds, missing defaults, and authority mismatches fail closed;
-- activation names the exact compiled digest and authenticated approver; and
+- one full-bundle validator shared by CI, MCP, and admin navigation rejects broken role/workflow/node/edge/fact/schema references, cycles, unreachable or terminal-free paths, unsupported node kinds, missing ordered defaults, chart drift, and authority mismatches;
+- activation names the exact compiled digest and authenticated approver;
+- profile/process/node/transition/tool projections accept inserts only while the revision is a candidate and cannot change after activation; and
 - existing cases remain pinned to their prior policy revision unless explicitly migrated.
 
 ### 6.2 Investigator agent
 
 #### US-I1 — Understand the assignment
 
-**When** I receive work, **I want** the frozen question, exact repository snapshot, active node, allowed tools, evidence requirements, deadline, and remaining budget, **so that** I can act without guessing.
+**When** I receive work, **I want** the frozen question, exact primary snapshot and tool revisions, active node, allowed operations, evidence requirements, deadline, and remaining budget, **so that** I can act without guessing.
 
 Maps to: **F3, F4**
 
@@ -187,9 +198,9 @@ Maps to: **F3, F4**
 
 Accepted when:
 
-- execution occurs in a credential-free isolated source tree at the exact snapshot;
+- execution occurs in a credential-free isolated primary source tree plus only the preserved, read-only tool bundles and operations admitted for that case;
 - time, compute, process, disk, output, token, and currency ceilings are enforced outside agent control;
-- the attempt records request, actor/profile, tool/model versions, seed, environment, limits, transport state, termination state, and research outcome separately;
+- the attempt records request, actor/profile, tool manifests, requested/resolved model and provider, OpenRouter generation, native usage, seed, environment, limits, transport state, termination state, and research outcome separately;
 - model credentials and control-plane credentials never enter the child sandbox; and
 - retry creates a new execution rather than overwriting history.
 
@@ -246,9 +257,10 @@ Maps to: **F5, F6**
 
 Accepted when:
 
-- the attestation records kind, authority class, issuer, method, outcome, schema, limitations, and content digest;
+- the attestation records kind, authority class, issuer, optional exact membership/profile, optional method digest, exact outcome code, schema, limitations, independence dimensions, and content digest;
 - it binds the same problem revision as the claim it assesses;
 - supporting artifacts are an explicit immutable closure;
+- a human-decided attestation requires an active human issuer and matching active membership;
 - independence dimensions are recorded individually; and
 - correction creates a superseding attestation rather than mutating the original.
 
@@ -262,7 +274,8 @@ Maps to: **F7**
 
 Accepted when:
 
-- selection names exact case, problem, claim, attestation, artifact, policy, toolchain, and source revisions;
+- an immutable `publication_dossier` binds the eligible closed case, problem, claim, public-safe dossier artifact, and schema-versioned closure digest;
+- each draft-only selection names that exact dossier plus the case's disposition and eligibility attestations;
 - privacy, secret, citation, license/export, link, artifact-closure, audit-chain, and claim-language checks pass;
 - the preview shows the exact public diff; and
 - any failed check blocks sealing.
@@ -275,12 +288,13 @@ Maps to: **F7**
 
 Accepted when:
 
-- the batch receives a monotonic sequence, manifest digest, audit head, signature, and previous-batch link;
+- preview of a nonempty draft allocates the workspace-local batch sequence and freezes generator/toolchain/evidence/artifact digests plus the current workspace audit head;
+- sealing records and freezes the public-safe manifest artifact/digest, signature, sealing actor, and time;
 - an authenticated human with the narrow publication capability and configured recent/step-up identity check seals and authorizes the exact manifest;
 - a separate audited `platform-publisher` service principal performs the GitHub Actions/Cloudflare deployment under one manifest-scoped release authority, without exposing deploy credentials to the human browser or watched-repository identity;
-- the deployment request names the exact manifest, platform/generator revision, release sequence, and trigger kind;
+- each deployment attempt names the exact batch, `attempt_no`, trigger kind, target, platform/generator revision digests, and release-request digest;
 - CI validates and smoke-tests the uploaded version before promotion; and
-- public `latest` advances only after observed deployment success.
+- a successful attempt is required before the batch becomes published, and public `latest` then selects that exact successful batch/attempt pair.
 
 #### US-P3 — Retry or correct without rewriting history
 
@@ -290,8 +304,8 @@ Maps to: **F7**
 
 Accepted when:
 
-- an exact retry reuses the same release-request identity;
-- a platform/template redeploy creates a new deployment attempt without resealing research content;
+- a retry creates the next attempt number while an unchanged release-request digest identifies the repeated request;
+- a platform/template redeploy creates a new deployment attempt without changing the sealed research closure;
 - a research correction creates a linked erratum or new batch; and
 - superseded public pages keep visible correction links.
 
@@ -345,7 +359,7 @@ These are acceptance obligations, not extra personas or products.
 |---|---|---|---|
 | **SJ-1** | Reconcile GitHub | F1, F9 | A signed push yields one deduplicated receipt and exact preserved snapshot; reconciliation detects a missed event |
 | **SJ-2** | Enforce commands | F3–F6, F9 | Every mutation is authenticated, expected-version checked, request-hash idempotent, audited, and atomically outboxed where needed |
-| **SJ-3** | Bound spending and execution | F4, F9 | Reservation precedes work; cancellation, expiry, delayed usage, and late completion cannot create untracked spend or accepted state |
+| **SJ-3** | Bound spending and execution | F4, F9 | Reservation precedes every external effect; response/final-stream/generation observations preserve complete OpenRouter usage; delayed variance cannot disappear or authorize more work |
 | **SJ-4** | Preserve evidence | F4–F8 | Artifact bytes match their digest; lineage and attestations are immutable; a clean deterministic replay matches exact outputs |
 | **SJ-5** | Schedule without inventing content | F7, F9 | Periodic work reconciles and compacts state; no publication is generated when no new sealed batch exists |
 | **SJ-6** | Recover | F1–F9 | PostgreSQL, artifact storage, snapshots, policy revisions, and signing state restore into a clean environment and reproduce both fixtures and one batch |
@@ -400,7 +414,7 @@ Features: **F2–F6, minimal F9**
 - One manually selected exact repository snapshot.
 - One math fixture and one CS fixture.
 - One sequential workflow, one worker, one Investigator, one Verifier.
-- PostgreSQL state, immutable artifacts, bounded execution, and honest closure.
+- Always-on PostgreSQL 16 state on Firebat, immutable artifacts, bounded execution, and honest closure.
 
 ### Slice B — connect the repository and admin edge
 
@@ -421,7 +435,7 @@ Features: **F7, F8**
 
 ## 10. Explicit deferrals
 
-- Multiple watched repositories, tenants, or active organizations.
+- Multiple watched **project** repositories, tenants, or active organizations; exact read-only tool dependencies are part of v1.
 - Teams, departments, org charts, arbitrary channels, DMs, presence, rich notification rules, and Slack replacement breadth.
 - Generic workflow authoring, forks, joins, loops, reusable subflows, and an ambitious graph canvas.
 - Agent swarms, recursive delegation, autonomous committees, multiple providers, or multiple active workers.

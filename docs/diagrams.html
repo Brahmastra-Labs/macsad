@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MaCSad diagrams</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: light-dark(#f8fafc, #0b1220);
+      --panel: light-dark(#ffffff, #111827);
+      --text: light-dark(#0f172a, #e5e7eb);
+      --muted: light-dark(#64748b, #9ca3af);
+      --border: light-dark(#cbd5e1, #374151);
+      --accent: light-dark(#2563eb, #60a5fa);
+      --accent-soft: light-dark(#dbeafe, #172554);
+      --stage: light-dark(#f1f5f9, #0f172a);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body { background: var(--bg); color: var(--text); font: 14px/1.45 Inter, ui-sans-serif, system-ui, sans-serif; }
+    button, a { font: inherit; }
+    .shell { display: grid; grid-template-columns: 280px minmax(0, 1fr); height: 100%; }
+    .sidebar { border-right: 1px solid var(--border); background: var(--panel); padding: 20px 16px; overflow: auto; }
+    h1 { font-size: 19px; margin: 0 0 4px; }
+    .lede { color: var(--muted); margin: 0 0 18px; }
+    .diagram-list { display: grid; gap: 8px; }
+    .diagram-choice { width: 100%; border: 1px solid transparent; border-radius: 10px; padding: 10px 11px; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
+    .diagram-choice:hover { background: var(--accent-soft); }
+    .diagram-choice[aria-current="true"] { background: var(--accent-soft); border-color: var(--accent); }
+    .diagram-choice strong { display: block; font-weight: 650; }
+    .diagram-choice span { display: block; color: var(--muted); font-size: 12px; margin-top: 3px; }
+    .main { min-width: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+    .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
+    .toolbar-title { min-width: 240px; margin-right: auto; }
+    .toolbar-title strong { display: block; }
+    .toolbar-title span { color: var(--muted); font-size: 12px; }
+    .control, .download { border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--text); min-height: 34px; padding: 6px 10px; cursor: pointer; text-decoration: none; }
+    .control:hover, .download:hover { border-color: var(--accent); }
+    .zoom-value { min-width: 58px; text-align: center; font-variant-numeric: tabular-nums; color: var(--muted); }
+    .stage { position: relative; overflow: hidden; background-color: var(--stage); background-image: linear-gradient(to right, color-mix(in srgb, var(--border) 40%, transparent) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in srgb, var(--border) 40%, transparent) 1px, transparent 1px); background-size: 24px 24px; touch-action: none; cursor: grab; }
+    .stage.dragging { cursor: grabbing; }
+    .canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+    .canvas img { display: block; max-width: none; background: white; box-shadow: 0 3px 18px rgb(15 23 42 / .16); user-select: none; -webkit-user-drag: none; }
+    .hint { position: absolute; left: 14px; bottom: 12px; color: var(--muted); background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--border); border-radius: 8px; padding: 6px 9px; pointer-events: none; }
+    @media (max-width: 760px) {
+      .shell { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+      .sidebar { border-right: 0; border-bottom: 1px solid var(--border); padding: 12px; }
+      .lede { display: none; }
+      .diagram-list { display: flex; overflow-x: auto; }
+      .diagram-choice { min-width: 190px; }
+      .main { min-height: 70vh; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <h1>MaCSad domain diagrams</h1>
+      <p class="lede">Select a view, then zoom and drag the full-resolution SVG. PNG and editable DOT sources are beside it on disk.</p>
+      <nav class="diagram-list" id="diagram-list" aria-label="Domain diagrams"></nav>
+    </aside>
+    <main class="main">
+      <div class="toolbar">
+        <div class="toolbar-title"><strong id="title"></strong><span id="description"></span></div>
+        <button class="control" id="zoom-out" type="button" aria-label="Zoom out">−</button>
+        <output class="zoom-value" id="zoom-value">100%</output>
+        <button class="control" id="zoom-in" type="button" aria-label="Zoom in">+</button>
+        <button class="control" id="fit" type="button">Fit</button>
+        <button class="control" id="actual" type="button">100%</button>
+        <a class="download" id="svg-link" href="#">Open SVG</a>
+        <a class="download" id="png-link" href="#">Open PNG</a>
+        <a class="download" id="dot-link" href="#">DOT source</a>
+      </div>
+      <section class="stage" id="stage" aria-label="Zoomable diagram canvas">
+        <div class="canvas" id="canvas"><img id="diagram" alt=""></div>
+        <div class="hint">Wheel or +/− to zoom · drag to pan · 0 fits · 1 shows 100%</div>
+      </section>
+    </main>
+  </div>
+  <script>
+    const diagrams = [
+      { id: 'domain-context-map', title: 'Bounded context map', description: 'The one watched project, approved tool repositories, Firebat authority, Cloudflare edge, and external effects.' },
+      { id: 'domain-control-erd', title: 'Control and organization ERD', description: 'Workspace identity, sealed tool catalogs, compiled virtual organization, process graph, Kanban tasks, and assignments.' },
+      { id: 'domain-evidence-erd', title: 'Evidence and budget ERD', description: 'Executions, admitted tools, immutable evidence, OpenRouter observations, exact reservations, and settlement.' },
+      { id: 'domain-publication-erd', title: 'Publication and audit ERD', description: 'Case-bound dossiers, frozen batches, deployment reconciliation, public head, events, and outbox.' },
+      { id: 'discovery-v1-process', title: 'Discovery control flow', description: 'The smallest end-to-end process across Director, Investigator, Verifier, Publisher, and reader.' }
+    ];
+    const list = document.getElementById('diagram-list');
+    const stage = document.getElementById('stage');
+    const canvas = document.getElementById('canvas');
+    const image = document.getElementById('diagram');
+    const title = document.getElementById('title');
+    const description = document.getElementById('description');
+    const zoomValue = document.getElementById('zoom-value');
+    let current = diagrams[0];
+    let scale = 1;
+    let x = 0;
+    let y = 0;
+    let drag = null;
+
+    function renderTransform() {
+      canvas.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+      zoomValue.value = `${Math.round(scale * 100)}%`;
+      zoomValue.textContent = zoomValue.value;
+    }
+    function fit() {
+      if (!image.naturalWidth || !image.naturalHeight) return;
+      const inset = 36;
+      scale = Math.min((stage.clientWidth - inset) / image.naturalWidth, (stage.clientHeight - inset) / image.naturalHeight, 1);
+      x = (stage.clientWidth - image.naturalWidth * scale) / 2;
+      y = (stage.clientHeight - image.naturalHeight * scale) / 2;
+      renderTransform();
+    }
+    function zoom(next, cx = stage.clientWidth / 2, cy = stage.clientHeight / 2) {
+      const bounded = Math.max(0.08, Math.min(8, next));
+      const worldX = (cx - x) / scale;
+      const worldY = (cy - y) / scale;
+      scale = bounded;
+      x = cx - worldX * scale;
+      y = cy - worldY * scale;
+      renderTransform();
+    }
+    function selectDiagram(diagram) {
+      current = diagram;
+      title.textContent = diagram.title;
+      description.textContent = diagram.description;
+      image.alt = diagram.title;
+      image.src = `images/${diagram.id}.svg`;
+      document.getElementById('svg-link').href = `images/${diagram.id}.svg`;
+      document.getElementById('png-link').href = `images/${diagram.id}.png`;
+      document.getElementById('dot-link').href = `diagrams/${diagram.id}.dot`;
+      document.querySelectorAll('.diagram-choice').forEach(button => button.setAttribute('aria-current', String(button.dataset.id === diagram.id)));
+      history.replaceState(null, '', `#${diagram.id}`);
+    }
+    diagrams.forEach(diagram => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'diagram-choice';
+      button.dataset.id = diagram.id;
+      button.innerHTML = `<strong>${diagram.title}</strong><span>${diagram.description}</span>`;
+      button.addEventListener('click', () => selectDiagram(diagram));
+      list.appendChild(button);
+    });
+    image.addEventListener('load', fit);
+    document.getElementById('zoom-in').addEventListener('click', () => zoom(scale * 1.25));
+    document.getElementById('zoom-out').addEventListener('click', () => zoom(scale / 1.25));
+    document.getElementById('fit').addEventListener('click', fit);
+    document.getElementById('actual').addEventListener('click', () => {
+      scale = 1; x = 24; y = 24; renderTransform();
+    });
+    stage.addEventListener('wheel', event => {
+      event.preventDefault();
+      const box = stage.getBoundingClientRect();
+      zoom(scale * (event.deltaY < 0 ? 1.14 : 1 / 1.14), event.clientX - box.left, event.clientY - box.top);
+    }, { passive: false });
+    stage.addEventListener('pointerdown', event => {
+      stage.setPointerCapture(event.pointerId);
+      drag = { x: event.clientX, y: event.clientY, originX: x, originY: y };
+      stage.classList.add('dragging');
+    });
+    stage.addEventListener('pointermove', event => {
+      if (!drag) return;
+      x = drag.originX + event.clientX - drag.x;
+      y = drag.originY + event.clientY - drag.y;
+      renderTransform();
+    });
+    stage.addEventListener('pointerup', () => { drag = null; stage.classList.remove('dragging'); });
+    stage.addEventListener('pointercancel', () => { drag = null; stage.classList.remove('dragging'); });
+    window.addEventListener('keydown', event => {
+      if (event.key === '+' || event.key === '=') zoom(scale * 1.25);
+      if (event.key === '-') zoom(scale / 1.25);
+      if (event.key === '0') fit();
+      if (event.key === '1') { scale = 1; x = 24; y = 24; renderTransform(); }
+    });
+    window.addEventListener('resize', fit);
+    const requested = location.hash.slice(1);
+    selectDiagram(diagrams.find(diagram => diagram.id === requested) || diagrams[0]);
+  </script>
+</body>
+</html>

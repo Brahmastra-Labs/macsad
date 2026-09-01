@@ -1,0 +1,27 @@
+[
+  {
+    "id": "domain-context-map",
+    "title": "Bounded context map",
+    "description": "The one watched project, approved tool repositories, Firebat authority, Cloudflare edge, and external effects."
+  },
+  {
+    "id": "domain-control-erd",
+    "title": "Control and organization ERD",
+    "description": "Workspace identity, sealed tool catalogs, compiled virtual organization, process graph, Kanban tasks, and assignments."
+  },
+  {
+    "id": "domain-evidence-erd",
+    "title": "Evidence and budget ERD",
+    "description": "Executions, admitted tools, immutable evidence, OpenRouter observations, exact reservations, and settlement."
+  },
+  {
+    "id": "domain-publication-erd",
+    "title": "Publication and audit ERD",
+    "description": "Case-bound dossiers, frozen batches, deployment reconciliation, public head, events, and outbox."
+  },
+  {
+    "id": "discovery-v1-process",
+    "title": "Discovery control flow",
+    "description": "The smallest end-to-end process across Director, Investigator, Verifier, Publisher, and reader."
+  }
+]

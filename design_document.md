@@ -25,10 +25,10 @@ The v1 shape is intentionally small:
 
 1. one new MaCSad platform repository is implemented primarily in LOGOS;
 2. its development toolchain resolves locally to `/home/alejandro/projects/logicaffeine-private`, while every build records one exact toolchain commit and binary digest;
-3. one connected GitHub repository is the research project and workspace boundary;
-4. every problem revision, card, run, and artifact is pinned to an exact workspace commit;
+3. one selected watched GitHub repository is the sole research project and primary workspace; zero or more explicitly approved tool repositories may be attached as read-only exact-version dependencies, never as additional projects;
+4. every problem revision, card, run, and artifact is pinned to an exact primary-workspace commit/tree and the exact approved tool-repository revision set it may use;
 5. one LOGOS `macsad-server` is the sole policy and state-transition authority;
-6. one PostgreSQL database stores control metadata and an append-only, hash-chained domain history;
+6. one native PostgreSQL 16 cluster runs continuously on Firebat under systemd and stores control metadata plus an append-only, hash-chained domain history;
 7. one content-addressed filesystem stores immutable artifacts and preserved workspace snapshots;
 8. one trusted Firebat worker supervisor launches credential-free, bounded child sandboxes;
 9. one small MaCSad-native process-graph engine begins with one fixed discovery workflow and deterministic decision matrices, then grows into the four named workflow families;
@@ -41,16 +41,16 @@ The v1 shape is intentionally small:
 
 This design is grounded in:
 
-- [`OVERVIEW.md`](./OVERVIEW.md), the combined autonomous-campaign analysis;
-- [`proxapi-overview.md`](./proxapi-overview.md);
-- [`datacenterdev-overview.md`](./datacenterdev-overview.md);
-- [`logicaffeine-private-overview.md`](./logicaffeine-private-overview.md);
-- [`dioxus-postgres-template-overview.md`](./dioxus-postgres-template-overview.md); and
+- the separately maintained `OVERVIEW.md`, the combined autonomous-campaign analysis;
+- the separately maintained `proxapi-overview.md`;
+- the separately maintained `datacenterdev-overview.md`;
+- the separately maintained `logicaffeine-private-overview.md`;
+- the separately maintained `dioxus-postgres-template-overview.md`; and
 - the most recent relevant email from Tristen Harr, subject **“granola hehe,”** sent 2026-08-31, containing the Granola transcript titled **“Autonomous research agent framework — task board, budgeting, and guardrails.”**
 
-The repository audits were primarily static. For this revision, the local `logicaffeine-private` checkout was additionally fetched and inspected: it is clean on `main`, equal to `origin/main`, at commit `f6ee2c06a4ae47bed2358ebf979554fa4890fe9d`, with workspace version `0.10.1` (`v0.10.1-2-gf6ee2c06`). That establishes the source version and exposed interfaces, not that MaCSad's intended combinations already work. Every integration remains a proposed design until its executable contract test passes.
+The repository audits were primarily static. For this revision, the local `logicaffeine-private` checkout was additionally fetched and inspected: it is clean on `main`, equal to `origin/main`, at commit `132dc5346728e2d204df798dd7544e6405306a2c`, with workspace version `0.10.1` (`v0.10.1-3-g132dc534`). That establishes the source version and exposed interfaces, not that MaCSad's intended combinations already work. Every integration remains a proposed design until its executable contract test passes.
 
-Cloudflare and GitHub delivery recommendations were checked against their official documentation on 2026-08-31. Those platform details can change and must be rechecked during implementation.
+Cloudflare, GitHub, PostgreSQL 16, and OpenRouter operational recommendations were checked against their official documentation on 2026-08-31. External platform details can change and must be rechecked during implementation.
 
 ## 3. Product thesis
 
@@ -70,9 +70,10 @@ The intended experience is that a research director can wake up, inspect a morni
 
 ### 4.1 In scope
 
-- Connecting MaCSad to one selected GitHub repository; that repository is the v1 project and workspace.
+- Connecting MaCSad to one selected GitHub repository; that repository is the sole v1 project and primary workspace.
 - Watching authenticated repository events and reconciling the default branch, pull requests, and relevant Actions results.
-- Pinning every card, run, artifact, and publication to a repository ID plus exact commit SHA.
+- Pinning every card, run, artifact, and publication to the primary repository ID plus exact commit/tree and to the exact approved tool-repository revisions used by that work.
+- Attaching zero or more explicitly approved tool repositories, including the local `logicaffeine-private` checkout, as read-only dependencies with a declared purpose, access mode, exact commit/tree, preserved source artifact, and allowlisted operation manifests. A tool repository never becomes a project, supplies workspace identity, or activates project policy.
 - A controller-owned Git mirror plus preserved snapshot bundles and credential-free per-attempt source trees on Firebat One; changes return as patch artifacts and reviewed pull requests.
 - Mathematics and computer-science research cards.
 - A fixed Kanban lifecycle with budgets, WIP limits, play, pause, cancel, block, verify, review, and publish controls.
@@ -80,7 +81,7 @@ The intended experience is that a research director can wake up, inspect a morni
 - A minimal virtual organization: one human Director, one Investigator profile, one Verifier profile, assignments, a small inbox, one operations conversation, per-card threads, and the minimum explicit handoff lifecycle.
 - Slack-like discussion attached to repo, task, workflow, node, run, artifact, or decision context.
 - A small graph connecting tasks, sources, hypotheses, artifacts, claims, and follow-up questions.
-- One model-provider adapter initially, with usage and cost accounting.
+- One OpenRouter adapter initially, with per-call request identity, native-token usage observations, provider-reported cost, reconciliation, and budget variance.
 - One local bounded worker on Firebat One.
 - Curated source bundles supplied at intake; restricted live retrieval can come after the evidence path works.
 - One mathematical fixture and one executable CS fixture.
@@ -94,10 +95,10 @@ The intended experience is that a research director can wake up, inspect a morni
 
 ### 4.2 Explicit non-goals
 
-- Multiple active workspace repositories in v1, or one project silently spanning several repositories.
+- Multiple active primary project repositories in v1, or treating a tool dependency as a second project/workspace.
 - Running against a floating branch name without resolving and storing the exact commit first.
 - Letting a worker keep GitHub credentials, push directly, merge, modify Actions workflows, or operate in the canonical mirror.
-- Unreviewed submodules, Git LFS dependencies, or cross-repository dependencies; each requires an explicit pinned policy later.
+- Floating, unreviewed, or write-capable submodules, Git LFS dependencies, or tool repositories. Every admitted dependency requires an approved exact revision, preserved bytes, declared scope, and pinned policy before use.
 - Importing all of ProxAPI as the first MaCSad runtime.
 - Importing datacenterdev as a v1 provider framework.
 - Copying `pit` source, its 33 workflows, its ten software roles, or its file format as MaCSad's runtime. MaCSad rewrites the concepts into its own domain model, schemas, compiler, validator, and engine.
@@ -135,7 +136,8 @@ The intended experience is that a research director can wake up, inspect a morni
 | Granola notes | Budgeted autonomy | Per-call, per-run, per-card, and daily hard ceilings with human budget gates | Agents assigning their own value or extending their own budget |
 | Granola notes | Daily rhythm and memory | Morning digest, approval window, work window, nightly compaction, sealed publication | Endless context accumulation and continuous public mutation |
 | Granola notes | Self-improvement | Agents may propose process changes as reviewed Git pull requests | Self-modifying active policy or silently changing in-flight workflows |
-| GitHub workspace | Repository is the project | Stable GitHub repository ID, exact commit snapshots, watched events, isolated source trees, patch/PR handoff | An internal “project” abstraction that drifts away from the repository or lets work run on an unpinned branch |
+| GitHub workspace | The watched repository is the project | Stable GitHub repository ID, exact commit snapshots, watched events, isolated source trees, patch/PR handoff | An internal “project” abstraction that drifts away from the repository or lets work run on an unpinned branch |
+| Tool repositories | Dependencies are explicit capabilities, not projects | Approved read-only repository identity, exact preserved revision, case-level purpose/scope pin, versioned operation manifests | Floating local paths, ambient host-tree access, dependency webhooks activating policy, or treating a tool checkout as another workspace |
 
 ## 6. Proposed architecture
 
@@ -143,21 +145,23 @@ The intended experience is that a research director can wake up, inspect a morni
 flowchart TD
     H[Research director]
     R[Watched GitHub repository<br/>project / workspace]
+    TR[Approved tool repositories<br/>read-only dependencies]
     GA[Watched-project GitHub App<br/>read-only installation identity]
     PP[Platform publisher identity<br/>trusted repo only]
     MIR[Controller-owned Git mirror<br/>never mounted in a sandbox]
     SNAP[Immutable workspace snapshot<br/>protected ref + CAS tree bundle]
+    TPIN[Exact tool-repository revisions<br/>purpose + scope + preserved bytes]
     A[Cloudflare Access]
     ADM[Admin web application]
     G[Admin API gateway]
     T[Cloudflare Tunnel]
     S[macsad-server<br/>LOGOS sole controller]
     HC[Minimal trusted host adapters<br/>effects only, no policy]
-    PG[(PostgreSQL)]
+    PG[(PostgreSQL 16<br/>Firebat systemd service)]
     CAS[(Content-addressed artifact store)]
     W[Trusted Firebat worker supervisor]
     X[Credential-free child sandbox]
-    M[Model gateway]
+    M[OpenRouter gateway<br/>per-call usage + reconciliation]
     ORG[Virtual organization<br/>teams, roles, agents, channels]
     WF[MaCSad workflow registry<br/>graphs + decision matrices]
     L[Local LOGOS toolchain/runtime<br/>logicaffeine-private at exact commit]
@@ -172,6 +176,9 @@ flowchart TD
     S --> MIR
     MIR --> SNAP
     SNAP --> W
+    S -->|approve, resolve, preserve| TR
+    TR --> TPIN
+    TPIN --> W
     H --> A --> ADM
     ADM --> G --> T --> S
     L -. builds and checks .-> S
@@ -209,8 +216,8 @@ LocalToolchainResolution/1              # machine-local, ignored by Git
 
 LogosToolchainLock/1                    # committed and reviewed
   workspace_version: 0.10.1
-  source_commit: f6ee2c06a4ae47bed2358ebf979554fa4890fe9d
-  source_describe: v0.10.1-2-gf6ee2c06
+  source_commit: 132dc5346728e2d204df798dd7544e6405306a2c
+  source_describe: v0.10.1-3-g132dc534
   promoted_bundle_hash: <recorded at promotion>
   largo_binary_hash: <recorded at promotion>
   runtime_source_closure_hash: <recorded at promotion>
@@ -246,7 +253,7 @@ For v1, the LOGOS HTTP service runs on Firebat behind Cloudflare Tunnel. The LOG
 
 ### 6.2 The GitHub repository is the project
 
-MaCSad does not invent a second generic `Project` object. In v1, a project is exactly one GitHub repository selected during onboarding. The stable identity is GitHub's numeric repository ID; `owner/name` is display and routing metadata that may change if the repository is renamed or transferred.
+MaCSad does not invent a second generic `Project` object. In v1, a project is exactly one watched GitHub repository selected during onboarding. The stable identity is GitHub's numeric repository ID; `owner/name` is display and routing metadata that may change if the repository is renamed or transferred. An approved GitHub repository or local Git checkout may also be registered as a `tool_repository`, but that record is a read-only dependency of the workspace, not another project, workspace, policy source, or webhook authority.
 
 The repository supplies the workspace's versioned material:
 
@@ -257,12 +264,12 @@ The repository supplies the workspace's versioned material:
 - GitHub Actions workflows; and
 - the commit history and pull-request review boundary.
 
-PostgreSQL still owns live operational facts such as leases, budgets, current Kanban projection, and approvals. The content-addressed store owns large evidence bytes. Git is the workspace and reviewed change history, not a substitute for the live scheduler database.
+PostgreSQL still owns live operational facts such as leases, budgets, current Kanban projection, approvals, tool-repository registrations, and exact case-to-tool revision pins. The content-addressed store owns large evidence and preserved repository bytes. The primary Git repository is the workspace and reviewed change history; attached tool repositories supply only explicitly admitted, exact-version capabilities.
 
 Every mutable branch is resolved to an immutable snapshot before work begins:
 
 ```text
-WorkspaceSnapshot/1 =
+workspace_snapshot identity =
   GitHub repository ID
   + commit SHA
   + Git tree SHA
@@ -271,7 +278,7 @@ WorkspaceSnapshot/1 =
   + relevant lockfile/tool-manifest hashes
 ```
 
-A card may track the default branch for freshness, but a run never does. It runs only against a stored snapshot.
+A card may track the primary default branch for freshness, but a run never does. It runs only against a stored primary snapshot. Each case separately pins every allowed `tool_repository_revision` by exact commit/tree, preserved source artifact, purpose, access mode, and optional schema-validated path/operation scope. Workers receive only that frozen closure; they never receive a floating tool branch, a repository credential, or the host checkout itself.
 
 ### 6.3 Repository onboarding and watch loop
 
@@ -281,8 +288,9 @@ The first onboarding flow is:
 2. MaCSad records the installation ID, stable repository ID, display name, default branch, and approved permission set—never an installation token.
 3. MaCSad fetches repository metadata into a controller-owned bare mirror using a short-lived installation token supplied through an ephemeral credential header/helper, never embedded in the remote URL. The mirror is writable only by the trusted controller and is never exposed to workers.
 4. MaCSad reads `.macsad/project.yaml`. If it is absent while the App is read-only, MaCSad emits a setup patch for a human to apply; an App-created setup pull request requires a separate, explicit permission-upgrade decision.
-5. MaCSad compiles and validates organization, workflow, role, and decision definitions as a `candidate_bundle`, detects lockfiles and sensitive paths, and creates the initial immutable `WorkspaceSnapshot`.
-6. The admin reviews watched/excluded/private paths, budgets, tools, publication paths, branch rules, the candidate semantic diff, and model-data policy, then explicitly activates the exact candidate bundle hash. A push never activates policy merely because it compiles.
+5. MaCSad compiles and validates organization, workflow, role, and decision definitions as a `candidate_bundle`, detects lockfiles and sensitive paths, and creates the initial immutable `workspace_snapshot`.
+6. The admin may register read-only tool repositories, resolve each to an exact commit/tree, preserve its source bytes, review its purpose and scope, and admit only versioned operation manifests whose schemas, effects, limits, and provider revision are explicit.
+7. The admin reviews watched/excluded/private paths, budgets, project and tool scopes, publication paths, branch rules, the candidate semantic diff, and model-data policy, then explicitly activates the exact candidate bundle hash. A push or tool-repository refresh never activates policy merely because it compiles.
 
 Suggested repository contract:
 
@@ -340,7 +348,8 @@ Cloudflare coordinates access and serves web assets. It does not execute researc
 | Concern | Authority |
 |---|---|
 | Project/workspace identity and reviewed source history | Selected GitHub repository |
-| Executed source baseline | Immutable `WorkspaceSnapshot` at an exact commit |
+| Executed source baseline | Immutable `workspace_snapshot` at an exact commit |
+| Approved dependency baseline | Exact `tool_repository_revision` rows pinned to the research case; preserved source artifact plus declared purpose/access scope |
 | Repository event intake, reconciliation, snapshots, and proposals | `macsad-server`, authenticated to GitHub through the watched-project App installation |
 | Card state, transition validity, budgets, leases, WIP, approvals | `macsad-server` |
 | Current control data and transition projection | PostgreSQL |
@@ -356,52 +365,37 @@ Cloudflare coordinates access and serves web assets. It does not execute researc
 
 The board is a projection, not authority. Dragging a card must call a transition endpoint; it may never update a status field directly.
 
-## 7. Minimal data model
+## 7. Minimal canonical data model
 
-PostgreSQL is selected because the Granola notes call for a durable long-lived database on the team's machines and because the system needs transactional state, budgets, leases, and history. V1 remains a single-node application even though it uses Postgres.
+The normative domain explanation is [`domain_model.md`](./domain_model.md). The executable PostgreSQL baseline is [`database/migrations/0001_initial_schema.sql`](./database/migrations/0001_initial_schema.sql), operated according to [`database/README.md`](./database/README.md). Names in those artifacts are canonical; the design does not maintain a second conceptual record vocabulary.
 
-### 7.1 Core records
+### 7.1 Relational groups
 
-| Record | Essential contents |
-|---|---|
-| `RepositoryWorkspace/1` | Stable GitHub repository/installation IDs, display name, default branch, configuration path, watch state, controller-owned mirror locator, last reconciled delivery/head |
-| `WorkspaceSnapshot/1` | Repository ID, exact commit/tree, configuration and workflow-bundle hashes, relevant lock/tool hashes, changed paths, provenance, protected internal ref and verified Git/tree bundle hash retained in CAS |
-| `WebhookReceipt/1` | App ID, delivery ID, repository ID, event/action, raw payload hash, receipt state, retry/dead-letter metadata, timestamps |
-| `ExternalObservation/1` | GitHub/Cloudflare object ID, exact observed SHA/state, source delivery or API request, observation time, reconciliation state |
-| `ChangeProposal/1` | Base snapshot/tree, normalized patch hash, expected resulting-tree hash, allowed-path-policy hash, evidence/review snapshot, state, branch/ref, pull-request identity, idempotency key |
-| `PolicyActivation/1` | Candidate organization/workflow/tool bundle hash, semantic diff, CI evidence, human approving principal, activation time, superseded active hash |
-| `OrganizationBundle/1` | Versioned teams, roles, reporting/handoff rules, default channels, staffing constraints, source commit, canonical hash |
-| `Principal/1` | Stable human, service, or agent-instance authentication identity, kind, status, and credential epoch |
-| `ExternalIdentity/1` | Principal, issuer, provider subject/audience, numeric GitHub user ID where applicable; never authorize by email or display name |
-| `WorkspaceMembership/1` | Principal, immutable member-profile revision, effective roles, channel visibility, start/end times |
-| `CapabilityGrant/1` | Principal/service identity, workspace, allowed action and resource constraints, issuer/justification, validity interval, revocation/credential epoch, and required step-up authentication |
-| `ActorSession/1` | Authenticated principal, effective member, invocation/run ID, credential epoch, authentication method/time, immutable authorization-snapshot hash |
-| `MemberProfileRevision/1` | Human/agent persona, team, supervisor, model/provider policy, tool/data policy, budget class, WIP and availability guidance; not an authentication record |
-| `Conversation/1` | Channel or thread identity, visibility, attached repo/task/workflow/node/run/artifact/decision context |
-| `Message/1` | Principal/session and effective member, conversation, immutable content revision/tombstone, message kind, reply target, mentions, timestamp; never an implicit state mutation |
-| `ProblemRevision/1` | Canonical original question, vocabulary, claim kind, assumptions, bounds, goal, success/refutation/inconclusive rules, formal representation and reverse paraphrase, source and digest |
-| `WorkflowBundle/1` | MaCSad-native graph definitions, node-to-board metadata, role requirements, decision tables, schemas, source commit, compiler version, canonical hash, candidate/active/retired state |
-| `WorkflowRun/1` | Activated bundle/version, graph ID, problem revision, active node-instance IDs, accumulated typed facts, assignments, gates, optimistic version |
-| `FactRecord/1` | Typed value/hash, authority class, trusted issuer/predicate ID, schema, producer, artifact/event reference, and derivation closure for controller-derived facts |
-| `NodeInstance/1` | Run/node/branch identity, board phase, responsible assignment, input/output closure hashes, lifecycle, attempt, iteration/fuel, parent/call/return identity |
-| `TaskCard/1` | ID, workspace snapshot, immutable problem revision, title, domain, projected board phase, research outcome, editorial decision, publication state, priority, tags, workflow run/node instance, required role, risk, source policy, budget, assignees, conversation, optimistic version |
-| `CardEdge/1` | Source card, destination object/card, relation type, rationale |
-| `Handoff/1` | Offerer/recipient principal and role, exact workspace/problem/workflow snapshots, artifact closure, unresolved items, acceptance criteria, budget remaining, thread, offer/clarify/accept/reject/expire state and deadline |
-| `AuditEvent/1` | Workspace sequence, aggregate and aggregate sequence, principal/session, event type/schema version, correlation/idempotency/request hashes, immutable canonical payload bytes or CAS reference plus hash, previous event hash, event hash, timestamp |
-| `RunAttempt/1` | Card/node, exact workspace/problem revisions, state (`pending`, `leased`, `running`, `cancel_requested`, `completed`, `failed`, or `expired`), supervisor lease/fence, tool manifest, immutable agent/profile/prompt/context hashes, provider/model/parameters, environment, seed, limits, three-layer result status, reconciled cost, artifacts, patch artifact |
-| `ArtifactRef/1` | SHA-256, size, media type, schema, storage key, producer, parent hashes, visibility, classification, retention, source provenance, SPDX/license expression, third-party/derived markers, provider/export restrictions and review state |
-| `VerificationAttestation/1` | Verifier principal/profile, input-closure hash, blind/fresh-context mode, tool/checker/model/environment revisions, result, limitations, timestamp |
-| `Evidence/1` | Claim and problem revision, assumptions, method, independent evidence dimensions, artifact references, attestation IDs, disagreements, limitations |
-| `BudgetLedger/1` | Scope, currency/token/compute limit, reservation, actual use, provider/model, approver, expiration |
-| `GateDecision/1` | Card version, evidence snapshot hash, decision, reviewer, reason, timestamp |
-| `PublicationBatch/1` | Immutable selected card/problem/workspace revisions, public artifact closure, platform/generator commit, audit head, manifest hash/signature, sequence and state (`draft`, `previewed`, `sealed`, `dispatch_pending`, `deploying`, `published`, `failed`, or `superseded`) |
-| `PublicationAttempt/1` | Batch/manifest, monotonically increasing deployment-release sequence, authenticated platform-publisher principal, Actions workflow/run/attempt, Cloudflare version/deployment, trigger kind, status, timestamps and reconciliation evidence |
+| Concern | Canonical PostgreSQL relations | Core rule |
+|---|---|---|
+| Primary workspace and tool dependencies | `workspace`, `workspace_snapshot`, `tool_repository`, `tool_repository_revision`, `tool_operation_manifest`, `research_case_tool_revision` | Exactly one watched repository is the project; each case names the exact read-only tool revisions and operations it may use |
+| Policy, people, and process | `policy_revision`, `policy_member_profile`, `policy_process`, `policy_node`, `policy_transition`, `policy_node_tool_operation` | Human-readable policy compiles to an immutable, validated graph; roles, nodes, ordered decisions, and tool rights are pinned together |
+| Identity and authority | `actor`, `actor_identity`, `membership`, `capability_grant` | Authentication and explicit grants authorize actions; a role name never does |
+| Research work and conversation | `problem_revision`, `research_case`, `task`, `task_transition`, `task_assignment`, `thread`, `message`, `message_mention` | One case is one card; one live task is the current node; every selected edge records the exact fact snapshot and decision row |
+| Execution and evidence | `execution`, `execution_tool_use`, `blob`, `artifact`, `execution_artifact`, `claim`, `attestation`, `attestation_artifact` | Attempt, transport, termination, claim, and verification remain distinct and trace to immutable bytes |
+| Model spend | `budget_account`, `model_call`, `model_usage_observation`, `budget_entry`, `budget_balance_v`, `model_cost_variance_v` | Reserve before dispatch; record per-call provider usage; settle the full actual charge and expose variance or overrun honestly |
+| Publication and durable integration | `publication_dossier`, `publication_batch`, `publication_item`, `publication_attempt`, `publication_head`, `command_receipt`, `inbound_delivery`, `audit_stream`, `domain_event`, `outbox_message` | Dossiers close over eligible evidence, draft-only selections freeze at preview, deployment success precedes publication, and event/outbox history remains ordered |
 
-These are logical contracts, not a command to create one table per row. V1 can store some immutable revisions as canonical JSON while normalizing the transactional records that require constraints. The first slice uses one card per workflow run and no child-card aggregation; parent objectives and parallel child cards wait until branch semantics are implemented.
+Stable state machines use named PostgreSQL enums; evolving provider, model, and external identifiers remain constrained data rather than enum values. JSONB is limited to immutable, schema-versioned tagged bodies whose canonical digest is stored beside them. The schema does not add a universal entity table, polymorphic graph edges, a model catalog, or a second writable Cloudflare database.
 
-Every local mutation, not only workflow movement, appends an `AuditEvent/1` in the same transaction as the state change and transactional outbox entry. This includes assignments, messages/revisions, budgets, leases, attempts, tool calls, artifacts, gates, handoffs, GitHub operations, policy activation, and publication. The immutable event body—not merely its hash or a transient outbox row—is retained for replay and explanation. The workspace-scoped sequence and `previous_event_hash` form a canonical hash chain. Idempotency is bound to both key and request hash, and each aggregate has its own monotonic version. A sealed publication records and signs the current audit head with a separately controlled publication key and records the previous published head; CI verifies the chain segment and signature before promotion.
+The greenfield `0001` inventory is 47 tables including the migration ledger, 50 native enum types, and exactly six read views: `case_board_v`, `budget_balance_v`, `model_cost_variance_v`, `publication_catalog_v`, `audit_timeline_v`, and `schema_version_v`.
 
-### 7.2 Tasks, chats, and authoritative actions
+### 7.2 PostgreSQL service and schema lifecycle
+
+MaCSad uses one native PostgreSQL 16 cluster on Firebat One. Systemd owns the `16/main` cluster, enables it at boot, restarts it after failure, and health checks it with `pg_isready`. PostgreSQL listens only on the local Unix socket and loopback boundary; Cloudflare and research workers never receive a direct database endpoint. The LOGOS controller remains the only domain-transition authority.
+
+`0001_initial_schema.sql` is the one canonical create script for the greenfield schema. It creates the domains, 50 enums, 47 tables, constraints, indexes, six views, routines, defensive triggers, grants, and migration ledger in one reviewed transaction. Deployment applies it through `database/apply_migrations.sh` under the dedicated migrator role and advisory lock, verifies the resulting schema, and only then starts a compatible controller. Application startup never performs DDL.
+
+Schema changes use expand, bounded backfill, then contract in a later deployment. The owner, migrator, application, and read-only roles remain separate; `PUBLIC` has no MaCSad schema authority. Backups coordinate the PostgreSQL boundary with the CAS manifest, restore into a fresh PostgreSQL 16 database, migrate forward, and pass schema plus artifact-closure verification before they count as recoverable.
+
+Every accepted mutation, not only workflow movement, appends a `domain_event` in the same transaction as state changes and required outbox rows. Idempotency binds both key and request digest. One automatically created `audit_stream` row serializes each workspace's sequence and previous-hash link, and a previewed publication records the exact current audit head that it will sign.
+
+### 7.3 Tasks, chats, and authoritative actions
 
 The product should feel like Slack meets a Kanban board, but the two surfaces have different authority:
 
@@ -410,26 +404,21 @@ The product should feel like Slack meets a Kanban board, but the two surfaces ha
 - **Workflow transitions** are the only way discussion becomes authoritative process state.
 - **Artifacts and evidence records** are the only way a message's claims become research evidence.
 
-Every task automatically has a primary thread. A workflow node may also open a role-specific channel or handoff thread. Messages may mention cards, nodes, artifacts, decisions, members, and exact commits through typed references rather than ambiguous pasted names.
+The schema permits one workspace-operations thread, one primary thread per case, and one thread per task. Messages may carry task context, reply to or correct an earlier message in the same thread, and mention actors explicitly.
 
-Chat commands such as “done,” “approved,” “spend more,” or “publish this” do nothing by themselves. The member must invoke the corresponding authenticated, CSRF-protected, typed action; `macsad-server` derives principal, session, member, role, scope, and the immutable authorization snapshot server-side, checks a valid `CapabilityGrant`, decision matrix, evidence, budget, step-up requirement, and optimistic version, then appends the audit event. Sensitive events record the authorization-snapshot hash. The resulting immutable system message links that event back into the thread.
+Chat commands such as “done,” “approved,” “spend more,” or “publish this” do nothing by themselves. The member must invoke the corresponding authenticated, CSRF-protected, typed action; `macsad-server` derives actor, identity, membership, profile, scope, and authorization facts server-side, checks a valid `capability_grant`, decision matrix, evidence, budget, and optimistic version, then records the resulting facts in the schema-versioned `domain_event` payload.
 
-### 7.3 Board graph relations
+### 7.4 Process graph and Kanban projection
 
-Start with a small fixed relation vocabulary:
+![Discovery v1 process flow](./docs/images/discovery-v1-process.svg)
 
-- `depends_on`
-- `refines`
-- `derived_from`
-- `supports`
-- `contradicts`
-- `reproduces`
-- `duplicate_of`
-- `follow_up_to`
+[Full-resolution PNG](./docs/images/discovery-v1-process.png) · [Pan/zoom viewer](./docs/diagrams.html#discovery-v1-process)
 
-These edges let the system answer questions such as “what did this result depend on?”, “which result contradicted it?”, and “what did we do at a particular time?” without deploying a graph database.
+`policy_process`, `policy_node`, and `policy_transition` are the compiled control-flow graph for one policy revision. Projection rows can be inserted only while that revision is a candidate and are append-only; activation therefore freezes the graph. A `task` instantiates one node for one research case. The first task must be the compiled entry node. Each successor closes the previous sequence through a `task_transition` whose finished source, target, entering policy edge, fact snapshot, decision code/order, and exact `task.transitioned` event agree. A transition without a successor must target a declared terminal node.
 
-### 7.4 Artifact storage
+`case_board_v` projects the one live task's `board_phase`, assignee, deadline, and control state. The Kanban column is therefore a view of the process graph, not separately writable state. The same task, policy node, assignment, and thread drive the board, process diagram, task drawer, and inbox. A general research-knowledge graph remains outside the greenfield core; claims, attestations, artifact links, and audit events provide the relations required by the first complete journey.
+
+### 7.5 Artifact storage
 
 Store immutable bytes under a digest-derived path such as:
 
@@ -441,7 +430,7 @@ Uploads are staged, hashed, size-checked, scanned, and atomically renamed. An ex
 
 ## 8. Kanban lifecycle
 
-The Kanban board is a deterministic projection of node instances across active workflow runs in the watched repository. In the first slice, one research objective is one card and one workflow run; the current node's immutable `board_phase` metadata determines the visible column. There is no separately writable process-status field. Later child tasks may represent parallel branches only after their ownership and join invariants exist.
+The Kanban board is the deterministic `case_board_v` projection of live `task` rows across active research cases in the watched repository. In the first slice, one research case is one card; its one live task instantiates the current compiled policy node, whose immutable `board_phase` determines the visible column. There is no separately writable process-status field. Later child tasks may represent parallel branches only after their ownership and join invariants exist.
 
 ### 8.1 Visible columns
 
@@ -456,9 +445,9 @@ Inbox → Ready → Running → Verify → Review → Closed
 - **Review:** the evidence snapshot is complete enough for human interpretation and disposition.
 - **Closed:** the research workflow is complete; its research outcome remains visible. A closed card may separately carry `editorial_decision=eligible`, which places it in the publication queue without inventing another workflow node or board transition.
 
-Each card shows repository and organization context: base commit, changed paths, workflow/node, required role, assigned member, team, channel/thread, supervisor or reviewer, lease, budget, and evidence blockers. The same task can be reached from the board, a member's inbox, its conversation, or the process diagram.
+Each card shows repository and organization context: primary commit/tree, pinned tool-repository revisions, changed paths, process/node, required profile, assigned member, channel/thread, supervisor or reviewer, lease, budget, and evidence blockers. The same task can be reached from the board, a member's inbox, its conversation, or the process diagram.
 
-`Paused` and `Blocked` are reason-bearing control flags, not truth states. A paused card keeps its column and releases or suspends work according to policy. A blocked card records the blocker, owner, next review time, and whether its budget reservation is released.
+`paused` and `blocked` are `research_case.control_state` values, not truth states. Their causes are recorded in the correlated schema-versioned domain-event payload; current responsibility remains the accepted task assignment, and reservation changes remain explicit budget entries.
 
 ### 8.2 Separate process status from research outcome
 
@@ -481,11 +470,11 @@ A card can be closed with a claim-kind-appropriate outcome. V1 uses:
 
 - Every transition supplies `expected_version` and an `idempotency_key`.
 - Stale transitions fail with a conflict and do not partially apply.
-- Every transition appends an `AuditEvent` in the same transaction as the node/card projection update and outbox entry.
-- `Ready → Running`, budget reservation, `RunAttempt` creation, fenced supervisor lease issuance, and node activation are one atomic operation; the lease does not have to exist beforehand.
+- Every selected edge writes one `task_transition` with the exact compiled transition and fact snapshot, and appends correlated `domain_event` rows in the same transaction as task/case changes and required outbox entries.
+- `Ready → Running`, budget reservation, `execution` creation, fenced supervisor lease issuance, and task activation are one atomic operation; the lease does not have to exist beforehand.
 - `Running → Verify` requires at least one artifact-backed candidate, observation, or validated failure report.
 - `Verify → Review` requires the workflow's evidence predicate, not a prose summary.
-- Investigator and verifier must be different authenticated principals. A verifier cannot have produced or modified the candidate artifact, cannot receive write access to its workspace, and begins with a fresh run/context and the frozen problem plus artifact closure—not the Investigator's persuasive conclusion. Each attestation records blind/unblinded context, clean-worker status, and model/provider/checker/environment differences; publication reports the achieved independence dimensions instead of a generic “independent” label.
+- Investigator and verifier must be different authenticated principals. A verifier cannot have produced or modified the candidate artifact, cannot receive write access to its workspace, and begins with a fresh run/context and the frozen problem plus artifact closure—not the Investigator's persuasive conclusion. Each attestation stores producer, environment, method, and data independence separately. Any `human_decided` attestation requires an active human actor and matching active membership; a case's disposition and eligibility attestations must carry outcome codes exactly equal to the selected typed values.
 - Changing the problem, assumptions, formalization, code, workflow hash, or material evidence invalidates prior approval.
 - Only a human principal holding the narrow `publication.eligibility.decide` capability may set `editorial_decision=eligible` as the workflow closes; a role name or generic admin status is insufficient.
 - No card enters `Closed` merely because an agent ran out of time, context, budget, or ideas.
@@ -517,18 +506,22 @@ MaCSad will reimplement the useful ideas for its own domain:
 - MCP tools that help an agent understand where it is and what it may propose next; and
 - version pinning so an in-flight process cannot change underneath its members.
 
+MaCSad carries over the process discipline, not the Python runtime. The human-readable workflow and role files are the only authoring source. Mermaid/SVG charts, the process index, normalized PostgreSQL rows, and MCP/admin navigation are derived views stamped with the compiled graph digest; CI fails if a checked-in derived chart drifts. CI, activation, MCP, and admin preview invoke the same full-bundle validator—never a narrower MCP-only check. It rejects missing entries, dangling node/role/tool references, invalid question/decision options, duplicate or shadowed match order, missing fail-closed defaults, unreachable nodes, terminal-free paths, disallowed cycles/node kinds, and authority/schema/evidence-producer mismatches.
+
+Navigation operations may list or inspect processes, roles, the current node, and candidate next edges. They may only propose a transition. The controller authenticates the actor, evaluates the pinned ordered rules, and writes the successor `task` plus immutable `task_transition`; MCP narration and chart clicks never mutate process state. `case_board_v` then derives the Kanban phase from that live task, so the process chart, card, drawer, thread, and inbox cannot disagree without a failed invariant.
+
 The MaCSad compiler, validator, graph engine, decision evaluator, schemas, role model, API, UI, and MCP tools are new LOGOS work. The implementation sequence is:
 
 1. author MaCSad-native organization, workflow, role, and decision definitions in `.macsad/`;
 2. compile them with a MaCSad-owned LOGOS parser and validator in CI;
-3. emit a canonical JSON graph bundle with a content hash;
-4. activate that immutable bundle in PostgreSQL;
-5. pin each workflow run and task to the bundle; and
+3. emit a canonical JSON graph bundle with a content hash and normalize its member profiles, processes, nodes, ordered transitions, and node-tool grants into the `policy_*` relations;
+4. activate that immutable policy revision in PostgreSQL;
+5. pin each research case and task to the policy revision; and
 6. let `macsad-server` enforce nodes, decisions, assignments, gates, and transitions.
 
 ### 9.2 The virtual organization
 
-Each watched repository has one virtual organization. It is a managed workplace for human and agent members rather than a loose pool of prompts. V1 materializes only the root organization, the Director/Investigator/Verifier profiles, one operations channel, per-task threads, assignments, and inboxes; the fuller hierarchy below is the growth model.
+Each primary watched repository has one virtual organization. Attached tool repositories do not create organizations, members, channels, or independent work queues. The organization is a managed workplace for human and agent members rather than a loose pool of prompts. V1 materializes only the root organization, the Director/Investigator/Verifier profiles, one operations channel, per-task threads, assignments, and inboxes; the fuller hierarchy below is the growth model.
 
 The target organization model is:
 
@@ -607,9 +600,9 @@ The expression subset is deliberately finite: typed literals and fact references
 
 Facts carry `source`, `producer`, `schema`, `artifact/event reference`, timestamp, and one authority class: `agent_asserted`, `tool_observed`, `checker_attested`, `controller_derived`, or `human_decided`. These are categories, not a strength ordering. Every input/predicate declares exact allowed authority classes, trusted issuer/predicate IDs, and schema constraints. A human decision never substitutes for a checker attestation; a controller-derived fact retains its derivation closure and input-event/artifact hashes. Agent assertions may inform routing but cannot satisfy budget, identity, capability, checker, or approval predicates. For example, intake may consider domain, duplication, scope completeness, controller-calculated cost, data classification, and risk; the controller, not the producing agent, evaluates the matrix.
 
-The v1 compiler rejects missing node/role/fact/evidence-producer references, unreachable nodes, shadowed decision rows, missing fail-closed defaults, disallowed node kinds, cycles, terminal-free paths, schema/authority mismatches, and unauthorized role transitions. It validates reference, producer, and schema closure for gates; it does not claim to solve arbitrary external satisfiability. Runtime evaluation records the typed fact snapshot, authority/provenance, first matched row, output, actor/session, and graph hash.
+The v1 compiler rejects missing node/role/fact/evidence-producer references, unreachable nodes, shadowed decision rows, missing fail-closed defaults, disallowed node kinds, cycles, terminal-free paths, schema/authority mismatches, and unauthorized role transitions. It validates reference, producer, and schema closure for gates; it does not claim to solve arbitrary external satisfiability. Runtime evaluation writes one `task_transition` containing the exact policy-transition row, typed fact snapshot and digest, first matched order, decision code, deciding actor, source task, and successor task or terminal target.
 
-The process diagram is interactive in the admin UI: operators can see active nodes, assigned virtual people, blockers, budget, recent chat, artifacts, and permitted next edges. Clicking a node opens the same task/thread seen in Kanban and the member inbox.
+The process diagram is a digest-stamped derived view of the activated graph. Operators can see active nodes, assigned virtual people, blockers, budget, recent chat, artifacts, and permitted next edges. Clicking a node opens the same task/thread seen in Kanban and the member inbox; selecting an edge opens a typed command/proposal and never edits board or task state directly.
 
 ### 9.4 One initial graph, four workflow families
 
@@ -670,7 +663,7 @@ verify artifact closure and hashes
     accept-for-publication → terminal Closed with editorial_decision=eligible
 ```
 
-`revision_requested` closes the old run and creates a separately bounded new `ProblemRevision` and workflow run linked by supersession; it is not a cycle or return edge. Eligibility is an editorial attribute on the closed card, not a board phase. Selection, sealing, deployment, failure, retry, and errata occur only in the separate `PublicationBatch`/`PublicationAttempt` state machines.
+`revision_requested` closes the old research case and creates a separately bounded new `problem_revision` and `research_case` linked by supersession; it is not a cycle or return edge. Eligibility is an editorial attribute on the closed case, not a board phase. Selection, sealing, deployment, failure, retry, and errata occur only in the separate `publication_batch`/`publication_attempt` state machines.
 
 ### 9.5 Four responsibility roles
 
@@ -718,23 +711,22 @@ Agents may propose:
 - a revised budget heuristic; or
 - a new tool manifest.
 
-Each proposal becomes a patch or reviewed pull request. CI validates it, but a push produces only a candidate bundle and semantic diff. A human principal with the narrow activation capability approves the exact hash, creating a `PolicyActivation`; new work then uses that immutable version. In-flight cards remain pinned to their old version unless a recorded migration is approved. MaCSad never silently rewrites its own active rules.
+Each proposal becomes a patch or reviewed pull request. CI validates it, but a push produces only a candidate bundle and semantic diff. A human principal with the narrow activation capability approves the exact hash and transitions that immutable `policy_revision` to active; new work then uses it. In-flight cases remain pinned to their old revision unless an explicit migration is approved. MaCSad never silently rewrites its own active rules.
 
 ## 10. Tool and worker contract
 
 ### 10.1 One typed invocation seam
 
-Every executable capability is declared by a MaCSad-owned manifest:
+Every executable capability is declared by one `tool_operation_manifest` bound to an exact `tool_repository_revision`:
 
-| `ToolManifest/1` field | Purpose |
+| Field | Purpose |
 |---|---|
-| `operation_id` | Stable MaCSad operation and version |
-| `provider` and `provider_revision` | Adapter identity and exact binary/image/commit digest |
-| `request_schema` and `response_schema` | Frozen wire contracts |
+| `operation_key` and `operation_version` | Stable MaCSad operation identity |
+| `tool_repository_revision_id` | Exact source commit/tree and preserved bytes supplying the operation |
+| `provider_key` and `provider_revision` | Adapter identity and exact binary/image/commit digest |
+| request/response schema IDs, versions, and digests | Frozen wire contracts |
 | `effect_class` | `pure_check`, `bounded_compute`, `model_call`, or `artifact_emit` |
-| `required_capabilities` | Exact filesystem, model, solver, network, and artifact rights |
-| `determinism_profile` | Inputs, versions, seed, fuel, and effects that must be pinned |
-| `resource_ceiling` | Maximum CPU, memory, processes, disk, output, wall time, tokens, and cost |
+| schema-versioned manifest body | Exact required capabilities, determinism profile, effects, and resource ceiling |
 | `manifest_digest` | Immutable identity used by attempts and replay |
 
 V1 has no generic shell manifest. An adapter may internally spawn an allowlisted executable, but an agent cannot provide a command line.
@@ -748,7 +740,8 @@ The worker has two explicit trust layers:
 
 The supervisor uses mTLS or an equivalently scoped service credential and receives lease-scoped artifact rights. It never places that credential inside the child. Each sandbox receives:
 
-- a fresh isolated process/container namespace containing a verified archive/read-only source tree at the exact `WorkspaceSnapshot` commit, with Git remotes and credentials absent;
+- a fresh isolated process/container namespace containing a verified archive/read-only source tree at the exact `workspace_snapshot` commit, with Git remotes and credentials absent;
+- only the exact case-pinned tool-repository revisions and operations, materialized read-only from preserved artifacts rather than mounted host checkouts;
 - source objects materialized by the supervisor from a protected snapshot/CAS bundle, never a linked worktree or controller-owned mirror mount;
 - read-only digest-addressed inputs;
 - a fresh writable output directory;
@@ -764,7 +757,7 @@ The supervisor uses mTLS or an equivalently scoped service credential and receiv
 
 Model access is separated from untrusted program execution. `macsad-server` and its model proxy are the sole spending authority; an agent requests a typed model operation but cannot select an unrestricted account, model, or ceiling. Generated code runs in the no-network child. The trusted supervisor can deliver a model response as a new immutable input artifact but does not expose provider credentials to the child.
 
-The controller-owned mirror is never an agent workspace. After a patch passes workflow gates, MaCSad creates a `ChangeProposal` linked to the task, run, evidence snapshot, and conversation. V1 hands that exact-base, expected-tree proposal to a human-mediated branch/PR flow. Optional later App-authored PR creation follows the permission/ruleset constraints in Section 6.3.
+The controller-owned mirror is never an agent workspace. After a patch passes workflow gates, MaCSad records a normalized patch artifact linked to the task, execution, evidence snapshot, conversation, exact base tree, and expected result tree. V1 hands that artifact to a human-mediated branch/PR flow. Optional later App-authored PR creation follows the permission/ruleset constraints in Section 6.3.
 
 ### 10.3 Proposed formal operations
 
@@ -842,18 +835,17 @@ Replay proves reproducibility of that execution. It does not prove that a formal
 
 ## 12. Budgeting, committees, and anti-reward-hacking controls
 
-### 12.1 Hard budget hierarchy
+### 12.1 Exact period budgets
 
-Enforce budgets at four levels:
+A `budget_account` controls one resource and unit for a workspace or optional research case over the half-open period `[period_start, period_end)`. All quantities and money use `numeric(30,12)`. Ledger entries may additionally attribute an execution or model call without changing the account scope.
 
-1. **Call:** maximum input/output tokens or deterministic compute units.
-2. **Attempt:** maximum model cost, CPU, wall time, and output.
-3. **Card:** maximum aggregate spend across attempts.
-4. **Period:** daily and monthly MaCSad ceilings.
+OpenRouter is the single v1 model provider. Before dispatch, the controller creates one `model_call`, binds it through composite foreign keys to the same case/task/execution and to an admitted `model_call` operation, stores a sanitized schema-versioned request plus digest, and appends a worst-case `reserve` entry. A reservation is accepted only inside the account period and when `spent + reserved + requested_reservation <= spending_limit`. The controller holds the OpenRouter credential and submits outside the research sandbox.
 
-Before a model call or job begins, the controller transactionally reserves a server-calculated worst-case cost using the pinned provider price schedule plus safety margin. A call that cannot reserve does not start. Reset periods use UTC. Reservations expire with their leases; provider usage may reconcile later, and a delayed overage fails closed against new spend until a human resolves it. Agents and sandboxes may report telemetry, but only controller/provider records settle the ledger. Only a human principal with the narrow budget capability can raise a card or period ceiling in v1.
+OpenRouter usage is recorded per call, never inferred from a process-wide token counter. The terminal response or final SSE usage object appends a `model_usage_observation`; the controller later uses the OpenRouter generation ID to reconcile missing or provisional data through `/api/v1/generation`. Normalized fields include resolved model/provider, native prompt/completion/reasoning/cache-read/cache-write/audio/media/search quantities, provider-reported billed amount or credits, upstream inference cost, observation source/sequence, and whether the observation is final. The sanitized provider payload remains schema-versioned JSON for auditability as fields evolve. `/api/v1/credits` is a management-key aggregate cross-check, not per-call settlement authority, and that key never enters a worker.
 
-The admin screen shows estimates, reservations, actuals, and remaining budget. One emergency-stop control prevents new claims and cancels or drains active work according to policy.
+Settlement always records the full provider-reported actual charge. A model commit must settle that same call's exact reservation and equal its final usage observation's billed amount and currency; it never clamps cost to the reservation or limit. A corrected billed amount appends a `spend_adjustment`; a cost-equivalent correction appends a zero-quantity `usage_reconciliation`, and the reconciled call may be reopened to `usage_pending` before the correction is added. `model_cost_variance_v` shows the reservation, latest usage, settlement, adjustments, reservation/reconciliation variance, unreconciled usage, and exceeded-reservation state; `budget_balance_v` shows ledger consistency, available-to-reserve, and overrun quantity. Limit changes are explicit `limit_adjustment` entries.
+
+The admin screen shows reservation, provider actual, reconciliation state, variance, overrun, and remaining budget. One emergency-stop control prevents new claims and cancels or drains active work according to policy.
 
 ### 12.2 Budget committee
 
@@ -956,37 +948,27 @@ The site should distinguish visually among mechanically checked results, reprodu
 
 ## 16. Batch publication contract
 
-### 16.1 Sealed manifest
+### 16.1 Dossier, preview, and sealed manifest
 
-A `PublicationBatch/1` includes:
+Each immutable `publication_dossier` binds one eligible closed case, problem revision, claim, and public-safe dossier artifact to a schema-versioned closure body/digest. A `publication_item` may select that dossier only while its batch is `draft`, and it copies the exact disposition and eligibility attestation IDs, ordinal, and item digest.
 
-- batch ID and seal time;
-- exact card IDs and versions;
-- exact `ProblemRevision` hashes and per-item workspace snapshot SHAs;
-- gate-decision IDs and evidence-snapshot hashes;
-- the public artifact closure and hashes;
-- transitive license/export decisions;
-- workflow, LOGOS toolchain, platform, and generator versions/commits;
-- audit-chain head, previous published head, and chain segment;
-- public classification result;
-- prior batch or erratum relation; and
-- monotonic batch sequence, manifest hash, and publication-key signature.
+Moving the nonempty batch to `previewed` allocates its workspace-local `batch_sequence` and records the generator/toolchain artifacts, generator/platform/toolchain digests, evidence/artifact closure digests, and current `audit_stream` head. Those fields then freeze. Moving it to `sealed` adds the public-safe manifest artifact/digest, signature, sealing actor, and time; those fields then freeze as well. `corrects_batch_id` expresses an explicit research correction.
 
-The sealed manifest is stored in CAS and included in the generated public bundle. It identifies source and generator commits but does not need a Git commit that contains itself. A later human-reviewed PR may mirror it under `research/publications/batches/`, but that mirror is not required for authority. Cloudflare details belong in `PublicationAttempt` records.
+The manifest artifact is stored in CAS and included in the generated public bundle. GitHub and Cloudflare delivery observations belong to `publication_attempt`, not the research closure.
 
 ### 16.2 Publication algorithm
 
-1. Human selects eligible card versions.
-2. Server creates a preview and runs privacy, transitive license/export, citation, secret, link, artifact-closure, audit-chain, and claim-language checks.
-3. A human with the publication capability seals and signs the immutable manifest.
-4. A transactional outbox records one immutable release request identified by `(manifest_hash, platform_or_generator_sha, deployment_release_sequence, trigger_kind)`. That identity distinguishes a first content release, an exact retry, and a later template/platform redeploy of the same sealed content.
-5. GitHub Actions retrieves only that sealed public bundle.
-6. CI validates schema, hashes, reference closure, duplicate IDs, sanitization, and deterministic rendering.
-7. CI uploads one version, smoke-tests it, and promotes the same bytes under one of two explicit rules: a new-content release names an exact `dispatch_pending` manifest whose batch sequence is greater than public; a platform/template redeploy names the exact currently published manifest and may keep the same batch sequence while advancing the deployment-release sequence. Neither may select an arbitrary “latest sealed” batch.
-8. A callback is treated as an observation; API reconciliation records deployment success.
-9. Only then does MaCSad mark the batch published and atomically advance the public `latest` pointer.
+1. A human creates immutable dossiers for closed, eligible cases and selects them as items while the batch is `draft`.
+2. The server runs privacy, license/export, citation, secret, link, closure, audit-chain, and claim-language checks, allocates the next batch sequence, records the current audit head, and accepts the `previewed` closure.
+3. The exact bundle is generated outside database locks, committed to CAS, read back, and signed.
+4. A human with publication authority records the public-safe manifest and moves the previewed batch to `sealed`; the same transaction appends the domain event and a `pending` outbox request.
+5. GitHub Actions retrieves only that sealed public bundle, validates and renders it, uploads one Cloudflare version, and smoke-tests the result.
+6. One `publication_attempt` records its positive `attempt_no`, trigger kind, target, platform/generator digests, release-request digest, GitHub workflow/run identity, and Cloudflare version/deployment identity.
+7. API reconciliation moves the attempt from `running` to `succeeded`; success requires all GitHub and Cloudflare deployment identities.
+8. Only a batch with a succeeded attempt may move from `sealed` to `published`.
+9. `publication_head` then selects that exact successful batch/attempt pair as the public pointer.
 
-Retries reuse the exact release-request identity and its `PublicationAttempt`; they do not allocate a new deployment-release sequence. A protected template/platform change creates a new `PublicationAttempt` with a new release-request identity while leaving the already-published batch in `published`. Corrections to research content create an erratum or a new batch; they do not rewrite history silently.
+A delivery retry appends another attempt number; its immutable release-request digest identifies whether it repeats the same request. Corrections to research content create a new batch linked by `corrects_batch_id`; they do not rewrite history.
 
 ## 17. Repository and delivery layout
 
@@ -1049,14 +1031,21 @@ macsad-platform/
     math/
     computer-science/
     logos-toolchain/
-  migrations/
+  database/
+    README.md
+    apply_migrations.sh
+    verify.sql
+    migrations/
+      0001_initial_schema.sql
+  ops/firebat/
+    bootstrap_postgresql.sh
   scripts/
   .github/workflows/
 ```
 
 Each LOGOS project uses multi-file `Import` declarations within its own source tree. Because the pinned `largo test` is entry-file-only, each project also owns an assembly-aware test manifest generator/wrapper that emits one deterministic self-contained test entry and asserts the expected test-name set and count before executing it. Missing imported-module tests fail CI. Shared behavior begins as schemas and golden fixtures across deployables; unsupported cross-project imports are not assumed. If later `largo` releases prove and lock path-package resolution and project-aware test discovery, duplication and the wrapper may be reduced through a reviewed migration.
 
-During bootstrap the platform repository may also be the first watched project, but MaCSad must store the platform-repository identity and workspace-repository identity separately. That prevents the implementation repository from becoming an implicit global workspace when a different project is connected later.
+During bootstrap the platform repository may also be the first watched project, but MaCSad must store the platform-repository identity and workspace-repository identity separately. Attached tool repositories are a third, explicitly dependency-only category. This prevents either the implementation repository or a local tool checkout from becoming an implicit global workspace when a different project is connected later.
 
 Provisional stack:
 
@@ -1064,7 +1053,7 @@ Provisional stack:
 |---|---|
 | Language/toolchain | LOGOS from local `/home/alejandro/projects/logicaffeine-private`, promoted as an exact signed binary/source/runtime/vendor/build-environment bundle |
 | Server | LOGOS HTTP service; pinned fuel-bounded VM for admitted synchronous reference fixtures and native AOT on Firebat only after closure and differential-parity gates |
-| Control database | PostgreSQL through a typed host-effect adapter; LOGOS remains transition authority |
+| Control database | Native PostgreSQL 16 `16/main` on Firebat, systemd-enabled/restarted/health-checked and local-only, through a typed host-effect adapter; LOGOS remains transition authority |
 | Artifact bytes | Local content-addressed filesystem |
 | Worker | Trusted minimal supervisor plus credential-free child sandbox running the pinned `largo` toolchain |
 | Organization/process authoring | MaCSad-native repository format plus LOGOS compiler/validator; canonical graph JSON at runtime |
@@ -1083,7 +1072,7 @@ Repository watching and CI/CD are related but distinct:
 - **`macsad-server`**, authenticated through the read-only watched-project GitHub App installation, receives webhooks, reconciles the selected project, creates immutable snapshots, and links pull requests/Actions observations to tasks;
 - **GitHub Actions** runs code/process validation and creates preview or production deployments from an exact Git commit.
 
-Publication uses a separate `platform-publisher` service principal authorized only for the trusted platform repository/workflow. The watched-project App is never broadened for this job. The publisher's external identity, authorization snapshot, request, and resulting `PublicationAttempt` are audited. If a suitably narrow dispatch credential is unavailable, use a pull model: the trusted scheduled/manual workflow claims one exact pending outbox manifest instead of allowing `macsad-server` to dispatch.
+Publication uses a separate `platform-publisher` service principal authorized only for the trusted platform repository/workflow. The watched-project App is never broadened for this job. Its command receipt records actor/identity and request digest, while the correlated event payload and `publication_attempt` record release and deployment facts. If a suitably narrow dispatch credential is unavailable, use a pull model: the trusted scheduled/manual workflow claims one exact pending outbox manifest instead of allowing `macsad-server` to dispatch.
 
 An Actions success is an operational fact. It becomes research evidence only when a workflow node explicitly names that exact workflow/version/artifact contract and its result is ingested as an evidence record.
 
@@ -1138,16 +1127,16 @@ Untrusted watched-project branches receive no deployment previews. Trusted platf
 
 #### `publish-batch.yml`
 
-This single serialized pipeline lives in the trusted platform repository and owns both public shell and content promotion. Its triggers are exact: a new publication names one `dispatch_pending` manifest; a retry names one failed/pending `PublicationAttempt`; a protected platform-main template change names the exact currently published manifest; and an optional nightly pull claims one exact pending outbox item. It never resolves “latest sealed”:
+This single serialized pipeline lives in the trusted platform repository and owns both public shell and content promotion. A new publication names one exact sealed batch/manifest from a `pending` outbox message; a retry names one exact batch plus next `attempt_no`; and an optional nightly pull claims one exact pending outbox item. It never resolves an arbitrary “latest sealed” batch:
 
 - accepts one-use service authority scoped to one manifest hash and public deployment target;
-- verifies manifest signature, audit-chain segment, trigger-specific batch/deployment-release sequence rule, artifact closure, licenses/export rights, and platform/generator commit;
+- verifies manifest signature, audit-head closure, batch sequence, release-request digest, artifact closure, licenses/export rights, and platform/generator digests;
 - generates and validates the site with the pinned LOGOS public generator;
 - uploads one Cloudflare version, smoke-tests it, and promotes those same bytes;
 - records a `PublicationAttempt` and reconciles Cloudflare's observed state; and
 - cannot query arbitrary private cards or execute watched-project code/templates.
 
-An older attempt cannot replace a newer published batch. The MaCSad scheduler decides readiness; GitHub's schedule is only a retry because scheduled workflows may be delayed.
+The versioned `publication_head` may select only a succeeded attempt on a published or superseded batch. The command layer decides ordering explicitly; GitHub's schedule is only a retry wake-up because scheduled workflows may be delayed.
 
 #### `release-server.yml`
 
@@ -1194,7 +1183,7 @@ Cloudflare currently supports static assets deployed with `wrangler deploy`, and
 | Artifact replacement | Digest-addressed immutable paths; hash on write/read; atomic publication |
 | Admin compromise | Cloudflare Access/MFA, origin validation, exact CORS/origin policy, least-privilege service tokens |
 | Secret/private-data leak | Data classification, output scanning, public allowlist, isolated publication bundle, no direct DB export |
-| Audit rewriting | Canonical workspace hash chain, separately signed sealed head, previous published head, immutable chain segment and CI verification |
+| Audit rewriting | One serialized workspace audit head, immutable sequence/hash links, preview-bound audit head, signed sealed manifest, and CI verification |
 | Metric gaming | Multi-dimensional ledger, independent assessment, no agent-authored scalar reward |
 | Policy self-modification | Pushes create candidate bundles only; semantic diff, CI, human exact-hash activation, in-flight pinning, no runtime rewrite |
 | Privileged publication executes project code | Generator/workflow stay in the trusted platform repo; sealed data only; one-use manifest credential; no project-authored executable templates |
@@ -1217,7 +1206,7 @@ The Granola transcript and private audit reports are design inputs, not automati
 
 The exact transport can evolve, but the authority surface should stay small:
 
-### GitHub workspace
+### GitHub workspace and tool dependencies
 
 - `POST /v1/github/webhooks` — unauthenticated only at the HTTP layer; original-body signature validation and delivery deduplication are mandatory
 - `GET /v1/github/webhooks/{delivery_id}`
@@ -1225,6 +1214,10 @@ The exact transport can evolve, but the authority surface should stay small:
 - `POST /v1/workspace/reconcile`
 - `GET /v1/workspace/snapshots/{commit}`
 - `POST /v1/workspace/setup-patch`
+- `GET /v1/tool-repositories`
+- `POST /v1/tool-repositories` — admin-only registration of a read-only GitHub or local-checkout dependency
+- `POST /v1/tool-repositories/{id}/resolve` — preserve and return one exact revision plus admitted operation manifests
+- `POST /v1/cases/{id}/tool-revisions` — pin an approved revision, purpose, access mode, and optional scope to the case
 - `GET /v1/policy/candidates/{hash}`
 - `POST /v1/policy/candidates/{hash}/activate`
 - `POST /v1/change-proposals`
@@ -1281,22 +1274,24 @@ Each phase begins with failing acceptance tests and ends only when the stated ga
 - Approve the fundamental goal, claim semantics, non-goals, and LOGOS-first rule.
 - Create the trusted MaCSad platform repository and the three standalone LOGOS project skeletons.
 - Resolve development to `/home/alejandro/projects/logicaffeine-private`; review the BSL terms; promote the exact current commit as the signed binary/source/runtime/vendor/build-environment bundle in Section 6.1; commit `logos.lock.json`; and prove that an independent network-disabled machine outside the checkout can verify the bundle and build/run the HTTP fixture. Require an identical rebuilt `largo` digest only after a hermetic build is established; until then preserve the promoted digest and require behavioral reproduction.
-- Define versioned wire/artifact schemas, canonical hashing, one fixed acyclic `discovery-v1` process, ordered decision semantics, and three identities: human Director, Investigator, and Verifier.
+- Provision PostgreSQL 16 `16/main` on Firebat as the local-only, systemd-enabled control database; apply the immutable `0001_initial_schema.sql` through the checksum-verifying migration runner; verify roles, grants, catalog fingerprint, restart health, and a clean restore according to `database/README.md`.
+- Register the local `logicaffeine-private` checkout as an approved read-only tool repository at commit `132dc5346728e2d204df798dd7544e6405306a2c`, preserve its exact revision, and admit only explicitly versioned operation manifests.
+- Define versioned wire/artifact schemas, canonical hashing, one fixed acyclic `discovery-v1` process in `policy_process`/`policy_node`/`policy_transition`, ordered fail-closed decision semantics, derived-chart drift checks, and three profiles: human Director, Investigator, and Verifier.
 - Run a capability spike proving a LOGOS HTTP handler can cross the typed host boundary for one PostgreSQL transaction and one CAS write/read, and that the LOGOS DOM/public-generator paths produce deployable artifacts. If an in-process ABI is not yet supported, use a local authenticated stdio/loopback sidecar with the same schemas; do not move policy into it.
 - Select one adjudicated math fixture and one deterministic executable CS fixture with known expected dispositions.
 - Record ADRs for single authority, LOGOS/host boundary, worker trust split, storage ownership, Cloudflare boundary, and publication separation.
 
-**Exit:** pinned `largo check`, assembly-aware/generated-entry `largo test` with an exact multi-file discovered-test set/count, engine-traced fuel-bounded-VM `logos_run`, `logos_logic`, and the chosen `logos_prove` fixture behave through recorded envelopes; an async or VM-rejected reference run fails instead of silently falling back; the network-disabled HTTP/runtime-closure, host-boundary, and web-generation spikes pass; the valid fixed process checks and adversarial decision/schema fixtures fail closed.
+**Exit:** PostgreSQL 16 is enabled, active, ready after restart, locally bound, and at verified schema version `0001`; a fresh restore verifies; the exact LOGOS tool-repository revision and allowed operations are pinned; pinned `largo check`, assembly-aware/generated-entry `largo test` with an exact multi-file discovered-test set/count, engine-traced fuel-bounded-VM `logos_run`, `logos_logic`, and the chosen `logos_prove` fixture behave through recorded envelopes; an async or VM-rejected reference run fails instead of silently falling back; the network-disabled HTTP/runtime-closure, host-boundary, and web-generation spikes pass; the valid fixed process checks and adversarial decision/schema fixtures fail closed.
 
 ### Phase 1 — discovery-integrity vertical slice before platform breadth
 
-- Start from a manually selected exact commit/tree bundle; GitHub watching is not required yet.
-- Implement in LOGOS the immutable `ProblemRevision`, fixed workflow transitions, ordered decisions, claim-kind outcomes, and minimal CLI/API.
-- Add Postgres, CAS, hash-chained audit events, idempotency, optimistic versions, budget reservations, and transactional outbox through typed host adapters.
+- Start from a manually selected exact primary commit/tree bundle plus the exact approved `research_case_tool_revision` set; GitHub watching is not required yet.
+- Implement in LOGOS the immutable `problem_revision` contract, fixed policy/task transitions, ordered decisions, claim-kind outcomes, and minimal CLI/API.
+- Use the canonical PostgreSQL relations for process nodes/transitions, CAS metadata, hash-chained audit streams, idempotency, optimistic versions, budget reservations, and transactional outbox through typed host adapters.
 - Add the trusted Firebat supervisor and credential-free child sandbox with one active lease, hard limits, cancellation, and sealed source materialization.
-- Wire the pinned LOGOS formal/render/reference operations and one budgeted model candidate call; keep model access outside the child.
+- Wire the pinned LOGOS formal/render/reference operations and one budgeted OpenRouter candidate call; persist `model_call`, append response/generation usage observations, settle the full provider charge, and keep model access outside the child.
 - Run semantic review plus checker attestation for the math fixture and clean exact replay for the CS fixture.
-- Fault-test crash, late/duplicate completion, output overflow, missing artifact, budget exhaustion, path/symlink escape, mirror mutation, and timeout.
+- Fault-test crash, late/duplicate completion, output overflow, missing artifact, budget exhaustion, delayed/missing OpenRouter usage, actual cost above reservation, path/symlink escape, mirror mutation, and timeout.
 
 **Exit:** both fixtures traverse intake → work → verify → review → terminal with immutable artifacts and honest outcomes; no fault creates duplicate accepted state, untracked spend, mutable evidence, credential exposure, or false proof.
 
@@ -1367,13 +1362,15 @@ MaCSad v1 is complete only when:
 
 - MaCSad's controller, workflow/decision policy, MCP policy, admin app, and public generator are authored in LOGOS, with non-LOGOS code confined to typed mechanical host adapters;
 - local development resolves to `/home/alejandro/projects/logicaffeine-private`, while CI, runs, replay, and deployments name and verify one exact reviewed, signed LOGOS binary/source/runtime/vendor/build-environment bundle;
-- one selected watched GitHub repository is the sole research project/workspace, keyed by stable repository ID; the separate trusted platform repository is not a second MaCSad project;
+- Firebat's PostgreSQL 16 `16/main` cluster is local-only, systemd-enabled, active and ready after restart; schema `0001` applies through the checksum ledger and advisory lock, catalog verification passes, the application role cannot perform DDL, and a fresh restore verifies;
+- one selected watched GitHub repository is the sole research project/workspace, keyed by stable repository ID; the separate trusted platform repository and any attached tool repositories are not MaCSad projects;
 - every accepted webhook is signature-verified and delivery-deduplicated, and periodic reconciliation detects missed state;
-- every accepted snapshot is preserved independently of GitHub reachability, and every task, problem revision, run, artifact, evidence record, patch, and publication identifies an exact workspace commit/tree;
+- every accepted primary snapshot and admitted tool-repository revision is preserved independently of branch or host-checkout reachability, and every case, task, run, artifact, evidence record, patch, and publication identifies the exact primary commit/tree and allowed tool revision set;
 - child sandboxes receive credential-free isolated source trees and cannot reach or mutate the controller mirror, GitHub, host home, CAS authority, model credentials, or repository settings;
 - an approved exact-base `ChangeProposal` can be handed to a human-mediated branch/PR flow linked to task, evidence, conversation, base tree, patch hash, and expected resulting tree;
-- the MaCSad-native LOGOS compiler rejects broken references, missing fact authority, shadowed/invalid ordered decisions, unreachable or terminal-free graphs, cycles, disallowed fork/join/call nodes, and invalid evidence-producer/schema closure;
+- the same full-bundle MaCSad-native LOGOS validator is used by CI, activation, MCP, and admin preview; it rejects broken role/node/tool references, missing fact authority, shadowed/invalid ordered decisions, unreachable or terminal-free graphs, cycles, disallowed fork/join/call nodes, derived-chart drift, and invalid evidence-producer/schema closure;
 - every active task is owned by a workflow node, responsible role, assigned member, and conversation thread;
+- every completed nonterminal task has exactly one `task_transition` whose fact snapshot, matched order, decision code, source, and successor agree with the pinned compiled transition; a terminal transition names a declared terminal target;
 - chat messages cannot directly change task, budget, evidence, approval, or publication state;
 - the member inbox, task thread, Kanban card, and process ribbon resolve to the same node state, and the board phase is derived rather than independently writable;
 - one math and one CS discovery can traverse the complete workflow;
@@ -1389,19 +1386,26 @@ MaCSad v1 is complete only when:
 - raw `largo mcp` is confined inside the outer sandbox and cannot read arbitrary host paths;
 - every admitted reference execution records and asserts the fuel-bounded VM tier; async, VM-rejected, or unreported fallback execution fails closed, and no tree-walker/JIT/native/hardware result is silently promoted into reference evidence;
 - CI proves multi-file test completeness by comparing the assembly-aware/generated-entry discovered `## Test` names and count to the expected fixture, so entry-only omission cannot pass green;
-- budget limits work at call, attempt, card, and daily scope;
+- OpenRouter calls reserve before dispatch, record per-call response/generation usage observations, settle the full provider-reported actual charge, expose reservation/reconciliation variance and overrun, and enforce call, attempt, card, and daily admission limits without hiding delayed overages;
 - pause, cancel, lease expiry, late result, retry, and emergency stop are tested;
 - an agent cannot claim a worker lease, approve its budget/result, activate policy, publish, or elevate its role/capability;
 - the admin UI is Access-protected and origin bypass fails;
 - a protected platform-main push after green CI deploys the attested LOGOS admin assets without exposing private-toolchain or production credentials to PR jobs;
 - a sealed batch is signed, monotonic, license/export-clean, deterministic, and publishes without executing watched-project code or exposing private material;
-- a clean disaster restore recovers Postgres, CAS, preserved Git snapshots, active policy/toolchain locks, and publication signing/audit state, then reproduces both fixtures and one batch;
+- a clean disaster restore recovers verified PostgreSQL schema/history, CAS, preserved primary and tool-repository snapshots, active policy/toolchain locks, and publication signing/audit state, then reproduces both fixtures and one batch;
 - an erratum creates an explicit new record instead of silently rewriting a result.
 
 ## 23. Current platform references
 
 These are implementation references, not permanent architectural authority:
 
+- [PostgreSQL 16 server operation](https://www.postgresql.org/docs/16/server-start.html) — run the database under a proper operating-system service account and service manager rather than an interactive shell.
+- [PostgreSQL 16 advisory locks](https://www.postgresql.org/docs/16/functions-admin.html#FUNCTIONS-ADVISORY-LOCKS) — serialize reviewed schema migration transactions.
+- [PostgreSQL 16 role attributes](https://www.postgresql.org/docs/16/role-attributes.html) — separate object ownership, migration, application, and read-only privileges.
+- [PostgreSQL 16 `pg_dump`](https://www.postgresql.org/docs/16/app-pgdump.html) — logical backups still require a verified clean restore and coordinated CAS closure.
+- [OpenRouter usage accounting](https://openrouter.ai/docs/cookbook/administration/usage-accounting) — every response includes native-token and cost details; streaming usage arrives in the final SSE message.
+- [OpenRouter generation metadata](https://openrouter.ai/docs/api/api-reference/generations/get-generation) — reconcile one generation ID to provider, routing, token, timing, and cost observations.
+- [OpenRouter credits](https://openrouter.ai/docs/api/api-reference/credits/get-credits) — management-key account totals are an aggregate reconciliation signal, not per-call evidence.
 - [Cloudflare Workers Static Assets](https://developers.cloudflare.com/workers/static-assets/) — static assets and Worker code can be deployed together and cached at the edge.
 - [Cloudflare Workers with GitHub Actions](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/) — official `wrangler-action`, account ID, and scoped API-token deployment pattern.
 - [Cloudflare API token permissions](https://developers.cloudflare.com/fundamentals/api/reference/template/) — verify the real account/zone permission blast radius rather than assuming per-script scoping.
@@ -1431,9 +1435,9 @@ These decisions do not change the fundamental architecture but must be settled a
 4. Initial three principal/member profiles and, after v1 evidence, the richer team/channel/supervisor/handoff structure.
 5. Exact domain and whether the apex or `www` is canonical.
 6. Whether admin static assets are served by a Worker gateway or directly by the tunneled origin for the first milestone.
-7. Exact implementation of the typed PostgreSQL/GitHub/CAS host adapters and migration runner, while keeping policy in LOGOS.
+7. Exact implementation of the typed GitHub/CAS host adapters and the PostgreSQL transaction adapter, while keeping policy in LOGOS and schema ownership in the reviewed migration boundary.
 8. Firebat's OS isolation, archive/read-only mount, overlay, resource-control, and network-denial mechanism.
-9. Model provider and strict default daily/call/task budgets.
+9. Strict default daily/call/task OpenRouter budgets plus the approved model, provider-routing, fallback, and data-retention policy.
 10. The first math fixture, first CS fixture, and first admitted checker family.
 11. Formal approval of the selected Logos 0.10.1 BSL deployment/data flow, private-repository CI access, and any required alternative license.
 12. MaCSad source-code and public-content licenses.
@@ -1447,8 +1451,8 @@ These decisions do not change the fundamental architecture but must be settled a
 
 The first MaCSad should feel less like a society of unconstrained agents and more like a careful research laboratory with automated staff:
 
-> one LOGOS codebase, one pinned local toolchain, one watched repository, one preserved workspace snapshot, one immutable problem revision, one navigable process graph, one approved budget, one assigned Investigator, one independently bound Verifier, one linked task conversation, one typed worker contract, one immutable evidence trail, one replayable result, and one human-controlled path to publication.
+> one LOGOS codebase, one pinned local toolchain, one watched project repository, an explicit set of read-only pinned tool repositories, one preserved workspace snapshot, one immutable problem revision, one navigable process graph, one approved budget, one assigned Investigator, one independently bound Verifier, one linked task conversation, one typed worker contract, one immutable evidence trail, one replayable result, and one human-controlled path to publication.
 
-The watched GitHub repository defines the research project and exact workspace; the trusted platform repository contains the new LOGOS implementation. The virtual organization supplies managed people, roles, inboxes, conversations, and handoffs. The Kanban board makes current work understandable. MaCSad's own control-flow graph and ordered decision matrices govern how that work may advance. MaCSad MCP supplies organizational context while the pinned local `largo mcp` supplies bounded language/proof tools inside an outer sandbox. Postgres and the signed, hash-chained audit history keep operational truth. Content hashes preserve evidence and source snapshots. Firebat performs bounded work in credential-free isolated source trees. GitHub Actions and Cloudflare turn only attested platform builds and sealed, reviewed batches into web deployments.
+The watched GitHub repository defines the research project and exact primary workspace; approved tool repositories contribute only pinned read-only source or typed operations. The trusted platform repository contains the new LOGOS implementation. The virtual organization supplies managed people, roles, inboxes, conversations, and handoffs. The Kanban board is the projection of the live task in MaCSad's own control-flow graph, and ordered decision matrices govern how that work may advance. MaCSad MCP supplies read/propose organizational context while the pinned local `largo mcp` supplies bounded language/proof tools inside an outer sandbox. PostgreSQL 16 on Firebat and the signed, hash-chained audit history keep operational truth. Content hashes preserve evidence and primary/tool source snapshots. Firebat performs bounded work in credential-free isolated source trees. GitHub Actions and Cloudflare turn only attested platform builds and sealed, reviewed batches into web deployments.
 
 That is the smallest design that preserves the ambition in the Granola discussion while resisting the exact failure modes—premature completion, runaway cost, reward hacking, lost history, false certainty, and unsafe publication—that the discussion identified.

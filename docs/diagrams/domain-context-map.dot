@@ -1,0 +1,62 @@
+digraph G {
+  graph [
+    label="MaCSad v1 bounded contexts and deployment boundary",
+    labelloc=t, fontsize=22, fontname="Arial Bold",
+    rankdir=LR, splines=ortho, nodesep=0.55, ranksep=0.85,
+    pad=0.35, bgcolor="white"
+  ];
+  node [shape=box, style="rounded,filled", fontname="Arial", fontsize=12,
+        color="#64748b", fillcolor="#ffffff", fontcolor="#0f172a", margin="0.16,0.11"];
+  edge [fontname="Arial", fontsize=9, color="#64748b", fontcolor="#334155", arrowsize=0.7];
+
+  github [label="Watched GitHub repository\nTHE project / exact primary snapshots", fillcolor="#fff7ed", color="#f97316"];
+  tools [label="Approved tool repositories\nLOGOS and other exact pinned dependencies", fillcolor="#fff7ed", color="#f97316"];
+  openrouter [label="OpenRouter\nmodel effects + usage reconciliation", fillcolor="#fff7ed", color="#f97316"];
+  actions [label="GitHub Actions\nattested admin + publication deployments", fillcolor="#fff7ed", color="#f97316"];
+
+  subgraph cluster_edge {
+    label="Cloudflare edge"; fontname="Arial Bold"; fontsize=16; color="#93c5fd"; style="rounded";
+    access [label="Cloudflare Access\nadmin identity boundary", fillcolor="#eff6ff", color="#3b82f6"];
+    admin [label="Admin Worker + static assets\nKanban / process / chat / evidence", fillcolor="#eff6ff", color="#3b82f6"];
+    tunnel [label="Cloudflare Tunnel\nprivate origin path", fillcolor="#eff6ff", color="#3b82f6"];
+    public [label="Public Worker static assets\nsealed read-only discovery site", fillcolor="#f0fdf4", color="#22c55e"];
+    reader [label="Public reader", fillcolor="#f0fdf4", color="#22c55e"];
+    access -> admin [label="JWT validated"];
+    admin -> tunnel [label="private API"];
+    public -> reader [dir=back, label="cached static bytes"];
+  }
+
+  subgraph cluster_firebat {
+    label="Firebat One / LOGOS control plane"; fontname="Arial Bold"; fontsize=16; color="#c4b5fd"; style="rounded";
+    controller [label="MaCSad controller\ntyped commands + capability checks", fillcolor="#f5f3ff", color="#8b5cf6"];
+    workspace [label="Workspace + policy\nrepo pins / roles / process graph", fillcolor="#e0f2fe", color="#0284c7"];
+    operations [label="Research operations\ncases / tasks / assignments / threads", fillcolor="#e0f2fe", color="#0284c7"];
+    evidence [label="Evidence + execution\nruns / artifacts / claims / attestations", fillcolor="#ecfdf5", color="#10b981"];
+    publication [label="Publication\ndossiers / batches / deployment head", fillcolor="#f0fdf4", color="#22c55e"];
+    audit [label="Integration + audit\nidempotency / event chain / outbox", fillcolor="#fefce8", color="#ca8a04"];
+    postgres [label="PostgreSQL 16\nsole mutable domain authority", shape=cylinder, fillcolor="#f8fafc", color="#334155"];
+    cas [label="Content-addressed bytes\nsource bundles / evidence / releases", shape=folder, fillcolor="#f8fafc", color="#334155"];
+    worker [label="Credential-free bounded worker\npinned source + admitted operations", fillcolor="#f5f3ff", color="#8b5cf6"];
+
+    controller -> workspace;
+    controller -> operations;
+    controller -> evidence;
+    controller -> publication;
+    controller -> audit;
+    workspace -> operations [label="frozen context"];
+    operations -> evidence [label="bounded assignments"];
+    evidence -> publication [label="eligible exact closure"];
+    {workspace operations evidence publication audit} -> postgres [label="typed transactions"];
+    {workspace evidence publication} -> cas [label="digest + locator"];
+    controller -> worker [label="fenced lease"];
+    worker -> evidence [label="hashed results"];
+  }
+
+  github -> workspace [label="authenticated event / reconcile"];
+  tools -> workspace [label="approve / preserve / seal / pin"];
+  worker -> tools [style=dashed, label="promoted bytes only", dir=back];
+  evidence -> openrouter [label="reserved exact call", dir=both];
+  tunnel -> controller [label="localhost origin"];
+  publication -> actions [label="exact sealed manifest"];
+  actions -> public [label="same attested bytes"];
+}

@@ -1,0 +1,43 @@
+digraph G {
+  graph [label="MaCSad v1 discovery process: roles, Kanban phases, and fail-closed decisions",
+         labelloc=t, fontsize=22, fontname="Arial Bold", rankdir=TB,
+         splines=ortho, nodesep=0.45, ranksep=0.75, pad=0.35, bgcolor="white"];
+  node [shape=box, style="rounded,filled", fontname="Arial", fontsize=11,
+        color="#64748b", fillcolor="#ffffff", fontcolor="#0f172a", margin="0.14,0.10"];
+  edge [fontname="Arial", fontsize=9, color="#64748b", fontcolor="#334155", arrowsize=0.7];
+
+  intake [label="Freeze problem revision\nDirector\nINBOX", fillcolor="#dbeafe", color="#3b82f6"];
+  authorize [label="Approve exact snapshot, tools, policy, budget\nDirector\nREADY", fillcolor="#dbeafe", color="#3b82f6"];
+  investigate [label="Bounded attempt + immutable evidence\nInvestigator\nRUNNING", fillcolor="#ede9fe", color="#8b5cf6"];
+  evidencegate [shape=diamond, label="Required artifacts,\nlimits, and claim shape\nvalid?", fillcolor="#fef3c7", color="#d97706"];
+  handoff [label="Typed handoff accepted atomically\nInvestigator -> Verifier\nVERIFY", fillcolor="#ede9fe", color="#8b5cf6"];
+  verify [label="Fresh-context replay / checker / attack\nIndependent Verifier\nVERIFY", fillcolor="#dcfce7", color="#22c55e"];
+  verifygate [shape=diamond, label="Admitted method and\nindependence gate pass?", fillcolor="#fef3c7", color="#d97706"];
+  review [label="Typed disposition + editorial decision\nHuman Director / Curator\nREVIEW", fillcolor="#dbeafe", color="#3b82f6"];
+  publishgate [shape=diamond, label="Closed + eligible +\npublic-safe dossier?", fillcolor="#fef3c7", color="#d97706"];
+  preview [label="Freeze preview closure + audit head\nPublisher\nREVIEW", fillcolor="#f0fdf4", color="#22c55e"];
+  seal [label="Seal manifest; deploy exact bytes; reconcile\nPublisher service\nCLOSED", fillcolor="#f0fdf4", color="#22c55e"];
+  public [label="Static, caveated, traceable result\nPublic reader", fillcolor="#f0fdf4", color="#22c55e"];
+  blocked [label="Explicit blocked / inconclusive / policy-denied outcome\nNo silent advancement", fillcolor="#fee2e2", color="#ef4444"];
+
+  { rank=same; intake; authorize; investigate; evidencegate; }
+  { rank=same; handoff; verify; verifygate; review; }
+  { rank=same; publishgate; preview; seal; public; }
+
+  intake -> authorize [label="problem criteria complete"];
+  authorize -> investigate [label="reserve budget + issue lease"];
+  investigate -> evidencegate [label="transition proposal"];
+  evidencegate -> handoff [label="yes"];
+  evidencegate -> investigate [label="repair within budget"];
+  evidencegate -> blocked [label="no budget / invalid"];
+  handoff -> verify [label="new owner; fresh context"];
+  verify -> verifygate [label="typed attestation"];
+  verifygate -> review [label="pass / refute / honest uncertainty"];
+  verifygate -> investigate [label="bounded rework", constraint=false];
+  verifygate -> blocked [label="unsupported method"];
+  review -> publishgate [label="separate editorial authority"];
+  publishgate -> preview [label="yes"];
+  publishgate -> blocked [label="private / unsafe / ineligible"];
+  preview -> seal [label="same frozen closure"];
+  seal -> public [label="successful Cloudflare deployment"];
+}

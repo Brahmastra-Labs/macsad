@@ -1,0 +1,73 @@
+digraph G {
+  graph [label="Workspace, organization, process control, and Kanban projection",
+         labelloc=t, fontsize=22, fontname="Arial Bold", rankdir=LR,
+         splines=ortho, nodesep=0.45, ranksep=0.85, pad=0.3, bgcolor="white"];
+  node [shape=record, style="rounded,filled", fontname="Arial", fontsize=10,
+        color="#64748b", fillcolor="#ffffff", fontcolor="#0f172a", margin="0.10,0.07"];
+  edge [fontname="Arial", fontsize=8, color="#64748b", fontcolor="#334155", arrowsize=0.65];
+
+  subgraph cluster_repo {
+    label="Project and approved dependency closure"; color="#93c5fd"; style="rounded"; fontname="Arial Bold";
+    workspace [label="{workspace|id PK\lgithub_repository_id UK immutable\lowner/name/default branch observations\lstate + version\l}", fillcolor="#dbeafe"];
+    snapshot [label="{workspace_snapshot|id PK\lworkspace_id FK\lcommit_oid + tree_oid\lsource artifact + snapshot digest\l}", fillcolor="#dbeafe"];
+    toolrepo [label="{tool_repository|id PK\lworkspace_id FK\lrepository_key + purpose\lsource identity + exposure\lapproval + state + version\l}", fillcolor="#ffedd5"];
+    toolrev [label="{tool_repository_revision|id PK\ltool_repository_id FK\lcommit/tree + preserved source\lpromotion/access/closure digests\loperation_count + catalog_digest\loperations_sealed_at write-once\l}", fillcolor="#ffedd5"];
+    operation [label="{tool_operation_manifest|id PK\ltool_repository_revision_id FK\loperation key + version\leffect class\lrequest/response schema digests\lmanifest digest\l}", fillcolor="#ffedd5"];
+    workspace -> snapshot [label="1:N"];
+    workspace -> toolrepo [label="1:N"];
+    toolrepo -> toolrev [label="1:N exact revisions"];
+    toolrev -> operation [label="1:N before seal"];
+  }
+
+  subgraph cluster_policy {
+    label="Immutable compiled virtual organization"; color="#c4b5fd"; style="rounded"; fontname="Arial Bold";
+    policy [label="{policy_revision|id PK\lworkspace_snapshot_id FK\lcompiled + validation digests\lcandidate -> active -> retired\l}", fillcolor="#ede9fe"];
+    profile [label="{policy_member_profile|policy_revision_id FK\lprofile_key\lrole + supervisor profile\lWIP + profile digest\l}", fillcolor="#ede9fe"];
+    process [label="{policy_process|policy_revision_id FK\lprocess_key\lentry_node_key FK\lgraph digest\l}", fillcolor="#ede9fe"];
+    pnode [label="{policy_node|policy + process FK\lnode_key + node_kind\lboard_phase enum\lrequired_profile_key FK\l}", fillcolor="#ede9fe"];
+    transition [label="{policy_transition|policy + process FK\ltransition_key\lsource_node -> target_node\ldecision_code + ordered predicate\l}", fillcolor="#ede9fe"];
+    allowedop [label="{policy_node_tool_operation|policy node FK\ltool operation FK\lmax_invocations\lrequired flag\l}", fillcolor="#ede9fe"];
+    policy -> profile [label="1:N frozen on activation"];
+    policy -> process [label="1:N"];
+    process -> pnode [label="1:N"];
+    pnode -> transition [label="source / target"];
+    pnode -> allowedop [label="admits"];
+    operation -> allowedop [label="sealed operation"];
+  }
+
+  subgraph cluster_people {
+    label="Accountable virtual people"; color="#f0abfc"; style="rounded"; fontname="Arial Bold";
+    actor [label="{actor|id PK\lhuman / agent / service\ldisplay name + state\l}", fillcolor="#fae8ff"];
+    identity [label="{actor_identity|actor_id FK\lissuer + subject + audience UK\lvalid/revoked interval\l}", fillcolor="#fae8ff"];
+    membership [label="{membership|workspace_id + actor_id FK\lpolicy/profile key + digest FK\lsupervisor + validity + state\l}", fillcolor="#fae8ff"];
+    grant [label="{capability_grant|workspace_id + actor_id FK\lcapability_code\ltyped constraints + validity\lgranting actor\l}", fillcolor="#fae8ff"];
+    actor -> identity [label="1:N"];
+    actor -> membership [label="participates as"];
+    actor -> grant [label="authorized by"];
+    profile -> membership [label="instantiates"];
+  }
+
+  subgraph cluster_work {
+    label="Sequential process path and Kanban"; color="#86efac"; style="rounded"; fontname="Arial Bold";
+    problem [label="{problem_revision|id PK\lresearch_kind\lfrozen question + criteria + budget\lcontent digest\l}", fillcolor="#dcfce7"];
+    rcase [label="{research_case|id PK\lworkspace snapshot + policy + problem FK\lprocess_key + tool_closure_digest\lopen -> closed\ltyped disposition + editorial decision\l}", fillcolor="#dcfce7"];
+    casepin [label="{research_case_tool_revision|case + tool revision FK\lordinal + purpose\laccess_mode: source_read / operation_invoke\lscope digest\l}", fillcolor="#dcfce7"];
+    task [label="{task|case FK + sequence_no UK\lpolicy process/node FK\lentered_via_transition FK\lstate + compiled board_phase\lversion\l}", fillcolor="#dcfce7"];
+    movement [label="{task_transition|from_task UK -> to_task\lcompiled transition FK\lfact snapshot + decision\ldomain_event FK\l}", fillcolor="#dcfce7"];
+    assignment [label="{task_assignment|task FK\loffered actor + membership FK\lprofile + package digest\loffered -> accepted -> released\l}", fillcolor="#dcfce7"];
+    thread [label="{thread + message|workspace/case/task scope\lappend-only messages + mentions\lconversation is non-authoritative\l}", fillcolor="#dcfce7"];
+    problem -> rcase [label="1:1 frozen revision"];
+    snapshot -> rcase [label="pins"];
+    policy -> rcase [label="pins"];
+    rcase -> casepin [label="0:N exact tools"];
+    toolrev -> casepin [label="pinned"];
+    rcase -> task [label="1:N ordered; one live"];
+    pnode -> task [label="instantiates"];
+    task -> movement [label="finished source"];
+    transition -> movement [label="selected row"];
+    movement -> task [label="exact successor", style=dashed];
+    task -> assignment [label="offers; max one accepted"];
+    membership -> assignment [label="eligible assignee"];
+    rcase -> thread [label="primary / task threads"];
+  }
+}
