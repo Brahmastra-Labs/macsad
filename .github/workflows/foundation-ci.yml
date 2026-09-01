@@ -51,6 +51,9 @@ jobs:
             scripts/logos.sh \
             scripts/quality-gate.sh \
             database/apply_migrations.sh \
+            database/workers/*.sh \
+            database/tests/data_workers*.sh \
+            database/tests/representative_v1_field_coverage.sh \
             ops/compose/stack.sh \
             ops/compose/run-migrations.sh \
             ops/compose/postgres/010-bootstrap-macsad.sh \
@@ -83,6 +86,7 @@ jobs:
           node scripts/logos-source-lint.mjs
           node scripts/compose-guardrails.mjs
           node scripts/ci/verify-firebat2-contract.mjs
+          bash database/tests/data_workers_contract.sh
           python3 -m unittest discover --start-directory host_adapters/tests --pattern 'test_*.py'
 
       - name: Render the complete Compose model
@@ -144,7 +148,7 @@ jobs:
           schema_count="$(psql --no-psqlrc --set=ON_ERROR_STOP=1 --tuples-only --no-align --command "SELECT count(*) FROM pg_namespace WHERE nspname IN ('macsad', 'macsad_meta');")"
           [[ "${schema_count}" == '0' ]]
 
-      - name: Migrate, repeat, verify, and exercise invariants
+      - name: Migrate, repeat, verify, exercise invariants, and drill data recovery
         env:
           PGUSER: macsad_deployer
         run: |
@@ -153,6 +157,7 @@ jobs:
           bash database/apply_migrations.sh
           psql --no-psqlrc --set=ON_ERROR_STOP=1 --file=database/verify.sql
           psql --no-psqlrc --set=ON_ERROR_STOP=1 --file=database/tests/0001_invariants.sql
+          MACSAD_TEST_ADMIN_USER=postgres bash database/tests/data_workers_roundtrip.sh
 
       - name: Prove service-role defaults and viewer write denial
         run: |
@@ -174,5 +179,5 @@ jobs:
         run: |
           set -Eeuo pipefail
           printf '%s\n' \
-            'Foundation CI proves repository/Compose guardrails, runner-provided Compose model parsing, the shared role bootstrap contract, and a clean PostgreSQL 16 migration/repeat/verify/invariant run.' \
+            'Foundation CI proves repository/Compose guardrails, runner-provided Compose model parsing, the shared role bootstrap contract, PostgreSQL 16 migration/invariants, representative field coverage, deterministic tenant-scoped export, and a trusted-manifest/CAS backup-restore drill.' \
             'It does not build or start application images and does not claim private LOGOS, browser, Firebat/Tailnet runtime, pgAdmin, Cloudflare Access, or deployment evidence.'

@@ -76,6 +76,7 @@ node scripts/logos-project.mjs audit
 node scripts/logos-source-lint.mjs
 node scripts/compose-guardrails.mjs
 node scripts/ci/verify-firebat2-contract.mjs
+bash database/tests/data_workers_contract.sh
 
 printf '== Mechanical development adapter tests ==\n'
 python3 -m unittest discover --start-directory host_adapters/tests --pattern 'test_*.py'
@@ -150,8 +151,8 @@ printf '%s\n' \
 database_evidence='not-run'
 if [[ -n "${DATABASE_URL:-}" ]]; then
   printf '== Fresh PostgreSQL 16 migration and invariant gate ==\n'
-  export REPOSITORY_ROOT
-  node --input-type=module <<'NODE'
+  MACSAD_REPOSITORY_ROOT="${REPOSITORY_ROOT}" \
+    DATABASE_URL="${DATABASE_URL}" node --input-type=module <<'NODE'
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 
@@ -182,7 +183,7 @@ if (!connection.hostname || !connection.username) {
 
 const databaseEnvironment = {
   ...process.env,
-  PGHOST: connection.hostname,
+  PGHOST: decodeURIComponent(connection.hostname),
   PGPORT: connection.port || "5432",
   PGUSER: decodeURIComponent(connection.username),
   PGDATABASE: databaseName,
@@ -194,7 +195,7 @@ if (connection.searchParams.has("sslmode")) {
 }
 delete databaseEnvironment.DATABASE_URL;
 
-const repositoryRoot = process.env.REPOSITORY_ROOT;
+const repositoryRoot = process.env.MACSAD_REPOSITORY_ROOT;
 function run(command, args, capture = false) {
   const result = spawnSync(command, args, {
     cwd: repositoryRoot,
@@ -241,8 +242,12 @@ run("psql", [
   `--dbname=${databaseName}`,
   `--file=${join(repositoryRoot, "database", "tests", "0001_invariants.sql")}`,
 ]);
+run("bash", [join(repositoryRoot, "database", "workers", "seed_representative_v1.sh")]);
+run("bash", [
+  join(repositoryRoot, "database", "tests", "representative_v1_field_coverage.sh"),
+]);
 NODE
-  database_evidence='clean-migrate-repeat-verify-invariants'
+  database_evidence='clean-migrate-repeat-verify-invariants-representative-field-coverage'
 elif [[ "${MACSAD_REQUIRE_DATABASE:-0}" == '1' ]]; then
   die 'MACSAD_REQUIRE_DATABASE=1 but DATABASE_URL is unset'
 else
