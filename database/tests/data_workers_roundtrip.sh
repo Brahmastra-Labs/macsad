@@ -88,7 +88,7 @@ create_scratch_database() {
   PGUSER="${ADMIN_USER}" PGDATABASE=postgres psql \
     --no-psqlrc --set=ON_ERROR_STOP=1 \
     --command="REVOKE ALL ON DATABASE ${database_name} FROM PUBLIC" \
-    --command="GRANT CONNECT ON DATABASE ${database_name} TO alejandro, macsad_owner, macsad_migrator, macsad_app, macsad_reader" \
+    --command="GRANT CONNECT ON DATABASE ${database_name} TO alejandro, macsad_deployer, macsad_owner, macsad_migrator, macsad_app, macsad_reader" \
     >/dev/null
   PGUSER="${ADMIN_USER}" PGDATABASE="${database_name}" psql \
     --no-psqlrc --set=ON_ERROR_STOP=1 \
