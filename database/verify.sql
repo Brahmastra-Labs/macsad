@@ -158,12 +158,24 @@ BEGIN
     LEFT JOIN pg_roles AS role_record ON role_record.oid = role_setting.setrole
     LEFT JOIN pg_database AS database_record ON database_record.oid = role_setting.setdatabase
     CROSS JOIN LATERAL unnest(role_setting.setconfig) AS setting
-    WHERE (role_setting.setrole = 0 AND role_setting.setdatabase = (
-             SELECT oid FROM pg_database WHERE datname = current_database()
-           ))
-       OR role_record.rolname IN (
-         'macsad_owner', 'macsad_migrator', 'macsad_app', 'macsad_reader',
-         'alejandro', 'macsad_deployer', 'macsad_runtime', 'macsad_viewer'
+    WHERE (
+      role_setting.setdatabase = (
+        SELECT oid FROM pg_database WHERE datname = current_database()
+      )
+      AND (
+        role_setting.setrole = 0
+        OR role_record.rolname IN (
+          'macsad_owner', 'macsad_migrator', 'macsad_app', 'macsad_reader',
+          'alejandro', 'macsad_deployer', 'macsad_runtime', 'macsad_viewer'
+        )
+      )
+    )
+       OR (
+         role_setting.setdatabase = 0
+         AND role_record.rolname IN (
+           'macsad_owner', 'macsad_migrator', 'macsad_app', 'macsad_reader',
+           'alejandro', 'macsad_deployer', 'macsad_runtime', 'macsad_viewer'
+         )
        )
   )
   SELECT count(*) INTO bad_count
@@ -924,19 +936,34 @@ WITH catalog_item AS (
 
   SELECT
     'role-setting',
-    format('%s@%s', COALESCE(role_record.rolname::text, '<database>'),
-      COALESCE(database_record.datname::text, '<all>')),
+    format('%s@%s', COALESCE(role_record.rolname::text, '<database>'), CASE
+      WHEN role_setting.setdatabase = 0 THEN '<all>'
+      WHEN database_record.datname = current_database() THEN '<current-database>'
+      ELSE database_record.datname::text
+    END),
     setting
   FROM pg_db_role_setting AS role_setting
   LEFT JOIN pg_roles AS role_record ON role_record.oid = role_setting.setrole
   LEFT JOIN pg_database AS database_record ON database_record.oid = role_setting.setdatabase
   CROSS JOIN LATERAL unnest(role_setting.setconfig) AS setting
-  WHERE (role_setting.setrole = 0 AND role_setting.setdatabase = (
-           SELECT oid FROM pg_database WHERE datname = current_database()
-         ))
-     OR role_record.rolname IN (
-       'macsad_owner', 'macsad_migrator', 'macsad_app', 'macsad_reader',
-       'alejandro', 'macsad_deployer', 'macsad_runtime', 'macsad_viewer'
+  WHERE (
+    role_setting.setdatabase = (
+      SELECT oid FROM pg_database WHERE datname = current_database()
+    )
+    AND (
+      role_setting.setrole = 0
+      OR role_record.rolname IN (
+        'macsad_owner', 'macsad_migrator', 'macsad_app', 'macsad_reader',
+        'alejandro', 'macsad_deployer', 'macsad_runtime', 'macsad_viewer'
+      )
+    )
+  )
+     OR (
+       role_setting.setdatabase = 0
+       AND role_record.rolname IN (
+         'macsad_owner', 'macsad_migrator', 'macsad_app', 'macsad_reader',
+         'alejandro', 'macsad_deployer', 'macsad_runtime', 'macsad_viewer'
+       )
      )
 
   UNION ALL

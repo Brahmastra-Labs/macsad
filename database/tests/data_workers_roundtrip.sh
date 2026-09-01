@@ -83,13 +83,42 @@ assert_no_macsad_schemas() {
 
 create_scratch_database() {
   local database_name="$1"
+  local created_flag
+  case "${database_name}" in
+    "${TARGET_DATABASE}") created_flag=TARGET_CREATED ;;
+    "${SECOND_SEED_DATABASE}") created_flag=SECOND_SEED_CREATED ;;
+    *) die "scratch database is not an owned test target: ${database_name}" ;;
+  esac
   PGUSER="${ADMIN_USER}" PGDATABASE=postgres createdb \
     --template=template0 --owner=macsad_owner "${database_name}"
+  # Ownership begins only after createdb succeeds. Cleanup must never drop a
+  # pre-existing database when creation loses a race or finds a name collision.
+  printf -v "${created_flag}" '%d' 1
   PGUSER="${ADMIN_USER}" PGDATABASE=postgres psql \
     --no-psqlrc --set=ON_ERROR_STOP=1 \
     --command="REVOKE ALL ON DATABASE ${database_name} FROM PUBLIC" \
-    --command="GRANT CONNECT ON DATABASE ${database_name} TO alejandro, macsad_deployer, macsad_owner, macsad_migrator, macsad_app, macsad_reader" \
+    --command="GRANT CONNECT ON DATABASE ${database_name} TO alejandro, macsad_deployer, macsad_runtime, macsad_viewer, macsad_owner, macsad_migrator, macsad_app, macsad_reader" \
     >/dev/null
+  # verify.sql validates the exact database-local policy of its current target.
+  # Scratch databases receive that same policy without disturbing another
+  # database's settings in the shared PostgreSQL test cluster.
+  PGUSER="${ADMIN_USER}" PGDATABASE=postgres psql \
+    --no-psqlrc --set=ON_ERROR_STOP=1 --quiet \
+    --set=scratch_database="${database_name}" <<'SQL'
+ALTER DATABASE :"scratch_database" SET search_path = pg_catalog;
+ALTER ROLE alejandro IN DATABASE :"scratch_database" SET search_path = pg_catalog;
+ALTER ROLE macsad_deployer IN DATABASE :"scratch_database" SET search_path = pg_catalog;
+ALTER ROLE macsad_owner IN DATABASE :"scratch_database" SET search_path = macsad, macsad_meta, pg_catalog;
+ALTER ROLE macsad_migrator IN DATABASE :"scratch_database" SET search_path = macsad, macsad_meta, pg_catalog;
+ALTER ROLE macsad_app IN DATABASE :"scratch_database" SET search_path = macsad, pg_catalog;
+ALTER ROLE macsad_reader IN DATABASE :"scratch_database" SET search_path = macsad, pg_catalog;
+ALTER ROLE macsad_runtime IN DATABASE :"scratch_database" SET search_path = macsad, pg_catalog;
+ALTER ROLE macsad_viewer IN DATABASE :"scratch_database" SET search_path = macsad, pg_catalog;
+ALTER ROLE macsad_viewer IN DATABASE :"scratch_database" SET default_transaction_read_only = on;
+ALTER ROLE macsad_viewer IN DATABASE :"scratch_database" SET statement_timeout = '30s';
+ALTER ROLE macsad_viewer IN DATABASE :"scratch_database" SET lock_timeout = '5s';
+ALTER ROLE macsad_viewer IN DATABASE :"scratch_database" SET idle_in_transaction_session_timeout = '30s';
+SQL
   PGUSER="${ADMIN_USER}" PGDATABASE="${database_name}" psql \
     --no-psqlrc --set=ON_ERROR_STOP=1 \
     --command='REVOKE ALL ON SCHEMA public FROM PUBLIC' >/dev/null
@@ -201,7 +230,6 @@ PY
 # The package must be byte-identical across two independently migrated and
 # seeded databases, despite routine-generated ledger UUIDs and trigger times.
 create_scratch_database "${SECOND_SEED_DATABASE}"
-SECOND_SEED_CREATED=1
 PGUSER="${SOURCE_USER}" PGDATABASE="${SECOND_SEED_DATABASE}" \
   "${REPOSITORY_ROOT}/database/apply_migrations.sh"
 PGUSER="${SOURCE_USER}" PGDATABASE="${SECOND_SEED_DATABASE}" \
@@ -295,7 +323,6 @@ readonly TRUSTED_MANIFEST_SHA256_LINE="$(sha256sum "${TEMP_ROOT}/backup/manifest
 readonly TRUSTED_MANIFEST_SHA256="${TRUSTED_MANIFEST_SHA256_LINE%% *}"
 
 create_scratch_database "${TARGET_DATABASE}"
-TARGET_CREATED=1
 
 if PGUSER="${SOURCE_USER}" PGDATABASE="${TARGET_DATABASE}" \
     "${WORKER_DIR}/restore_database.sh" \
