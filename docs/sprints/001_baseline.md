@@ -1,10 +1,15 @@
 # Sprint 001 — trustworthy visible baseline
 
+Status: **in progress**. Source, schema, LOGOS, Compose-model, and CI gates are
+implemented. Live Firebat acceptance remains pending the one-time sudo Docker/
+Tailscale bootstrap and Headscale enrollment.
+
 ## Sprint goal
 
-Deliver a website visibly authored and bundled by LOGOS, establish the repository
-and PostgreSQL quality gates, and leave explicit RED contracts for the framework
-capabilities needed by the first real CRUD slice.
+Deliver websites visibly authored and bundled by LOGOS, establish the repository
+and PostgreSQL quality gates, run the private development environment as a
+reproducible Firebat Docker Compose stack, and leave explicit RED contracts for
+the framework capabilities needed by the first real CRUD slice.
 
 This sprint is a template and guardrail sprint. It does not implement all MaCSad
 features.
@@ -19,21 +24,28 @@ At sprint review a developer can:
 4. serve the admin website and interact with its LOGOS signals, navigation,
    bound form, and Kanban prototype;
 5. call a same-origin LOGOS health endpoint through the LOGOS gateway;
-6. apply and verify the PostgreSQL schema on PostgreSQL 16; and
-7. see precise RED framework gates rather than fake CRUD.
+6. start the Firebat Compose stack and apply and verify the PostgreSQL schema;
+7. open the admin, public preview, and read-only database viewer over the
+   Headscale-managed tailnet; and
+8. see precise RED framework gates rather than fake CRUD.
 
 ## In scope
 
 - Root engineering constitution and automated shortcut scan.
 - Exact local LOGOS source/toolchain lock.
-- Single-file LOGOS admin application.
-- Single-file LOGOS public-site application.
-- Single-file LOGOS development gateway and health contract.
+- Modular LOGOS admin application with a manifest-locked import closure.
+- Modular LOGOS public-site application with a manifest-locked import closure.
+- Modular LOGOS development gateway and health contract.
 - Deterministic LOGOS unit/property tests with exact test-manifest locking.
 - Admin visual system, responsive shell, board, role/process view, research
   overview, operations view, and local-only intake interaction.
 - Public discovery landing-page template.
 - Sequential quality gate and PostgreSQL schema gate.
+- Pinned, hardened Firebat Docker Compose services for PostgreSQL, the LOGOS
+  gateway, emitted LOGOS sites, and read-only pgAdmin, plus a one-shot migrator.
+- Exact tailnet-IP publication of admin `18080`, public preview `18082`, and
+  pgAdmin `8978`; no database host port, wildcard/LAN binding, or Funnel.
+- Getting-started and operational runbooks covering the repeatable lifecycle.
 - Credential-free GitHub CI foundation.
 - Cloudflare deployment contract, variable names, and disabled-until-provisioned
   workflow templates.
@@ -73,8 +85,17 @@ At sprint review a developer can:
 - Keep every mutation endpoint absent until G1–G3 are green.
 - Run the existing migration runner twice and the adversarial invariant suite on
   a fresh PostgreSQL 16 database.
-- Prepare the native Firebat bootstrap; one human `sudo` authentication remains
-  the installation boundary.
+- Bootstrap Firebat's pinned Docker Engine, Compose, and Tailscale services;
+  one human `sudo` authentication and Headscale enrollment remain host
+  administration boundaries.
+- Build images only from a revision-specific, digest-recorded staging closure:
+  the verified `largo` binary, emitted bundles, gateway source/manifest, and
+  database migrations. Never mount `logicaffeine-private` into a container.
+- Start four restartable services behind the successful one-shot migrator;
+  retain PostgreSQL and pgAdmin named volumes across ordinary shutdown.
+- Configure pgAdmin with the ACL-constrained `macsad_viewer` login, read-only
+  session default, and make
+  PostgreSQL reachable only on Compose's internal data network.
 
 ### WP4 — public template
 
@@ -98,10 +119,19 @@ At sprint review a developer can:
 - Admin and public `wasm-dom` outputs build twice to identical SHA-256 digests.
 - The browser shows the LOGOS admin shell and interactive navigation/form state.
 - The gateway health endpoint is served by LOGOS and is same-origin.
+- The current health-only gateway has no PostgreSQL adapter and no mutation
+  route; neither the UI nor deployment documentation claims CRUD readiness.
 - Gateway static serving is development-interpreter evidence only; the current
   native file helpers and binary response parity remain explicit RED gates.
 - No mutation route exists.
 - PostgreSQL clean apply, repeat apply, verification, and invariant suite pass.
+- Compose configuration and policy guardrails pass; `postgres` has no published
+  host port and only Firebat's verified tailnet IP publishes `18080`, `18082`,
+  and `8978`.
+- The four long-running containers become healthy after a Firebat/Docker
+  restart, while `migrate` exits successfully and remains safe to rerun.
+- pgAdmin can execute representative reads through `macsad_viewer` and cannot
+  mutate domain data or perform DDL.
 - CI contains no floating action references or error-swallowing step.
 - Git contains no credential or developer-specific secret path.
 

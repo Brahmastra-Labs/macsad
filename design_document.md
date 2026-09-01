@@ -3,7 +3,7 @@
 > **Status:** Initial system design, 2026-08-31  
 > **Name:** MaCSad — Mathematics and Computer Science Auto-Discovery  
 > **Scope:** A deliberately small, LOGOS-first system, not a merger of the audited repositories  
-> **Primary deployment target:** Firebat One for the private LOGOS control/worker plane and Cloudflare for the web edge  
+> **Primary deployment target:** Firebat One Docker Compose for the private tailnet environment; Cloudflare remains the later public edge
 
 ## 1. Executive decision
 
@@ -28,7 +28,7 @@ The v1 shape is intentionally small:
 3. one selected watched GitHub repository is the sole research project and primary workspace; zero or more explicitly approved tool repositories may be attached as read-only exact-version dependencies, never as additional projects;
 4. every problem revision, card, run, and artifact is pinned to an exact primary-workspace commit/tree and the exact approved tool-repository revision set it may use;
 5. one LOGOS `macsad-server` is the sole policy and state-transition authority;
-6. one native PostgreSQL 16 cluster runs continuously on Firebat under systemd and stores control metadata plus an append-only, hash-chained domain history;
+6. one PostgreSQL 16.15 container runs continuously in the Firebat Compose stack, without a published database port, and stores control metadata plus an append-only, hash-chained domain history;
 7. one content-addressed filesystem stores immutable artifacts and preserved workspace snapshots;
 8. one trusted Firebat worker supervisor launches credential-free, bounded child sandboxes;
 9. one small MaCSad-native process-graph engine begins with one fixed discovery workflow and deterministic decision matrices, then grows into the four named workflow families;
@@ -151,13 +151,15 @@ flowchart TD
     MIR[Controller-owned Git mirror<br/>never mounted in a sandbox]
     SNAP[Immutable workspace snapshot<br/>protected ref + CAS tree bundle]
     TPIN[Exact tool-repository revisions<br/>purpose + scope + preserved bytes]
-    A[Cloudflare Access]
-    ADM[Admin web application]
-    G[Admin API gateway]
-    T[Cloudflare Tunnel]
+    O[Authorized Firebat operators]
+    TN[Headscale-managed tailnet<br/>ACL-restricted access]
+    SITE[logos-sites<br/>unprivileged static server<br/>shared gateway network namespace]
+    DBA[pgAdmin<br/>read-only viewer]
     S[macsad-server<br/>LOGOS sole controller]
     HC[Minimal trusted host adapters<br/>effects only, no policy]
-    PG[(PostgreSQL 16<br/>Firebat systemd service)]
+    PG[(PostgreSQL 16.15<br/>internal Compose data network)]
+    MIG[One-shot checksum migrator]
+    STAGE[Verified local LOGOS source<br/>exact staged binary + bundles + source]
     CAS[(Content-addressed artifact store)]
     W[Trusted Firebat worker supervisor]
     X[Credential-free child sandbox]
@@ -179,10 +181,18 @@ flowchart TD
     S -->|approve, resolve, preserve| TR
     TR --> TPIN
     TPIN --> W
-    H --> A --> ADM
-    ADM --> G --> T --> S
-    L -. builds and checks .-> S
-    L -. emits admin/public assets .-> ADM
+    H --> O
+    O --> TN
+    TN -->|tailnet IP :18080 admin| SITE
+    TN -->|tailnet IP :18082 preview| SITE
+    TN -->|tailnet IP :8978| DBA
+    SITE -->|same-network-namespace health proxy| S
+    L -->|verify, test, emit| STAGE
+    STAGE -->|minimal immutable image inputs| SITE
+    STAGE -->|exact largo + gateway source| S
+    MIG -->|apply and verify, then exit| PG
+    MIG -->|successful completion gate| S
+    DBA -->|macsad_viewer only| PG
     S --> HC
     HC --> PG
     HC --> CAS
@@ -249,7 +259,7 @@ Six source-level limitations shape the design:
 5. Current `largo test` reads only the manifest entry file and does not assemble imported modules. MaCSad therefore uses an assembly-aware test wrapper or generates a deterministic self-contained test entry, and CI asserts the exact discovered test names and count; a green entry-only run is not accepted as complete project testing.
 6. The selected source commit contains post-tag HTTP work while external generated/runtime resolution may otherwise select published `=0.10.1` crates that do not contain the same feature closure. A standalone `largo` binary is therefore not a valid promotion artifact. The signed bundle and explicit `LOGOS_WORKSPACE` binding above are mandatory for the admitted HTTP/native path.
 
-For v1, the LOGOS HTTP service runs on Firebat behind Cloudflare Tunnel. The LOGOS admin DOM bundle and generated public assets deploy to Cloudflare. Direct execution of a LOGOS-produced Wasm backend inside Cloudflare Workers is deferred until an explicit Worker-ABI, limits, storage, and security fixture passes; choosing LOGOS does not justify assuming that compatibility.
+For the private development environment, the LOGOS gateway and emitted LOGOS sites run in Docker Compose on Firebat. Only the exact Firebat tailnet address publishes the admin site on `18080`, public preview on `18082`, and pgAdmin on `8978`; PostgreSQL has no host mapping. There is no wildcard, LAN, public, or Tailscale Funnel listener. Direct execution of a LOGOS-produced Wasm backend inside Cloudflare Workers is deferred until an explicit Worker-ABI, limits, storage, and security fixture passes; choosing LOGOS does not justify assuming that compatibility.
 
 ### 6.2 The GitHub repository is the project
 
@@ -331,17 +341,17 @@ V1 keeps the GitHub App read-only and delivers the reviewed `ChangeProposal` to 
 
 ### 6.4 Deployment topology
 
-Use provisional hostnames until a domain is selected:
+The Firebat development topology has three tailnet-only endpoints:
 
-| Host | Purpose | Exposure |
+| Endpoint | Purpose | Exposure |
 |---|---|---|
-| `admin.<macsad-domain>` | Admin static application and same-origin API gateway | Cloudflare Access, deny by default |
-| `origin.<macsad-domain>` | Tunnel-only path to `macsad-server` | Service-to-service only; no ordinary public policy |
-| `<macsad-domain>` and `www.<macsad-domain>` | Generated publication site | Public, read-only, cacheable |
+| `http://<firebat-tailnet-ip>:18080/` | LOGOS admin bundle plus same-origin `/api/v1/health` | Headscale tailnet ACLs only |
+| `http://<firebat-tailnet-ip>:18082/` | LOGOS public-site preview | Headscale tailnet ACLs only |
+| `http://<firebat-tailnet-ip>:8978/` | pgAdmin with the preconfigured read-only database login | Headscale tailnet ACLs plus pgAdmin authentication and MFA |
 
-The preferred edge shape is that the admin Worker serves static assets and sends `/api/*` through a narrowly configured gateway to the tunneled origin. If implementation testing shows that forwarding and validating the Cloudflare Access identity is unnecessarily complex, serve the admin bundle directly from `macsad-server` through the Access-protected tunnel for the first milestone. The API contract must remain the same either way.
+Compose interpolates one `MACSAD_BIND_IP` that `stack.sh configure` proves belongs to Firebat's Tailscale client. The configuration rejects wildcard and loopback values. No service is published to `0.0.0.0`, the LAN, the public Internet, or Tailscale Funnel. PostgreSQL is exposed only as `postgres:5432` on the internal Compose `data` network.
 
-Cloudflare coordinates access and serves web assets. It does not execute research code and is not the research state authority.
+Cloudflare publication and protected production delivery are separate later release paths. They do not change PostgreSQL authority and are not connected to the Firebat development stack.
 
 ### 6.5 Authority map
 
@@ -387,9 +397,9 @@ The greenfield `0001` inventory is 47 tables including the migration ledger, 50 
 
 ### 7.2 PostgreSQL service and schema lifecycle
 
-MaCSad uses one native PostgreSQL 16 cluster on Firebat One. Systemd owns the `16/main` cluster, enables it at boot, restarts it after failure, and health checks it with `pg_isready`. PostgreSQL listens only on the local Unix socket and loopback boundary; Cloudflare and research workers never receive a direct database endpoint. The LOGOS controller remains the only domain-transition authority.
+MaCSad uses one PostgreSQL 16.15 service in the Firebat Compose project. A named volume owns the data, the container uses `restart: unless-stopped`, and the host bootstrap enables Docker Engine at boot. PostgreSQL has no published host port: the one-shot migrator, LOGOS gateway, and pgAdmin reach it only through Compose's internal `data` network. The LOGOS controller remains the only domain-transition authority; pgAdmin connects through an ACL-constrained viewer login with a read-only session default and strict timeouts.
 
-`0001_initial_schema.sql` is the one canonical create script for the greenfield schema. It creates the domains, 50 enums, 47 tables, constraints, indexes, six views, routines, defensive triggers, grants, and migration ledger in one reviewed transaction. Deployment applies it through `database/apply_migrations.sh` under the dedicated migrator role and advisory lock, verifies the resulting schema, and only then starts a compatible controller. Application startup never performs DDL.
+`0001_initial_schema.sql` is the one canonical create script for the greenfield schema. It creates the domains, 50 enums, 47 tables, constraints, indexes, six views, routines, defensive triggers, grants, and migration ledger in one reviewed transaction. The dedicated `migrate` container applies it through `database/apply_migrations.sh` under the migrator role and advisory lock, verifies the resulting schema, and exits successfully before Compose starts a compatible controller. Application startup never performs DDL.
 
 Schema changes use expand, bounded backfill, then contract in a later deployment. The owner, migrator, application, and read-only roles remain separate; `PUBLIC` has no MaCSad schema authority. Backups coordinate the PostgreSQL boundary with the CAS manifest, restore into a fresh PostgreSQL 16 database, migrate forward, and pass schema plus artifact-closure verification before they count as recoverable.
 
@@ -995,9 +1005,9 @@ The MaCSad platform implementation normally lives in a separate trusted reposito
 macsad-platform/
   .macsad/
     toolchains/
-      logos.lock.json
+      logos.lock.toml
   logos/
-    server/
+    gateway/
       Largo.toml
       src/
         main.lg
@@ -1015,13 +1025,13 @@ macsad-platform/
         conversations/
         process/
         evidence/
-    public-generator/
+    public-site/
       Largo.toml
       src/
         main.lg
         dossier/
         manifest/
-  host-adapters/             # narrow mechanical effects; no domain policy
+  host_adapters/             # narrow mechanical effects; no domain policy
     postgres/
     github/
     artifact-store/
@@ -1037,8 +1047,17 @@ macsad-platform/
     verify.sql
     migrations/
       0001_initial_schema.sql
-  ops/firebat/
-    bootstrap_postgresql.sh
+  ops/
+    compose/
+      compose.yaml
+      stack.sh
+      images/
+      nginx/
+      pgadmin/
+      postgres/
+    firebat/
+      bootstrap_container_host.sh
+  docs/runbooks/
   scripts/
   .github/workflows/
 ```
@@ -1052,15 +1071,18 @@ Provisional stack:
 | Layer | V1 choice |
 |---|---|
 | Language/toolchain | LOGOS from local `/home/alejandro/projects/logicaffeine-private`, promoted as an exact signed binary/source/runtime/vendor/build-environment bundle |
-| Server | LOGOS HTTP service; pinned fuel-bounded VM for admitted synchronous reference fixtures and native AOT on Firebat only after closure and differential-parity gates |
-| Control database | Native PostgreSQL 16 `16/main` on Firebat, systemd-enabled/restarted/health-checked and local-only, through a typed host-effect adapter; LOGOS remains transition authority |
+| Server | Containerized LOGOS gateway built from the exact staged `largo` binary and gateway source; health-only until the typed HTTP/database adapter gates are green |
+| Sites | Unprivileged static container holding only emitted admin/public bundles; it shares the gateway's network namespace so the admin health proxy remains same-origin |
+| Control database | PostgreSQL 16.15 in Compose with a durable named volume, internal network only, checksum migrator completion gate, and no published database port; LOGOS remains transition authority |
+| Database viewer | pgAdmin on tailnet port `8978`, authenticated with MFA and connected only through ACL-constrained `macsad_viewer`, whose session defaults to read only |
 | Artifact bytes | Local content-addressed filesystem |
 | Worker | Trusted minimal supervisor plus credential-free child sandbox running the pinned `largo` toolchain |
 | Organization/process authoring | MaCSad-native repository format plus LOGOS compiler/validator; canonical graph JSON at runtime |
 | Agent interface | MaCSad policy MCP plus sandboxed local `largo mcp` tool adapters |
 | Admin UI | LOGOS DOM/Wasm application emitted by the pinned toolchain |
 | Public site | Deterministic LOGOS generator from sealed JSON/Markdown bundles; output is static HTML/assets |
-| Edge | Cloudflare Workers Static Assets, Access, and Tunnel |
+| Private edge | Exact Firebat tailnet-IP bindings on `18080`, `18082`, and `8978`; no wildcard, LAN, public, or Funnel exposure |
+| Public edge | Cloudflare Workers Static Assets after the separate release gates are provisioned |
 | CI/CD | GitHub Actions plus Wrangler |
 
 The Dioxus template remains a process/design reference, not reusable application code. MaCSad does not choose Dioxus for its frontend: the user-facing and admin surfaces are LOGOS projects. A non-LOGOS host adapter is acceptable only for a capability gap and must remain smaller than the policy it serves, typed, least-privilege, and replaceable.
@@ -1101,7 +1123,7 @@ Subscribe only to necessary events. Every webhook is signature-verified, deliver
 
 #### `platform-ci.yml`
 
-Runs in the trusted platform repository on every pull request and push. It downloads the exact promoted, signed LOGOS toolchain bundle named by `logos.lock.json`, verifies its binary/source/runtime/vendor/build-environment closure, sets `LOGOS_WORKSPACE` to the recorded bundled source root, and runs network-disabled; a pull-request job receives neither private `logicaffeine-private` checkout credentials nor production credentials. It performs:
+Runs in the trusted platform repository on every pull request and push. It downloads the exact promoted, signed LOGOS toolchain bundle named by `.macsad/toolchains/logos.lock.toml`, verifies its binary/source/runtime/vendor/build-environment closure, sets `LOGOS_WORKSPACE` to the recorded bundled source root, and runs network-disabled; a pull-request job receives neither private `logicaffeine-private` checkout credentials nor production credentials. It performs:
 
 - project-aware `largo check --json`, format/lint, relevant LOGOS build/emit operations, and assembly-aware/generated-entry `largo test` with an exact expected test-name/count assertion for each MaCSad LOGOS project;
 - server, host-adapter, schema, migration, and security tests;
@@ -1117,7 +1139,7 @@ Runs without platform/deployment secrets in the watched project, if a human elec
 
 #### `promote-logos-toolchain.yml`
 
-This protected, manually approved job runs only on a trusted Firebat/self-hosted context and never checks out or executes pull-request-authored MaCSad code while holding private-repository access. It verifies the local checkout is clean and equal to `origin/main`; pins the exact Rust/Cargo/linker/target/build-image identities; builds `largo`; captures the required runtime/workspace source, Cargo vendor/index, and generated-AOT lock/vendor closures; and records the required `LOGOS_WORKSPACE` root. It then runs positive and adversarial tool fixtures, signs the complete bundle and manifest, and proposes a reviewed `logos.lock.json` update. An independent clean worker downloads the bundle outside any checkout, disables network access, verifies all hashes, and builds/runs the HTTP fixture from that closure. Until the build is genuinely hermetic, promotion preserves the original binary digest and requires behavioral reproduction rather than falsely promising byte-identical recompilation; once hermetic, the promotion gate also requires identical rebuilt bytes. Ordinary pushes consume only that immutable bundle and never float to the local directory or registry.
+This protected, manually approved job runs only on a trusted Firebat/self-hosted context and never checks out or executes pull-request-authored MaCSad code while holding private-repository access. It verifies the local checkout is clean and equal to `origin/main`; pins the exact Rust/Cargo/linker/target/build-image identities; builds `largo`; captures the required runtime/workspace source, Cargo vendor/index, and generated-AOT lock/vendor closures; and records the required `LOGOS_WORKSPACE` root. It then runs positive and adversarial tool fixtures, signs the complete bundle and manifest, and proposes a reviewed `.macsad/toolchains/logos.lock.toml` update. An independent clean worker downloads the bundle outside any checkout, disables network access, verifies all hashes, and builds/runs the HTTP fixture from that closure. Until the build is genuinely hermetic, promotion preserves the original binary digest and requires behavioral reproduction rather than falsely promising byte-identical recompilation; once hermetic, the promotion gate also requires identical rebuilt bytes. Ordinary pushes consume only that immutable bundle and never float to the local directory or registry.
 
 #### `deploy-admin.yml`
 
@@ -1273,15 +1295,15 @@ Each phase begins with failing acceptance tests and ends only when the stated ga
 
 - Approve the fundamental goal, claim semantics, non-goals, and LOGOS-first rule.
 - Create the trusted MaCSad platform repository and the three standalone LOGOS project skeletons.
-- Resolve development to `/home/alejandro/projects/logicaffeine-private`; review the BSL terms; promote the exact current commit as the signed binary/source/runtime/vendor/build-environment bundle in Section 6.1; commit `logos.lock.json`; and prove that an independent network-disabled machine outside the checkout can verify the bundle and build/run the HTTP fixture. Require an identical rebuilt `largo` digest only after a hermetic build is established; until then preserve the promoted digest and require behavioral reproduction.
-- Provision PostgreSQL 16 `16/main` on Firebat as the local-only, systemd-enabled control database; apply the immutable `0001_initial_schema.sql` through the checksum-verifying migration runner; verify roles, grants, catalog fingerprint, restart health, and a clean restore according to `database/README.md`.
+- Resolve development to `/home/alejandro/projects/logicaffeine-private`; review the BSL terms; promote the exact current commit as the signed binary/source/runtime/vendor/build-environment bundle in Section 6.1; commit `.macsad/toolchains/logos.lock.toml`; and prove that an independent network-disabled machine outside the checkout can verify the bundle and build/run the HTTP fixture. Require an identical rebuilt `largo` digest only after a hermetic build is established; until then preserve the promoted digest and require behavioral reproduction.
+- Provision the Firebat Docker Compose project with PostgreSQL 16.15 on its internal network, durable named storage, the one-shot checksum migrator, the health-only LOGOS gateway, unprivileged LOGOS sites, and read-only pgAdmin; publish only the three reviewed ports on Firebat's exact tailnet address and verify roles, grants, catalog fingerprint, restart health, and a clean restore according to `GETTING_STARTED.md` and `docs/runbooks/`.
 - Register the local `logicaffeine-private` checkout as an approved read-only tool repository at commit `132dc5346728e2d204df798dd7544e6405306a2c`, preserve its exact revision, and admit only explicitly versioned operation manifests.
 - Define versioned wire/artifact schemas, canonical hashing, one fixed acyclic `discovery-v1` process in `policy_process`/`policy_node`/`policy_transition`, ordered fail-closed decision semantics, derived-chart drift checks, and three profiles: human Director, Investigator, and Verifier.
-- Run a capability spike proving a LOGOS HTTP handler can cross the typed host boundary for one PostgreSQL transaction and one CAS write/read, and that the LOGOS DOM/public-generator paths produce deployable artifacts. If an in-process ABI is not yet supported, use a local authenticated stdio/loopback sidecar with the same schemas; do not move policy into it.
+- Run a capability spike proving a LOGOS HTTP handler can cross the typed host boundary for one PostgreSQL transaction and one CAS write/read, and that the LOGOS DOM/public-generation paths produce deployable artifacts. If an in-process ABI is not yet supported, use a local authenticated stdio/loopback sidecar with the same schemas; do not move policy into it.
 - Select one adjudicated math fixture and one deterministic executable CS fixture with known expected dispositions.
 - Record ADRs for single authority, LOGOS/host boundary, worker trust split, storage ownership, Cloudflare boundary, and publication separation.
 
-**Exit:** PostgreSQL 16 is enabled, active, ready after restart, locally bound, and at verified schema version `0001`; a fresh restore verifies; the exact LOGOS tool-repository revision and allowed operations are pinned; pinned `largo check`, assembly-aware/generated-entry `largo test` with an exact multi-file discovered-test set/count, engine-traced fuel-bounded-VM `logos_run`, `logos_logic`, and the chosen `logos_prove` fixture behave through recorded envelopes; an async or VM-rejected reference run fails instead of silently falling back; the network-disabled HTTP/runtime-closure, host-boundary, and web-generation spikes pass; the valid fixed process checks and adversarial decision/schema fixtures fail closed.
+**Exit:** the four long-running Compose services recover after Docker/Firebat restart; `migrate` exits successfully at verified schema version `0001`; PostgreSQL is unreachable from any host interface; the three web endpoints answer only on the exact tailnet IP; and a fresh restore verifies. The exact LOGOS tool-repository revision and allowed operations are pinned; pinned `largo check`, assembly-aware/generated-entry `largo test` with an exact multi-file discovered-test set/count, engine-traced fuel-bounded-VM `logos_run`, `logos_logic`, and the chosen `logos_prove` fixture behave through recorded envelopes; an async or VM-rejected reference run fails instead of silently falling back; the network-disabled HTTP/runtime-closure, host-boundary, and web-generation spikes pass; the valid fixed process checks and adversarial decision/schema fixtures fail closed.
 
 ### Phase 1 — discovery-integrity vertical slice before platform breadth
 
@@ -1362,7 +1384,7 @@ MaCSad v1 is complete only when:
 
 - MaCSad's controller, workflow/decision policy, MCP policy, admin app, and public generator are authored in LOGOS, with non-LOGOS code confined to typed mechanical host adapters;
 - local development resolves to `/home/alejandro/projects/logicaffeine-private`, while CI, runs, replay, and deployments name and verify one exact reviewed, signed LOGOS binary/source/runtime/vendor/build-environment bundle;
-- Firebat's PostgreSQL 16 `16/main` cluster is local-only, systemd-enabled, active and ready after restart; schema `0001` applies through the checksum ledger and advisory lock, catalog verification passes, the application role cannot perform DDL, and a fresh restore verifies;
+- Firebat's PostgreSQL 16.15 container is healthy after restart with its named volume intact and no published database port; the one-shot `migrate` container applies schema `0001` through the checksum ledger and advisory lock before the application services start; catalog verification passes, the application role cannot perform DDL, pgAdmin is forced read-only, and a fresh restore verifies;
 - one selected watched GitHub repository is the sole research project/workspace, keyed by stable repository ID; the separate trusted platform repository and any attached tool repositories are not MaCSad projects;
 - every accepted webhook is signature-verified and delivery-deduplicated, and periodic reconciliation detects missed state;
 - every accepted primary snapshot and admitted tool-repository revision is preserved independently of branch or host-checkout reachability, and every case, task, run, artifact, evidence record, patch, and publication identifies the exact primary commit/tree and allowed tool revision set;
@@ -1441,7 +1463,7 @@ These decisions do not change the fundamental architecture but must be settled a
 10. The first math fixture, first CS fixture, and first admitted checker family.
 11. Formal approval of the selected Logos 0.10.1 BSL deployment/data flow, private-repository CI access, and any required alternative license.
 12. MaCSad source-code and public-content licenses.
-13. Toolchain artifact storage/signing, protected Firebat promotion runner, and who may update `logos.lock.json`.
+13. Toolchain artifact storage/signing, protected Firebat promotion runner, and who may update `.macsad/toolchains/logos.lock.toml`.
 14. Backup target, retention period, publication-key custody, and public artifact policy.
 15. GitHub plan/repository visibility, ruleset/no-bypass configuration, and available deployment protections.
 16. Whether the native-AOT LOGOS HTTP service passes the required interpreter differential before production.
@@ -1453,6 +1475,6 @@ The first MaCSad should feel less like a society of unconstrained agents and mor
 
 > one LOGOS codebase, one pinned local toolchain, one watched project repository, an explicit set of read-only pinned tool repositories, one preserved workspace snapshot, one immutable problem revision, one navigable process graph, one approved budget, one assigned Investigator, one independently bound Verifier, one linked task conversation, one typed worker contract, one immutable evidence trail, one replayable result, and one human-controlled path to publication.
 
-The watched GitHub repository defines the research project and exact primary workspace; approved tool repositories contribute only pinned read-only source or typed operations. The trusted platform repository contains the new LOGOS implementation. The virtual organization supplies managed people, roles, inboxes, conversations, and handoffs. The Kanban board is the projection of the live task in MaCSad's own control-flow graph, and ordered decision matrices govern how that work may advance. MaCSad MCP supplies read/propose organizational context while the pinned local `largo mcp` supplies bounded language/proof tools inside an outer sandbox. PostgreSQL 16 on Firebat and the signed, hash-chained audit history keep operational truth. Content hashes preserve evidence and primary/tool source snapshots. Firebat performs bounded work in credential-free isolated source trees. GitHub Actions and Cloudflare turn only attested platform builds and sealed, reviewed batches into web deployments.
+The watched GitHub repository defines the research project and exact primary workspace; approved tool repositories contribute only pinned read-only source or typed operations. The trusted platform repository contains the new LOGOS implementation. The virtual organization supplies managed people, roles, inboxes, conversations, and handoffs. The Kanban board is the projection of the live task in MaCSad's own control-flow graph, and ordered decision matrices govern how that work may advance. MaCSad MCP supplies read/propose organizational context while the pinned local `largo mcp` supplies bounded language/proof tools inside an outer sandbox. PostgreSQL 16.15 in Firebat's private Compose network and the signed, hash-chained audit history keep operational truth. Content hashes preserve evidence and primary/tool source snapshots. Firebat performs bounded work in credential-free isolated source trees. GitHub Actions and Cloudflare turn only attested platform builds and sealed, reviewed batches into web deployments.
 
 That is the smallest design that preserves the ambition in the Granola discussion while resisting the exact failure modes—premature completion, runaway cost, reward hacking, lost history, false certainty, and unsafe publication—that the discussion identified.

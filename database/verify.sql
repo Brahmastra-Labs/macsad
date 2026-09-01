@@ -27,12 +27,15 @@ BEGIN
 
   SELECT count(*) INTO bad_count
   FROM (VALUES
-    ('macsad_owner'::name, false),
-    ('macsad_migrator'::name, false),
-    ('macsad_app'::name, false),
-    ('macsad_reader'::name, false),
-    ('alejandro'::name, true)
-  ) AS expected(role_name, can_login)
+    ('macsad_owner'::name, false, false),
+    ('macsad_migrator'::name, false, false),
+    ('macsad_app'::name, false, false),
+    ('macsad_reader'::name, false, false),
+    ('alejandro'::name, true, false),
+    ('macsad_deployer'::name, true, false),
+    ('macsad_runtime'::name, true, true),
+    ('macsad_viewer'::name, true, true)
+  ) AS expected(role_name, can_login, can_inherit)
   LEFT JOIN pg_roles AS actual ON actual.rolname = expected.role_name
   WHERE actual.oid IS NULL
      OR actual.rolcanlogin IS DISTINCT FROM expected.can_login
@@ -41,7 +44,7 @@ BEGIN
      OR actual.rolcreaterole
      OR actual.rolreplication
      OR actual.rolbypassrls
-     OR actual.rolinherit;
+     OR actual.rolinherit IS DISTINCT FROM expected.can_inherit;
 
   IF bad_count <> 0 THEN
     RAISE EXCEPTION 'required role attributes are missing or unsafe';
@@ -49,14 +52,16 @@ BEGIN
 
   IF NOT pg_has_role('alejandro', 'macsad_owner', 'MEMBER')
      OR NOT pg_has_role('alejandro', 'macsad_migrator', 'MEMBER')
+     OR NOT pg_has_role('macsad_deployer', 'macsad_owner', 'MEMBER')
+     OR NOT pg_has_role('macsad_deployer', 'macsad_migrator', 'MEMBER')
      OR NOT pg_has_role('macsad_migrator', 'macsad_owner', 'MEMBER') THEN
     RAISE EXCEPTION 'migration role membership graph is incomplete';
   END IF;
 
   SELECT count(*) INTO bad_count
   FROM (VALUES
-    ('alejandro'::name, 'macsad_owner'::name),
     ('alejandro'::name, 'macsad_migrator'::name),
+    ('macsad_deployer'::name, 'macsad_migrator'::name),
     ('macsad_migrator'::name, 'macsad_owner'::name)
   ) AS expected(member_name, role_name)
   LEFT JOIN pg_auth_members AS membership
@@ -72,19 +77,104 @@ BEGIN
   END IF;
 
   SELECT count(*) INTO bad_count
+  FROM (VALUES
+    ('macsad_runtime'::name, 'macsad_app'::name),
+    ('macsad_viewer'::name, 'macsad_reader'::name)
+  ) AS expected(member_name, role_name)
+  LEFT JOIN pg_auth_members AS membership
+    ON pg_get_userbyid(membership.member) = expected.member_name
+   AND pg_get_userbyid(membership.roleid) = expected.role_name
+  WHERE membership.oid IS NULL
+     OR membership.admin_option
+     OR NOT membership.inherit_option
+     OR membership.set_option;
+
+  IF bad_count <> 0 THEN
+    RAISE EXCEPTION 'service memberships must be inherited, non-settable, and non-admin';
+  END IF;
+
+  SELECT count(*) INTO bad_count
   FROM pg_auth_members AS membership
   WHERE (
       pg_get_userbyid(membership.roleid) = 'macsad_owner'
-      AND pg_get_userbyid(membership.member) NOT IN ('alejandro', 'macsad_migrator')
+      AND pg_get_userbyid(membership.member) <> 'macsad_migrator'
     )
      OR (
       pg_get_userbyid(membership.roleid) = 'macsad_migrator'
-      AND pg_get_userbyid(membership.member) <> 'alejandro'
+      AND pg_get_userbyid(membership.member) NOT IN ('alejandro', 'macsad_deployer')
     )
-     OR pg_get_userbyid(membership.roleid) = 'alejandro';
+     OR (
+      pg_get_userbyid(membership.roleid) = 'macsad_app'
+      AND pg_get_userbyid(membership.member) <> 'macsad_runtime'
+    )
+     OR (
+      pg_get_userbyid(membership.roleid) = 'macsad_reader'
+      AND pg_get_userbyid(membership.member) <> 'macsad_viewer'
+    )
+     OR pg_get_userbyid(membership.roleid) IN (
+      'alejandro', 'macsad_deployer', 'macsad_runtime', 'macsad_viewer'
+    )
+     OR (
+      pg_get_userbyid(membership.member) IN (
+        'alejandro', 'macsad_deployer', 'macsad_runtime', 'macsad_viewer'
+      )
+      AND NOT (
+        (pg_get_userbyid(membership.member) = 'alejandro'
+          AND pg_get_userbyid(membership.roleid) = 'macsad_migrator')
+        OR (pg_get_userbyid(membership.member) = 'macsad_deployer'
+          AND pg_get_userbyid(membership.roleid) = 'macsad_migrator')
+        OR (pg_get_userbyid(membership.member) = 'macsad_runtime'
+          AND pg_get_userbyid(membership.roleid) = 'macsad_app')
+        OR (pg_get_userbyid(membership.member) = 'macsad_viewer'
+          AND pg_get_userbyid(membership.roleid) = 'macsad_reader')
+      )
+    );
 
   IF bad_count <> 0 THEN
     RAISE EXCEPTION 'an unexpected role can administer or migrate MaCSad';
+  END IF;
+
+  WITH expected(role_name, database_scope, setting) AS (
+    VALUES
+      ('<database>', current_database(), 'search_path=pg_catalog'),
+      ('macsad_owner', current_database(), 'search_path=macsad, macsad_meta, pg_catalog'),
+      ('macsad_migrator', current_database(), 'search_path=macsad, macsad_meta, pg_catalog'),
+      ('macsad_app', current_database(), 'search_path=macsad, pg_catalog'),
+      ('macsad_reader', current_database(), 'search_path=macsad, pg_catalog'),
+      ('alejandro', current_database(), 'search_path=pg_catalog'),
+      ('macsad_deployer', current_database(), 'search_path=pg_catalog'),
+      ('macsad_runtime', current_database(), 'search_path=macsad, pg_catalog'),
+      ('macsad_viewer', current_database(), 'search_path=macsad, pg_catalog'),
+      ('macsad_viewer', current_database(), 'default_transaction_read_only=on'),
+      ('macsad_viewer', current_database(), 'statement_timeout=30s'),
+      ('macsad_viewer', current_database(), 'lock_timeout=5s'),
+      ('macsad_viewer', current_database(), 'idle_in_transaction_session_timeout=30s')
+  ), actual AS (
+    SELECT
+      COALESCE(role_record.rolname::text, '<database>') AS role_name,
+      COALESCE(database_record.datname::text, '<all>') AS database_scope,
+      setting
+    FROM pg_db_role_setting AS role_setting
+    LEFT JOIN pg_roles AS role_record ON role_record.oid = role_setting.setrole
+    LEFT JOIN pg_database AS database_record ON database_record.oid = role_setting.setdatabase
+    CROSS JOIN LATERAL unnest(role_setting.setconfig) AS setting
+    WHERE (role_setting.setrole = 0 AND role_setting.setdatabase = (
+             SELECT oid FROM pg_database WHERE datname = current_database()
+           ))
+       OR role_record.rolname IN (
+         'macsad_owner', 'macsad_migrator', 'macsad_app', 'macsad_reader',
+         'alejandro', 'macsad_deployer', 'macsad_runtime', 'macsad_viewer'
+       )
+  )
+  SELECT count(*) INTO bad_count
+  FROM (
+    (SELECT * FROM expected EXCEPT SELECT * FROM actual)
+    UNION ALL
+    (SELECT * FROM actual EXCEPT SELECT * FROM expected)
+  ) AS setting_drift;
+
+  IF bad_count <> 0 THEN
+    RAISE EXCEPTION 'MaCSad role or database settings have drifted';
   END IF;
 
   SELECT count(*) INTO bad_count
@@ -803,7 +893,8 @@ WITH catalog_item AS (
       role_record.rolbypassrls)
   FROM pg_roles AS role_record
   WHERE role_record.rolname IN (
-    'macsad_owner', 'macsad_migrator', 'macsad_app', 'macsad_reader', 'alejandro'
+    'macsad_owner', 'macsad_migrator', 'macsad_app', 'macsad_reader', 'alejandro',
+    'macsad_deployer', 'macsad_runtime', 'macsad_viewer'
   )
 
   UNION ALL
@@ -814,14 +905,38 @@ WITH catalog_item AS (
     concat_ws('|', pg_get_userbyid(membership.grantor), membership.admin_option,
       membership.inherit_option, membership.set_option)
   FROM pg_auth_members AS membership
-  WHERE pg_get_userbyid(membership.roleid) IN ('macsad_owner', 'macsad_migrator', 'alejandro')
+  WHERE pg_get_userbyid(membership.roleid) IN (
+    'macsad_owner', 'macsad_migrator', 'macsad_app', 'macsad_reader', 'alejandro',
+    'macsad_deployer', 'macsad_runtime', 'macsad_viewer'
+  )
      OR (
        pg_get_userbyid(membership.member) IN (
-         'macsad_owner', 'macsad_migrator', 'macsad_app', 'macsad_reader', 'alejandro'
+         'macsad_owner', 'macsad_migrator', 'macsad_app', 'macsad_reader', 'alejandro',
+         'macsad_deployer', 'macsad_runtime', 'macsad_viewer'
        )
        AND pg_get_userbyid(membership.roleid) IN (
-         'macsad_owner', 'macsad_migrator', 'macsad_app', 'macsad_reader', 'alejandro'
+         'macsad_owner', 'macsad_migrator', 'macsad_app', 'macsad_reader', 'alejandro',
+         'macsad_deployer', 'macsad_runtime', 'macsad_viewer'
        )
+     )
+
+  UNION ALL
+
+  SELECT
+    'role-setting',
+    format('%s@%s', COALESCE(role_record.rolname::text, '<database>'),
+      COALESCE(database_record.datname::text, '<all>')),
+    setting
+  FROM pg_db_role_setting AS role_setting
+  LEFT JOIN pg_roles AS role_record ON role_record.oid = role_setting.setrole
+  LEFT JOIN pg_database AS database_record ON database_record.oid = role_setting.setdatabase
+  CROSS JOIN LATERAL unnest(role_setting.setconfig) AS setting
+  WHERE (role_setting.setrole = 0 AND role_setting.setdatabase = (
+           SELECT oid FROM pg_database WHERE datname = current_database()
+         ))
+     OR role_record.rolname IN (
+       'macsad_owner', 'macsad_migrator', 'macsad_app', 'macsad_reader',
+       'alejandro', 'macsad_deployer', 'macsad_runtime', 'macsad_viewer'
      )
 
   UNION ALL

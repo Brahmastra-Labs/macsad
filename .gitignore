@@ -15,6 +15,7 @@ coverage/
 playwright-report/
 test-results/
 .tmp/
+.runtime/
 
 # Editor and operating-system files
 .DS_Store

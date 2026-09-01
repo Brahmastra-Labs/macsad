@@ -1,7 +1,9 @@
 # Contributing to MaCSad
 
 MaCSad is intentionally small, but its evidence rules are strict. Start with
-`AGENTS.md`, then run the complete gate before handing off a change:
+`GETTING_STARTED.md` and `AGENTS.md`. Choose one bounded outcome, name its
+acceptance test, and work RED → GREEN → REFACTOR. Run the complete gate before
+handing off a change:
 
 ```bash
 LOGOS_WORKSPACE=/path/to/the/exact/locked/logicaffeine-private \
@@ -23,7 +25,23 @@ that URL or place it in a shell transcript.
 | `database` | Immutable PostgreSQL migrations, verification, and invariant tests. |
 | `tests/logos-module-manifest.json` | Exact project entries and test-bearing leaf contracts. |
 | `scripts` | Pinned toolchain, import-closure, no-false-green, and deterministic-build gates. |
+| `ops/compose` | Firebat service topology, pinned image builds, and private runtime lifecycle. |
+| `ops/firebat` | Privileged one-time host bootstrap only. |
 | `docs` | Architecture, deployment, API boundary, and sprint decisions. |
+
+## Test matrix
+
+| Command | Intended use | Evidence |
+|---|---|---|
+| `make test-foundation` | Fast credential-free iteration | Source/module/Compose guardrails and host-adapter unit contracts |
+| `make test` | Required local handoff gate | Exact private LOGOS tests and deterministic bundles, plus the foundation gate |
+| `MACSAD_REQUIRE_DATABASE=1 DATABASE_URL=… make test` | Schema or persistence work | Fresh PG16 migrate/repeat/verify/invariants in addition to the full gate |
+| `make compose-config` | Environment or container change | Fully resolved Compose model after local configuration |
+| `make up && make verify` | Firebat runtime change | Built containers, startup ordering, routes, and schema compatibility |
+
+Never describe `compose config` as a running-stack test or a health response as
+CRUD evidence. Record the exact command and outcome in the pull request without
+including environment contents, connection strings, or secrets.
 
 ## Adding or moving a LOGOS module
 
@@ -66,3 +84,44 @@ that URL or place it in a shell transcript.
   digest, or deployment boundary to get green.
 - Do not commit generated `target/`, local environments, credentials, caches, or
   machine-specific paths.
+
+## PostgreSQL changes
+
+1. Add the next contiguous, immutable numbered migration. Every migration owns
+   its transaction, advisory lock, ledger row, and checksum marker.
+2. Prefer typed columns, domains, enums, foreign keys, and explicit checks for
+   durable concepts. Use JSONB only for versioned/evolving payloads with a
+   documented schema and digest.
+3. Add invariant/race tests at the same time. Run against an empty PG16 database
+   and repeat the migration runner to prove idempotent orchestration.
+4. Use expand → backfill → contract across releases for destructive shape
+   changes. Never edit an applied migration or infer missing history.
+
+## Compose and operations changes
+
+- Keep `.env.example`, `compose.yaml`, the runtime generator, documentation, and
+  guardrail expectations in sync. Examples contain shapes only, never values.
+- Every pulled image is tag-and-digest pinned; every local build consumes only
+  exact staged inputs. Do not mount a source repository at runtime.
+- Prove health/readiness, least privilege, named-volume persistence, and the
+  absence of wildcard/LAN/database exposure.
+- Update the relevant runbook and ADR when a cross-cutting operating decision
+  changes.
+- The deployment harness admits only a fully committed tree: image tags and
+  staged inputs are bound to `HEAD`, and any untracked file fails closed. On a
+  feature branch, review and commit a coherent local checkpoint, run
+  `PGADMIN_DEFAULT_EMAIL=YOUR-REAL-OWNER-EMAIL make configure`, then exercise
+  `make up && make verify`. Fix failures in a follow-up local commit. Do not
+  push the branch until its required gates pass.
+
+## Commits and pull requests
+
+- Branch from current `main`; keep one concern per branch and coherent commit.
+- Do not include unrelated user work, generated bundles, `.runtime/`, dumps, or
+  credentials. Review `git diff --check` and the full staged diff.
+- Explain the user-visible outcome, architectural boundary, test evidence,
+  limitations, and any operator action. A red or unavailable gate is surfaced,
+  never hidden with retries, skips, or weakened assertions.
+- Foundation CI is credential-free. Never execute untrusted pull-request code
+  on the owned Firebat host; a future self-hosted runner requires isolation and
+  a separate security decision.

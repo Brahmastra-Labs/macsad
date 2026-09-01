@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 20
     services:
       postgres:
-        image: postgres@sha256:38471f330eb885e04de130b768d6db4e10469e2311879c7e5c699f6d2d8a1c74 # 16.10-bookworm index
+        image: postgres:16.15-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
         env:
           POSTGRES_USER: postgres
           POSTGRES_DB: postgres
@@ -46,41 +46,89 @@ jobs:
       - name: Validate credential-free contracts
         run: |
           set -Eeuo pipefail
-          bash -n scripts/logos.sh scripts/quality-gate.sh database/apply_migrations.sh
+          bash -n \
+            scripts/dev.sh \
+            scripts/logos.sh \
+            scripts/quality-gate.sh \
+            database/apply_migrations.sh \
+            ops/compose/stack.sh \
+            ops/compose/run-migrations.sh \
+            ops/compose/postgres/010-bootstrap-macsad.sh \
+            ops/firebat/bootstrap_container_host.sh
           node --check scripts/guardrails.mjs
           node --check scripts/logos-project.mjs
           node --check scripts/verify-logos-tests.mjs
-          node --test tests/scripts/logos-project.test.mjs
+          node --check scripts/compose-guardrails.mjs
+          node --test \
+            tests/scripts/logos-project.test.mjs \
+            tests/scripts/compose-guardrails.test.mjs
           node scripts/guardrails.mjs
           node scripts/logos-project.mjs audit
+          node scripts/compose-guardrails.mjs
+          python3 -m unittest discover --start-directory host_adapters/tests --pattern 'test_*.py'
+
+      - name: Render the complete Compose model
+        run: |
+          set -Eeuo pipefail
+          docker compose version
+          runtime_root="${GITHUB_WORKSPACE}/.runtime/compose"
+          build_root="${runtime_root}/build/${GITHUB_SHA}"
+          secrets_root="${runtime_root}/secrets"
+          install -d -m 0700 \
+            "${build_root}/admin-bundle" \
+            "${build_root}/public-bundle" \
+            "${build_root}/gateway-source" \
+            "${build_root}/logos-runtime" \
+            "${build_root}/database-source" \
+            "${secrets_root}"
+          for name in \
+            postgres_superuser_password \
+            macsad_deployer_password \
+            macsad_runtime_password \
+            macsad_viewer_password \
+            pgadmin_admin_password; do
+            printf '%064d\n' 0 >"${secrets_root}/${name}"
+            chmod 0600 "${secrets_root}/${name}"
+          done
+          env_file="${runtime_root}/ci.env"
+          umask 077
+          cat >"${env_file}" <<EOF
+          MACSAD_BIND_IP=100.64.0.10
+          MACSAD_REPOSITORY_ROOT=${GITHUB_WORKSPACE}
+          MACSAD_RUNTIME_DIR=${runtime_root}
+          MACSAD_BUILD_DIR=${build_root}
+          MACSAD_SECRETS_DIR=${secrets_root}
+          MACSAD_SOURCE_REVISION=${GITHUB_SHA}
+          LOGOS_WORKSPACE=/private/not-present-in-ci
+          PGADMIN_DEFAULT_EMAIL=ci@macsad.invalid
+          EOF
+          docker compose \
+            --project-directory ops/compose \
+            --env-file "${env_file}" \
+            --file ops/compose/compose.yaml \
+            config --quiet
 
       - name: Create clean least-privilege database fixture
         run: |
           set -Eeuo pipefail
           psql --no-psqlrc --set=ON_ERROR_STOP=1 --dbname=postgres <<'SQL'
-          CREATE ROLE macsad_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
-          CREATE ROLE macsad_migrator NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
-          CREATE ROLE macsad_app NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
-          CREATE ROLE macsad_reader NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
-          CREATE ROLE alejandro LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
-
-          GRANT macsad_owner TO macsad_migrator WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;
-          GRANT macsad_owner, macsad_migrator TO alejandro WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;
-
-          CREATE DATABASE macsad OWNER macsad_owner ENCODING 'UTF8';
-          REVOKE ALL ON DATABASE macsad FROM PUBLIC;
-          GRANT CONNECT ON DATABASE macsad TO macsad_owner, macsad_migrator, macsad_app, macsad_reader, alejandro;
-          ALTER DATABASE macsad SET search_path = pg_catalog;
-          ALTER ROLE alejandro IN DATABASE macsad SET search_path = pg_catalog;
-          ALTER ROLE macsad_owner IN DATABASE macsad SET search_path = macsad, macsad_meta, pg_catalog;
-          ALTER ROLE macsad_migrator IN DATABASE macsad SET search_path = macsad, macsad_meta, pg_catalog;
-          ALTER ROLE macsad_app IN DATABASE macsad SET search_path = macsad, pg_catalog;
-          ALTER ROLE macsad_reader IN DATABASE macsad SET search_path = macsad, pg_catalog;
+          \set deployer_password 0000000000000000000000000000000000000000000000000000000000000000
+          \set runtime_password 0000000000000000000000000000000000000000000000000000000000000000
+          \set viewer_password 0000000000000000000000000000000000000000000000000000000000000000
+          \i ops/compose/postgres/010-bootstrap-macsad.sql
+          SQL
+          psql --no-psqlrc --set=ON_ERROR_STOP=1 --dbname=postgres <<'SQL'
+          \set deployer_password 0000000000000000000000000000000000000000000000000000000000000000
+          \set runtime_password 0000000000000000000000000000000000000000000000000000000000000000
+          \set viewer_password 0000000000000000000000000000000000000000000000000000000000000000
+          \i ops/compose/postgres/010-bootstrap-macsad.sql
           SQL
           schema_count="$(psql --no-psqlrc --set=ON_ERROR_STOP=1 --tuples-only --no-align --command "SELECT count(*) FROM pg_namespace WHERE nspname IN ('macsad', 'macsad_meta');")"
           [[ "${schema_count}" == '0' ]]
 
       - name: Migrate, repeat, verify, and exercise invariants
+        env:
+          PGUSER: macsad_deployer
         run: |
           set -Eeuo pipefail
           bash database/apply_migrations.sh
@@ -88,9 +136,25 @@ jobs:
           psql --no-psqlrc --set=ON_ERROR_STOP=1 --file=database/verify.sql
           psql --no-psqlrc --set=ON_ERROR_STOP=1 --file=database/tests/0001_invariants.sql
 
+      - name: Prove service-role defaults and viewer write denial
+        run: |
+          set -Eeuo pipefail
+          deployer_role="$(PGUSER=macsad_deployer psql --no-psqlrc --quiet --tuples-only --no-align --dbname=macsad \
+            --command='SET ROLE macsad_owner; SELECT current_user;')"
+          [[ "${deployer_role}" == 'macsad_owner' ]]
+          viewer_defaults="$(PGUSER=macsad_viewer psql --no-psqlrc --tuples-only --no-align --field-separator='|' \
+            --dbname=macsad --command="SELECT current_setting('default_transaction_read_only'), current_setting('statement_timeout'), current_setting('lock_timeout'), current_setting('idle_in_transaction_session_timeout');")"
+          [[ "${viewer_defaults}" == 'on|30s|5s|30s' ]]
+          if PGUSER=macsad_viewer psql --no-psqlrc --set=ON_ERROR_STOP=1 --dbname=macsad \
+            --command='SET default_transaction_read_only=off; UPDATE macsad.workspace SET id = id WHERE false;' \
+            >/dev/null 2>&1; then
+            printf 'macsad_viewer unexpectedly performed a write\n' >&2
+            exit 1
+          fi
+
       - name: State the evidence boundary
         run: |
           set -Eeuo pipefail
           printf '%s\n' \
-            'Foundation CI proves repository guardrails and a clean PostgreSQL 16 migration/repeat/verify/invariant run.' \
-            'It does not claim private LOGOS, browser, Firebat runtime, Cloudflare Access, or deployment evidence.'
+            'Foundation CI proves repository/Compose guardrails, runner-provided Compose model parsing, the shared role bootstrap contract, and a clean PostgreSQL 16 migration/repeat/verify/invariant run.' \
+            'It does not build or start application images and does not claim private LOGOS, browser, Firebat/Tailnet runtime, pgAdmin, Cloudflare Access, or deployment evidence.'

@@ -10,7 +10,7 @@
 >
 > **Schema operations:** [`database/README.md`](./database/README.md)
 >
-> **Target:** PostgreSQL 16 on Firebat One as the sole mutable domain authority; a provider-neutral content-addressed store for immutable bytes, using Firebat's local CAS first
+> **Target:** PostgreSQL 16.15 in Firebat One's private Docker Compose network as the sole mutable domain authority; a provider-neutral content-addressed store for immutable bytes, using Firebat's local CAS first
 >
 > **Schema inventory:** 47 tables including `macsad_meta.schema_migration`, 50 native enum types, and six read views: `case_board_v`, `budget_balance_v`, `model_cost_variance_v`, `publication_catalog_v`, `audit_timeline_v`, and `schema_version_v`
 
@@ -74,7 +74,7 @@ The model does **not** introduce:
 
 ### 2.2 Authority and storage
 
-PostgreSQL 16 is authoritative for mutable control state and immutable domain metadata. The LOGOS controller is the only service allowed to perform domain transitions. Firebat runs one systemd-managed cluster that is enabled at boot, restarts after failure, and is restricted to its local socket/loopback boundary.
+PostgreSQL 16.15 is authoritative for mutable control state and immutable domain metadata. The LOGOS controller is the only service allowed to perform domain transitions. Firebat runs PostgreSQL in the Docker Compose project with durable named storage, an internal-only data network, health-gated startup, and no published database port. The one-shot migrator applies and verifies the checksum ledger before application services start; the pgAdmin viewer has forced read-only database authority.
 
 The v1 local content-addressed filesystem on Firebat stores large immutable bytes: workspace bundles, inputs, outputs, logs, certificates, patches, dossiers, and sealed public bundles. PostgreSQL stores intrinsic blob metadata plus each logical artifact's classification, provenance, rights, and opaque provider locator. The storage contract is provider-neutral so a later migration or public-only replication to R2 does not change domain identity.
 
@@ -923,16 +923,24 @@ The initial UI may query these views through the controller and poll. No realtim
 
 RLS is not required for a single-workspace v1. Add it only when multiple mutually distrusting workspaces become a real requirement. Application authorization is still mandatory.
 
-## 14. Cloudflare data boundary
+## 14. Runtime and Cloudflare data boundary
 
 ```text
-Admin browser
-  -> Cloudflare Access
-  -> proposed admin Worker + Static Assets/API gateway
-     (validate Cf-Access-Jwt-Assertion explicitly)
-  -> Cloudflare Tunnel
-  -> LOGOS controller
-  -> PostgreSQL (domain authority)
+Authorized operator browser
+  -> Headscale-managed tailnet
+  -> Firebat exact tailnet IP :18080
+  -> unprivileged LOGOS sites container
+     (shares the LOGOS gateway network namespace)
+  -> LOGOS gateway/controller
+  -> PostgreSQL 16.15 on internal Compose data network
+     (domain authority; no published port)
+
+Authorized database viewer
+  -> Headscale-managed tailnet
+  -> Firebat exact tailnet IP :8978
+  -> authenticated pgAdmin
+  -> ACL-constrained macsad_viewer with read-only session default
+  -> PostgreSQL internal Compose service
 
 LOGOS controller / trusted worker
   -> local CAS on Firebat (content-addressed immutable bytes)
@@ -946,7 +954,7 @@ Optional later public replication
   -> separate public-only R2 bucket/binding
 ```
 
-The preferred admin Worker gateway remains conditional on a Phase 0 fixture. With Static Assets configured, Cloudflare currently does not pass `ctx.access` to user Worker code, so `/api/*` must validate `Cf-Access-Jwt-Assertion` issuer, audience, signature, expiry, and human-versus-service claims. If that fixture fails, the same admin/API contract is served directly through the Access-protected Tunnel. Workers VPC is beta and, for this topology, would still use Tunnel as its private-network on-ramp; it is not part of v1.
+The Firebat environment publishes only `18080` (admin), `18082` (public preview), and `8978` (pgAdmin) on an address verified as Firebat's own tailnet IPv4. It publishes nothing on wildcard, loopback, LAN, public, or Tailscale Funnel interfaces. Cloudflare receives only future release artifacts and sealed public projections; it does not connect to the private development database or determine domain state. Any protected production admin edge requires its own reviewed identity, origin, and negative-test design before it is provisioned.
 
 ### 14.1 Why PostgreSQL, not PostgreSQL plus D1
 
@@ -1039,13 +1047,13 @@ Every schema release ships with:
 - A general provider/model/tool marketplace or mutable tool catalogue; v1 has only workspace-scoped approved tool repositories, immutable promoted revisions, and exact operation manifests.
 - A general change-proposal aggregate; a v1 patch is an artifact and the pull request is an external observation.
 - D1 copies of private state, Durable Object workflow state, or KV-backed permissions.
-- Private-artifact R2 migration and Workers VPC until local CAS or direct Tunnel no longer fits.
+- Private-artifact R2 migration and Workers VPC until the local CAS and private Firebat topology no longer fit.
 - Realtime event fan-out and WebSockets.
 - Public users, comments, votes, funding, or personalized feeds.
 
 ## 17. Deployment parameters that do not alter the model
 
-PostgreSQL 16 on Firebat One, the initial role topology, and the canonical `0001` contract are fixed. The following operational values remain configuration rather than schema design questions:
+PostgreSQL 16.15 in Firebat's internal Compose network, the initial role topology, and the canonical `0001` contract are fixed. The following operational values remain configuration rather than schema design questions:
 
 1. backup target, retention window, and measured threshold for optional public-only R2 replication;
 2. UUID generation strategy at the LOGOS/host boundary;

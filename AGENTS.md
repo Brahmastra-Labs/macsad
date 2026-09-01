@@ -7,6 +7,24 @@ plane.
 
 These rules are requirements, not suggestions.
 
+## Source-of-truth map
+
+- `design_document.md` owns product and authority boundaries.
+- `domain_model.md` and immutable files under `database/migrations/` own the
+  persistence contract; the migration SQL wins if prose drifts.
+- `ops/compose/postgres/010-bootstrap-macsad.sql` owns cluster roles,
+  memberships, login defaults, and empty-volume database creation.
+- `.macsad/toolchains/logos.lock.toml` owns the exact admitted local LOGOS
+  source and runtime identity.
+- `tests/logos-module-manifest.json` owns LOGOS project, module-closure, and
+  exact test inventory.
+- `ops/compose/compose.yaml` owns the Firebat service topology.
+- `GETTING_STARTED.md` is the canonical operator/developer quickstart;
+  `docs/runbooks/` owns routine and recovery procedures.
+
+When two sources disagree, stop at the conflict and repair the contract plus
+its executable check. Do not choose the more convenient interpretation.
+
 ## The working loop
 
 Use RED, GREEN, REFACTOR for every behavior:
@@ -24,6 +42,34 @@ surface the conflict and obtain an explicit decision before changing its RED
 test.
 
 Run one test suite at a time. Do not leave duplicate suites or servers running.
+
+## Firebat Compose runtime
+
+- Compose is the sole authority for long-running MaCSad processes on Firebat.
+  Do not start undocumented background services beside it.
+- Pulled images use reviewed immutable digests. Locally built images are tied
+  to an exact clean MaCSad revision and admitted staged inputs.
+- PostgreSQL is never published on a host port. Application startup never runs
+  migrations; the one-shot migration service applies and verifies them first.
+- Persistent services have named volumes where needed, explicit health checks,
+  restart policy, least privilege, and bounded logs. `depends_on` alone is not
+  readiness evidence.
+- Never mount the Docker socket, private source checkout, repository
+  credentials, or host secrets into an application/viewer container.
+- Never run a volume-destroying reset, destructive restore, or unattended
+  stateful image upgrade without explicit human authorization and recovery
+  evidence.
+
+## Tailnet and operator access
+
+- Admin, public preview, and pgAdmin bind only to an IPv4 address actually
+  reported by Firebat's Tailscale client. Never substitute `0.0.0.0`, the LAN,
+  loopback, Funnel, or an internet-facing proxy.
+- Tailnet reachability is a network boundary, not application authorization.
+  Headscale ACLs and the service's own human login are both required.
+- pgAdmin uses individual MFA-enabled human accounts and the inherited
+  `macsad_reader` database role. It never uses a PostgreSQL superuser, owner,
+  migrator, or runtime application identity.
 
 ## Truth and authority
 
@@ -140,3 +186,15 @@ Work is done only when:
 6. documentation and machine contracts agree;
 7. no secret or machine-specific path entered Git; and
 8. the repository is clean at the pushed commit.
+
+## Repository and documentation discipline
+
+- Inspect status before editing; unrelated changes belong to their author.
+- Keep commits small, coherent, reviewable, and free of generated/runtime
+  state. Do not force-push or rewrite shared history.
+- A command in documentation must run against the checked-in layout. Clearly
+  distinguish intended, configured, and actually verified runtime state.
+- Infrastructure changes require negative exposure checks, clean bootstrap,
+  restart, persistence, and health evidence proportional to the change.
+- Update the owning runbook and machine guardrail in the same change when an
+  operational contract changes.

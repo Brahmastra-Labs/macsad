@@ -1,21 +1,16 @@
 # MaCSad PostgreSQL operations
 
-MaCSad targets native PostgreSQL 16 on Firebat One (Ubuntu 24.04). PostgreSQL is the authority for mutable state; the content-addressed store (CAS) remains the authority for immutable bytes.
+MaCSad is configured to run PostgreSQL 16.15 in the Firebat Docker Compose stack after the one-time host bootstrap. PostgreSQL is the authority for mutable state; the content-addressed store (CAS) remains the authority for immutable bytes. The `postgres` service has no published host port and is reachable only by containers on Compose's internal `data` network.
 
-The first native bootstrap requires one human-entered `sudo` authentication. The scripts never request, generate, print, or store a PostgreSQL password.
+## Firebat lifecycle
 
-## First installation on Firebat One
+The checked-in entrypoint is [`ops/compose/stack.sh`](../ops/compose/stack.sh). Follow [`GETTING_STARTED.md`](../GETTING_STARTED.md) for host enrollment and first start, and use the procedures in [`docs/runbooks/`](../docs/runbooks/) for operation, recovery, and backup.
 
-From the repository root on Firebat One:
+The stack defines four continuously running containers: `postgres`, `logos-gateway`, `logos-sites`, and `pgadmin`. The dedicated `migrate` service waits for PostgreSQL health, applies the checksum-verified migration ledger, verifies the schema, and exits successfully before the application containers start. Application startup never migrates.
 
-```bash
-bash ops/firebat/bootstrap_postgresql.sh
-PGDATABASE=macsad bash database/apply_migrations.sh
-```
+The named `postgres_data` volume preserves database state across container replacement and `stack.sh down`. Compose applies `restart: unless-stopped` to the long-running services; the host bootstrap enables Docker Engine at Firebat boot. PostgreSQL credentials are generated into the ignored, mode-`0700` `.runtime/compose/secrets/` directory, mounted only into named consumers, and never printed or committed. Individual secret files are mode `0444` solely because local Compose file-backed secrets preserve host bind-mount ownership/mode and must be readable by non-root container UIDs.
 
-The bootstrap installs the Ubuntu PostgreSQL 16 packages, creates the `16/main` cluster if needed, binds it to localhost only, configures peer authentication for the local `alejandro` OS account, and enables both PostgreSQL systemd units at boot. The cluster unit is also configured to restart after a failure. Every run ends by checking `is-enabled`, `is-active`, `pg_isready`, the server major version, the listener setting, and the peer rule.
-
-The migration runner uses libpq's normal environment variables and defaults to the local Unix socket and database `macsad`. Keep secrets out of command lines and repository files. In particular, do not put a password in a database URL. Firebat administration uses peer authentication; a future deployed service must receive its own LOGIN role and credential through the deployment secret store, then be granted only the `macsad_app` group role.
+PostgreSQL is not published on a host, LAN, or tailnet socket. Operators use the tailnet-only pgAdmin endpoint on port `8978`, which is preconfigured with the constrained `macsad_viewer` login, or execute reviewed administrative commands inside the `postgres` container. Do not add a `5432` host mapping.
 
 ## Role model
 
@@ -25,9 +20,12 @@ The migration runner uses libpq's normal environment variables and defaults to t
 | `macsad_migrator` | no | Deployment group allowed to `SET ROLE macsad_owner` only while applying reviewed migrations. |
 | `macsad_app` | no | Runtime privilege group for a future service-specific LOGIN role. |
 | `macsad_reader` | no | Read-only reporting privilege group. |
-| `alejandro` | yes | Matches the Firebat OS account through peer auth. It is `NOINHERIT` and must explicitly `SET ROLE` to migrate or administer. |
+| `alejandro` | yes | Passwordless human compatibility/audit identity with a SET-only path through `macsad_migrator`; it is not used by unattended deployment. |
+| `macsad_deployer` | yes | Nonhuman, `NOINHERIT` one-shot migration login. Its SET-only `macsad_migrator → macsad_owner` chain is available only to the migration container. |
+| `macsad_runtime` | yes | Credentialed service login that inherits only `macsad_app`; reserved for the typed LOGOS database adapter. |
+| `macsad_viewer` | yes | Credentialed pgAdmin login that inherits only `macsad_reader`, with a read-only session default and strict timeouts. ACLs still deny writes if a session changes that default. |
 
-`PUBLIC` receives neither database connection/temporary privileges nor access to the `public` schema. The application never owns database objects. Bootstrap is idempotent and tightens these attributes again on every run.
+`PUBLIC` receives neither database connection/temporary privileges nor access to the `public` schema. The application never owns database objects. The PostgreSQL image initializes these roles and grants only when creating an empty data volume; migrations remain safe to rerun against an initialized volume.
 
 ## Greenfield `0001` contract
 
@@ -76,19 +74,17 @@ psql --no-psqlrc --set=ON_ERROR_STOP=1 --dbname=macsad \
 
 ## Backup and restore discipline
 
-A dump is not a backup until a clean restore has passed verification. Before MaCSad contains valuable state, establish a scheduled custom-format `pg_dump`, retain it outside Firebat, and regularly restore it into a separately named scratch database on the same PostgreSQL major version. Run `database/verify.sql`, application-level row-count checks, and a representative read-only query against that restore before declaring it usable. The bootstrap intentionally does not pretend to install a backup service.
+A dump is not a backup until a clean restore has passed verification. Before MaCSad contains valuable state, establish a scheduled custom-format `pg_dump` from the `postgres` container, retain it outside Firebat and outside the `postgres_data` volume, and regularly restore it into an isolated scratch database running the same PostgreSQL major version. Run `database/verify.sql`, application-level row-count checks, and a representative read-only query against that restore before declaring it usable. The backup and restore runbook is the operational authority.
 
 PostgreSQL and the CAS cannot be snapshotted atomically. At a backup boundary, stop new write-producing work (or establish a controller fence), record the highest durable domain-event/outbox positions and a CAS manifest digest, take both snapshots, then resume. Restore succeeds only when every database artifact reference resolves in the restored CAS; unreferenced CAS bytes are harmless, but missing referenced bytes are a failed restore. Never garbage-collect CAS content newer than the oldest retained database backup boundary.
 
 ## Routine checks
 
 ```bash
-systemctl is-enabled postgresql postgresql@16-main
-systemctl is-active postgresql postgresql@16-main
-sudo -u postgres pg_isready -h /var/run/postgresql -d postgres
-PGDATABASE=macsad bash database/apply_migrations.sh
-psql --no-psqlrc --set=ON_ERROR_STOP=1 --dbname=macsad \
-  --file=database/verify.sql
+bash ops/compose/stack.sh status
+bash ops/compose/stack.sh verify
+bash ops/compose/stack.sh logs postgres
+bash ops/compose/stack.sh logs migrate
 ```
 
-`apply_migrations.sh` is safe to rerun: with no pending migrations it only revalidates history and the live schema.
+`stack.sh up` stages reviewed inputs, builds the images, runs the one-shot migrator, starts the four services, and performs endpoint plus schema checks. `stack.sh verify` proves the exact three tailnet bindings, absence of a database host port, admin/public/pgAdmin health, the `macsad_viewer` login and read-only default, schema version, and write denial after explicitly disabling that default. The migration runner remains safe to rerun: with no pending migrations it only revalidates history and the live schema.

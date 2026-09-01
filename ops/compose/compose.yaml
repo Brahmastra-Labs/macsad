@@ -1,0 +1,226 @@
+name: macsad-firebat
+
+services:
+  postgres:
+    image: "macsad/postgres:${MACSAD_SOURCE_REVISION:?run ops/compose/stack.sh configure}"
+    build:
+      context: .
+      dockerfile: images/postgres.Dockerfile
+      additional_contexts:
+        database-source: "${MACSAD_BUILD_DIR:?run ops/compose/stack.sh prepare}/database-source"
+    restart: unless-stopped
+    shm_size: 256mb
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_superuser_password
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256 --encoding=UTF8"
+    secrets:
+      - postgres_superuser_password
+      - macsad_deployer_password
+      - macsad_runtime_password
+      - macsad_viewer_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - data
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready --host=127.0.0.1 --username=postgres --dbname=postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    stop_grace_period: 1m
+
+  migrate:
+    image: "macsad/postgres:${MACSAD_SOURCE_REVISION:?run ops/compose/stack.sh configure}"
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["/opt/macsad/run-migrations.sh"]
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: macsad
+      PGUSER: macsad_deployer
+    secrets:
+      - macsad_deployer_password
+    networks:
+      - data
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  logos-gateway:
+    image: "macsad/logos-gateway:${MACSAD_SOURCE_REVISION:?run ops/compose/stack.sh configure}"
+    build:
+      context: .
+      dockerfile: images/logos-gateway.Dockerfile
+      additional_contexts:
+        gateway-source: "${MACSAD_BUILD_DIR:?run ops/compose/stack.sh prepare}/gateway-source"
+        logos-runtime: "${MACSAD_BUILD_DIR:?run ops/compose/stack.sh prepare}/logos-runtime"
+    restart: unless-stopped
+    init: true
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      HOME: /tmp/macsad-home
+      MACSAD_DATABASE_HOST: postgres
+      MACSAD_DATABASE_PORT: "5432"
+      MACSAD_DATABASE_NAME: macsad
+      MACSAD_DATABASE_USER: macsad_runtime
+    networks:
+      - data
+      - edge
+    ports:
+      - "${MACSAD_BIND_IP:?configure a tailnet address}:18080:8080"
+      - "${MACSAD_BIND_IP:?configure a tailnet address}:18082:8082"
+    expose:
+      - "18081"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -ec
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/18081;
+          printf 'GET /api/v1/health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3;
+          IFS= read -r status <&3;
+          [[ "$${status}" == *" 200 "* ]]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  logos-sites:
+    image: "macsad/logos-sites:${MACSAD_SOURCE_REVISION:?run ops/compose/stack.sh configure}"
+    build:
+      context: .
+      dockerfile: images/logos-sites.Dockerfile
+      additional_contexts:
+        admin-bundle: "${MACSAD_BUILD_DIR:?run ops/compose/stack.sh prepare}/admin-bundle"
+        public-bundle: "${MACSAD_BUILD_DIR:?run ops/compose/stack.sh prepare}/public-bundle"
+    restart: unless-stopped
+    depends_on:
+      logos-gateway:
+        condition: service_healthy
+    network_mode: "service:logos-gateway"
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+      - /var/cache/nginx:size=32m,mode=0755
+      - /var/run:size=4m,mode=0755
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - sh
+        - -ec
+        - >-
+          wget --no-verbose --tries=1 --spider http://127.0.0.1:8080/
+          && wget --no-verbose --tries=1 --spider http://127.0.0.1:8082/
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  pgadmin:
+    image: "dpage/pgadmin4:9.17@sha256:2f4ce946ddf8360680d7eff4eaba1d91859eb6b4003e6623bad5c63a322c2f4d"
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      PGADMIN_DEFAULT_EMAIL: "${PGADMIN_DEFAULT_EMAIL:?configure the pgAdmin owner email}"
+      PGADMIN_DEFAULT_PASSWORD_FILE: /run/secrets/pgadmin_admin_password
+      PGADMIN_DISABLE_POSTFIX: "True"
+      PGADMIN_LISTEN_PORT: "8080"
+      PGADMIN_REPLACE_SERVERS_ON_STARTUP: "True"
+      PGADMIN_CONFIG_SERVER_MODE: "True"
+      PGADMIN_CONFIG_AUTHENTICATION_SOURCES: "['internal']"
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "True"
+      PGADMIN_CONFIG_SESSION_COOKIE_SECURE: "False"
+      PGADMIN_CONFIG_SESSION_COOKIE_SAMESITE: "'Lax'"
+      PGADMIN_CONFIG_MFA_ENABLED: "True"
+      PGADMIN_CONFIG_MFA_FORCE_REGISTRATION: "True"
+      PGADMIN_CONFIG_MFA_SUPPORTED_METHODS: "['authenticator']"
+      PGADMIN_CONFIG_ALLOW_SAVE_PASSWORD: "False"
+      PGADMIN_CONFIG_ENABLE_PSQL: "False"
+      PGADMIN_CONFIG_ENABLE_SERVER_PASS_EXEC_CMD: "False"
+      PGADMIN_CONFIG_SHOW_GRAVATAR_IMAGE: "False"
+      PGADMIN_CONFIG_UPGRADE_CHECK_ENABLED: "False"
+      PGADMIN_CONFIG_LOGIN_BANNER: "'Authorized MaCSad tailnet users only.'"
+    secrets:
+      - pgadmin_admin_password
+    configs:
+      - source: pgadmin_servers
+        target: /pgadmin4/servers.json
+        mode: 0444
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - data
+    ports:
+      - "${MACSAD_BIND_IP:?configure a tailnet address}:8978:8080"
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - /venv/bin/python3
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8080/misc/ping', timeout=3).read()
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+networks:
+  data:
+    internal: true
+  edge:
+    internal: true
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+
+configs:
+  pgadmin_servers:
+    file: ./pgadmin/servers.json
+
+secrets:
+  postgres_superuser_password:
+    file: "${MACSAD_SECRETS_DIR:?run ops/compose/stack.sh configure}/postgres_superuser_password"
+  macsad_deployer_password:
+    file: "${MACSAD_SECRETS_DIR:?run ops/compose/stack.sh configure}/macsad_deployer_password"
+  macsad_runtime_password:
+    file: "${MACSAD_SECRETS_DIR:?run ops/compose/stack.sh configure}/macsad_runtime_password"
+  macsad_viewer_password:
+    file: "${MACSAD_SECRETS_DIR:?run ops/compose/stack.sh configure}/macsad_viewer_password"
+  pgadmin_admin_password:
+    file: "${MACSAD_SECRETS_DIR:?run ops/compose/stack.sh configure}/pgadmin_admin_password"

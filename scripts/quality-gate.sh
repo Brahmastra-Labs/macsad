@@ -39,12 +39,25 @@ require_command xargs
 cd -- "${REPOSITORY_ROOT}"
 
 printf '== Governance and source guardrails ==\n'
+bash -n \
+  scripts/dev.sh \
+  scripts/logos.sh \
+  scripts/quality-gate.sh \
+  database/apply_migrations.sh \
+  ops/compose/stack.sh \
+  ops/compose/run-migrations.sh \
+  ops/compose/postgres/010-bootstrap-macsad.sh \
+  ops/firebat/bootstrap_container_host.sh
 node --check scripts/guardrails.mjs
 node --check scripts/logos-project.mjs
 node --check scripts/verify-logos-tests.mjs
-node --test tests/scripts/logos-project.test.mjs
+node --check scripts/compose-guardrails.mjs
+node --test \
+  tests/scripts/logos-project.test.mjs \
+  tests/scripts/compose-guardrails.test.mjs
 node scripts/guardrails.mjs
 node scripts/logos-project.mjs audit
+node scripts/compose-guardrails.mjs
 
 printf '== Mechanical development adapter tests ==\n'
 python3 -m unittest discover --start-directory host_adapters/tests --pattern 'test_*.py'
@@ -114,12 +127,13 @@ done
 
 printf '%s\n' \
   'Gateway evidence: supported checker + exact pure tests only.' \
-  'Native/static-file serving remains a tracked RED framework gate; production bytes belong to Cloudflare Static Assets.'
+  'Native LOGOS static-file serving remains a tracked RED framework gate; Firebat uses the reviewed static edge and future public delivery uses Cloudflare Static Assets.'
 
 database_evidence='not-run'
 if [[ -n "${DATABASE_URL:-}" ]]; then
   printf '== Fresh PostgreSQL 16 migration and invariant gate ==\n'
-  REPOSITORY_ROOT="${REPOSITORY_ROOT}" DATABASE_URL="${DATABASE_URL}" node --input-type=module <<'NODE'
+  export REPOSITORY_ROOT
+  node --input-type=module <<'NODE'
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 
