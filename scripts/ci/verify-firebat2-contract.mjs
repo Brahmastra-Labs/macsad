@@ -21,6 +21,9 @@ const paths = {
   artifactManifest: "scripts/ci/artifact-manifest.mjs",
   browserProbe: "scripts/ci/browser-probe.mjs",
   actionsAudit: "scripts/ci/audit-github-actions-settings.mjs",
+  workflowLint: "scripts/ci/check-workflows.sh",
+  workflowLintConfig: ".github/actionlint.yaml",
+  qualityGate: "scripts/quality-gate.sh",
 };
 
 export class Firebat2ContractError extends Error {}
@@ -83,6 +86,12 @@ export function verifyFirebat2Contract(overrides = new Map()) {
     "Foundation must fail closed within its fast ten-minute budget",
     /^    timeout-minutes: 10$/m,
   );
+  requirePattern(
+    paths.foundation,
+    foundation,
+    "Foundation must run the pinned workflow semantic linter",
+    /^          bash scripts\/ci\/check-workflows\.sh$/m,
+  );
 
   const ingestion = read(paths.ingestion);
   requirePattern(paths.ingestion, ingestion, "must be triggered only by Foundation workflow_run", /^on:\n  workflow_run:\n    workflows:\n      - Foundation CI\n    types:\n      - completed$/m);
@@ -94,7 +103,8 @@ export function verifyFirebat2Contract(overrides = new Map()) {
     ["successful Foundation conclusion", /FOUNDATION_CONCLUSION.*\n[\s\S]*\[\[ "\$\{FOUNDATION_CONCLUSION\}" == 'success' \]\]/],
     ["push-only Foundation event", /\[\[ "\$\{FOUNDATION_EVENT\}" == 'push' \]\]/],
     ["exact Foundation definition path", /\[\[ "\$\{FOUNDATION_DEFINITION_PATH\}" == '\.github\/workflows\/foundation-ci\.yml' \]\]/],
-    ["exact main-qualified Foundation run path", /\[\[ "\$\{FOUNDATION_RUN_PATH\}" == '\.github\/workflows\/foundation-ci\.yml@main' \]\]/],
+    ["exact Foundation run path", /\[\[ "\$\{FOUNDATION_RUN_PATH\}" == '\.github\/workflows\/foundation-ci\.yml' \]\]/],
+    ["matching Foundation workflow identity", /\[\[ "\$\{FOUNDATION_RUN_WORKFLOW_ID\}" == "\$\{FOUNDATION_DEFINITION_ID\}" \]\]/],
     ["same-repository source", /\[\[ "\$\{CANDIDATE_REPOSITORY\}" == "\$\{EXPECTED_REPOSITORY\}" \]\]/],
     ["default-branch source", /\[\[ "\$\{CANDIDATE_BRANCH\}" == "\$\{DEFAULT_BRANCH\}" \]\]/],
     ["main-only default branch", /\[\[ "\$\{DEFAULT_BRANCH\}" == 'main' \]\]/],
@@ -109,6 +119,12 @@ export function verifyFirebat2Contract(overrides = new Map()) {
   rejectPattern(paths.reusable, reusable, "must not claim branch protection that is not configured", /Protected source ref/);
   requirePattern(paths.reusable, reusable, "must grant contents read only", /^permissions:\n  contents: read$/m);
   rejectPattern(paths.reusable, reusable, "must not reference Actions secrets", /\$\{\{\s*secrets\./);
+  rejectPattern(
+    paths.reusable,
+    reusable,
+    "runner context must not appear in job-level environment variables",
+    /^      [A-Z0-9_]+:.*\$\{\{\s*runner\./m,
+  );
   requirePattern(
     paths.reusable,
     reusable,
@@ -121,7 +137,8 @@ export function verifyFirebat2Contract(overrides = new Map()) {
     ["successful caller", /github\.event\.workflow_run\.conclusion == 'success'/],
     ["push caller", /github\.event\.workflow_run\.event == 'push'/],
     ["Foundation definition path", /github\.event\.workflow\.path == '\.github\/workflows\/foundation-ci\.yml'/],
-    ["main-qualified Foundation run path", /github\.event\.workflow_run\.path == '\.github\/workflows\/foundation-ci\.yml@main'/],
+    ["exact Foundation run path", /github\.event\.workflow_run\.path == '\.github\/workflows\/foundation-ci\.yml'/],
+    ["matching Foundation workflow identity", /github\.event\.workflow_run\.workflow_id == github\.event\.workflow\.id/],
     ["main caller", /github\.event\.workflow_run\.head_branch == 'main'/],
     ["same-repository caller", /github\.event\.workflow_run\.head_repository\.full_name == github\.repository/],
     ["exact event/input SHA", /inputs\.source_sha == github\.event\.workflow_run\.head_sha/],
@@ -134,6 +151,14 @@ export function verifyFirebat2Contract(overrides = new Map()) {
   const expectedLabels = ["self-hosted", "linux", "x64", "firebat2", "macsad-verifier"];
   if (JSON.stringify(actualLabels) !== JSON.stringify(expectedLabels)) {
     failures.push(`${paths.reusable}: runner labels must be exactly ${expectedLabels.join(", ")}`);
+  }
+  const evidenceDirectoryBindings = [
+    ...activeContractText(reusable).matchAll(
+      /^          MACSAD_EVIDENCE_DIR: \$\{\{ runner\.temp \}\}\/macsad-firebat2-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}$/gm,
+    ),
+  ];
+  if (evidenceDirectoryBindings.length !== 3) {
+    failures.push(`${paths.reusable}: evidence directory must be bound in exactly three step environments`);
   }
   for (const [label, pattern] of [
     ["fixed LOGOS workspace", /LOGOS_WORKSPACE: \/opt\/macsad\/toolchains\/logicaffeine-private/],
@@ -150,9 +175,34 @@ export function verifyFirebat2Contract(overrides = new Map()) {
     ["browser/LOGOS harness", /run: \/usr\/bin\/bash scripts\/ci\/firebat2-verify\.sh/],
     ["success-only evidence upload", /if: \$\{\{ success\(\) \}\}/],
     ["SHA-and-attempt artifact identity", /name: firebat2-\$\{\{ inputs\.source_sha \}\}-attempt-\$\{\{ github\.run_attempt \}\}/],
+    ["step-safe evidence upload path", /path: \$\{\{ runner\.temp \}\}\/macsad-firebat2-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/],
     ["pinned upload-artifact v7.0.1", /actions\/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a/],
     ["post-run disposable-guest cleanup", /Remove per-run evidence from the disposable guest/],
   ]) requirePattern(paths.reusable, reusable, `missing ${label}`, pattern);
+
+  const workflowLint = read(paths.workflowLint);
+  for (const [label, pattern] of [
+    ["pinned actionlint release", /ACTIONLINT_VERSION='1\.7\.12'/],
+    ["pinned actionlint archive digest", /ACTIONLINT_ARCHIVE_SHA256='8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'/],
+    ["HTTPS-only download", /--proto '=https'/],
+    ["archive checksum before execution", /sha256sum --check --status/],
+    ["explicit actionlint policy", /-config-file \.github\/actionlint\.yaml/],
+    ["all workflow definitions", /\.github\/workflows\/\*\.yml/],
+  ]) requirePattern(paths.workflowLint, workflowLint, `missing ${label} workflow-lint bumper`, pattern);
+  const workflowLintConfig = read(paths.workflowLintConfig);
+  requirePattern(
+    paths.workflowLintConfig,
+    workflowLintConfig,
+    "must declare only the two Firebat2 custom runner labels",
+    /^self-hosted-runner:\n  labels:\n    - firebat2\n    - macsad-verifier$/m,
+  );
+  const qualityGate = read(paths.qualityGate);
+  requirePattern(
+    paths.qualityGate,
+    qualityGate,
+    "local quality gate must run the workflow semantic linter",
+    /^bash scripts\/ci\/check-workflows\.sh$/m,
+  );
 
   const host = read(paths.host);
   for (const [label, pattern] of [

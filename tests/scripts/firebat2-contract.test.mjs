@@ -42,18 +42,18 @@ test("an inbound webhook trigger is rejected", () => {
   );
 });
 
-test("an unqualified workflow_run path is rejected", () => {
+test("a fabricated qualified workflow_run path is rejected", () => {
   const original = readFileSync(join(repositoryRoot, ...ingestionPath.split("/")), "utf8");
   const unsafe = original.replace(
-    "[[ \"${FOUNDATION_RUN_PATH}\" == '.github/workflows/foundation-ci.yml@main' ]]",
     "[[ \"${FOUNDATION_RUN_PATH}\" == '.github/workflows/foundation-ci.yml' ]]",
+    "[[ \"${FOUNDATION_RUN_PATH}\" == '.github/workflows/foundation-ci.yml@main' ]]",
   );
   assert.notEqual(unsafe, original);
   assert.throws(
     () => verifyFirebat2Contract(new Map([[ingestionPath, unsafe]])),
     (error) =>
       error instanceof Firebat2ContractError &&
-      error.message.includes("missing exact main-qualified Foundation run path admission"),
+      error.message.includes("missing exact Foundation run path admission"),
   );
 });
 
@@ -70,6 +70,22 @@ test("a secret-bearing verifier workflow is rejected", () => {
     () => verifyFirebat2Contract(new Map([[reusablePath, unsafe]])),
     (error) =>
       error instanceof Firebat2ContractError && error.message.includes("must not reference Actions secrets"),
+  );
+});
+
+test("a runner context in the job-level environment is rejected", () => {
+  const original = readFileSync(join(repositoryRoot, ...reusablePath.split("/")), "utf8");
+  const unsafe = original.replace(
+    "      MACSAD_EVENT_SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}",
+    "      MACSAD_EVENT_SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}\n" +
+      "      MACSAD_EVIDENCE_DIR: ${{ runner.temp }}/unsafe",
+  );
+  assert.notEqual(unsafe, original);
+  assert.throws(
+    () => verifyFirebat2Contract(new Map([[reusablePath, unsafe]])),
+    (error) =>
+      error instanceof Firebat2ContractError &&
+      error.message.includes("runner context must not appear in job-level environment variables"),
   );
 });
 
@@ -134,6 +150,12 @@ test("commented-out high-risk bumpers cannot satisfy the contract", async (conte
       path: foundationPath,
       line: "    timeout-minutes: 10",
       failure: "Foundation must fail closed within its fast ten-minute budget",
+    },
+    {
+      name: "Foundation workflow semantic lint",
+      path: foundationPath,
+      line: "          bash scripts/ci/check-workflows.sh",
+      failure: "Foundation must run the pinned workflow semantic linter",
     },
     {
       name: "push-only admission",

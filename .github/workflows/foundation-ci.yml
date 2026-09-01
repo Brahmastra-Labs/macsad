@@ -56,6 +56,7 @@ jobs:
             ops/compose/postgres/010-bootstrap-macsad.sh \
             ops/firebat/bootstrap_container_host.sh \
             ops/firebat2/verify_verifier_host.sh \
+            scripts/ci/check-workflows.sh \
             scripts/ci/browser-smoke.sh \
             scripts/ci/build-logos-evidence.sh \
             scripts/ci/firebat2-verify.sh
@@ -69,6 +70,7 @@ jobs:
           node --check scripts/ci/browser-probe.mjs
           node --check scripts/ci/verify-firebat2-contract.mjs
           python3 -c 'compile(open("scripts/ci/static_server.py", encoding="utf-8").read(), "scripts/ci/static_server.py", "exec")'
+          bash scripts/ci/check-workflows.sh
           node --test \
             tests/scripts/logos-project.test.mjs \
             tests/scripts/logos-source-lint.test.mjs \

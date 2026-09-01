@@ -28,7 +28,8 @@ jobs:
         github.event.workflow_run.conclusion == 'success' &&
         github.event.workflow_run.event == 'push' &&
         github.event.workflow.path == '.github/workflows/foundation-ci.yml' &&
-        github.event.workflow_run.path == '.github/workflows/foundation-ci.yml@main' &&
+        github.event.workflow_run.path == '.github/workflows/foundation-ci.yml' &&
+        github.event.workflow_run.workflow_id == github.event.workflow.id &&
         github.event.workflow_run.head_branch == 'main' &&
         github.event.workflow_run.head_repository.full_name == github.repository &&
         inputs.source_sha == github.event.workflow_run.head_sha
@@ -50,12 +51,13 @@ jobs:
       PATH: /usr/bin:/bin
       MACSAD_EVENT_FOUNDATION_RUN_ID: ${{ github.event.workflow_run.id }}
       MACSAD_EVENT_SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
-      MACSAD_EVIDENCE_DIR: ${{ runner.temp }}/macsad-firebat2-${{ github.run_id }}-${{ github.run_attempt }}
       MACSAD_FOUNDATION_RUN_ID: ${{ inputs.foundation_run_id }}
       MACSAD_SOURCE_REF: ${{ inputs.source_ref }}
       MACSAD_SOURCE_SHA: ${{ inputs.source_sha }}
     steps:
       - name: Prove the dedicated runner boundary before checkout
+        env:
+          MACSAD_EVIDENCE_DIR: ${{ runner.temp }}/macsad-firebat2-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -Eeuo pipefail
           export PATH='/usr/bin:/bin'
@@ -122,6 +124,8 @@ jobs:
         run: /usr/bin/bash ops/firebat2/verify_verifier_host.sh
 
       - name: Exercise LOGOS, deterministic WASM sites, and browser smoke
+        env:
+          MACSAD_EVIDENCE_DIR: ${{ runner.temp }}/macsad-firebat2-${{ github.run_id }}-${{ github.run_attempt }}
         run: /usr/bin/bash scripts/ci/firebat2-verify.sh
 
       - name: Upload bounded verification evidence
@@ -129,7 +133,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: firebat2-${{ inputs.source_sha }}-attempt-${{ github.run_attempt }}
-          path: ${{ env.MACSAD_EVIDENCE_DIR }}
+          path: ${{ runner.temp }}/macsad-firebat2-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: error
           retention-days: 14
           compression-level: 6
@@ -137,6 +141,8 @@ jobs:
 
       - name: Remove per-run evidence from the disposable guest
         if: ${{ always() }}
+        env:
+          MACSAD_EVIDENCE_DIR: ${{ runner.temp }}/macsad-firebat2-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -Eeuo pipefail
           export PATH='/usr/bin:/bin'

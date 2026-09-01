@@ -26,6 +26,7 @@ repeat, catalog, and invariant suite.
 | Gate | What it proves |
 |---|---|
 | Static guardrails | Forbidden source/deployment shapes are absent |
+| Workflow semantic lint | Every GitHub workflow parses under pinned `actionlint` before its queue contract is trusted |
 | LOGOS source-quality gate | Size and copied-behavior thresholds hold; baseline CSS debt did not move, change, or grow |
 | Exact LOGOS test gate | Registered tests ran, none vanished or skipped |
 | Deterministic emit | Two independent bundle emissions match |
@@ -52,9 +53,10 @@ higher gate.
 ## CI
 
 `Foundation CI` runs on every push and pull request without private credentials.
-It keys runs by event and exact SHA without cancelling an older commit, then
-executes the credential-free contracts and a clean PostgreSQL 16 database
-gate under a 10-minute job limit. Its successful push-on-main `workflow_run` is
+It keys runs by event and exact SHA without cancelling an older commit, runs a
+pinned, checksum-verified GitHub workflow semantic linter, then executes the
+credential-free contracts and a clean PostgreSQL 16 database gate under a
+10-minute job limit. Its successful push-on-main `workflow_run` is
 the only automatic Firebat2 ingestion event. Once the currently disabled lane
 is provisioned and explicitly enabled, every distinct successful main SHA is a
 separate queue item; only duplicate pending requests for the same SHA may

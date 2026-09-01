@@ -157,8 +157,8 @@ admission gap above is closed:
    `.github/workflows/firebat2-ingestion.yml` through `workflow_run`;
 2. its GitHub-hosted admission job accepts only a successful `push` run from
    this repository's `main`, produced by the exact
-   `.github/workflows/foundation-ci.yml@main` run path and the matching
-   `.github/workflows/foundation-ci.yml` workflow definition;
+   `.github/workflows/foundation-ci.yml` run and definition paths with matching
+   workflow IDs;
 3. it passes the exact SHA, `refs/heads/main`, and Foundation run ID to the
    reusable `.github/workflows/firebat2-verify.yml`;
 4. GitHub's self-hosted runner service long-polls for a worker in group

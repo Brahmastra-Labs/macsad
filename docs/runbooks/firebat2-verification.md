@@ -39,9 +39,9 @@ there is one path:
 1. `Foundation CI` completes for a push.
 2. `.github/workflows/firebat2-ingestion.yml` receives its `workflow_run`.
 3. A GitHub-hosted admission job requires success, event `push`, repository
-   identity, the exact workflow definition path plus GitHub's exact
-   main-qualified run path (`.github/workflows/foundation-ci.yml@main`),
-   `main`, and the full commit SHA reported by the successful Foundation run.
+   identity, the exact matching workflow IDs, GitHub's exact definition and run
+   path (`.github/workflows/foundation-ci.yml`), `main`, and the full commit SHA
+   reported by the successful Foundation run.
 4. The caller passes that exact SHA and Foundation run ID to the reusable
    `.github/workflows/firebat2-verify.yml`.
 5. A controller must create a fresh KVM/QEMU VM and register a one-job
