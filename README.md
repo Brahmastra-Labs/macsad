@@ -15,7 +15,8 @@ output or successful execution as verified truth.
 
 > **Current status: Sprint 001 foundation.** The repository contains responsive
 > LOGOS admin and public templates, a read-only LOGOS health gateway, the
-> canonical PostgreSQL 16 schema, a private Firebat Compose environment, and
+> canonical PostgreSQL 16 schema, a representative database scenario and narrow
+> operator data-worker contracts, a private Firebat Compose environment, and
 > strict build/test guardrails. Firebat still needs its one-time privileged
 > Docker/Tailscale bootstrap before that environment can run. Domain mutations,
 > PostgreSQL connectivity from LOGOS, agent workers, and live Cloudflare
@@ -30,7 +31,8 @@ output or successful execution as verified truth.
 | `logos/public-site/` | Evidence-first public site, authored in LOGOS |
 | `logos/gateway/` | Narrow LOGOS HTTP boundary; health only in Sprint 001 |
 | `host_adapters/` | Mechanical capabilities that LOGOS cannot yet provide |
-| `database/` | PostgreSQL schema, migrations, verification, and invariant tests |
+| `demo/` | Deterministic, read-only frontend storyboard and local preview contract |
+| `database/` | PostgreSQL schema, migrations, fixtures, verification, recovery workers, and tests |
 | `tests/` | Cross-project test manifests and governance fixtures |
 | `scripts/` | Reproducible local build and quality entry points |
 | `ops/compose/` | Pinned Firebat containers, private networking, and lifecycle harness |
@@ -120,8 +122,13 @@ GET mutations, raw JavaScript, generic CRUD, or a registry crate.
   incomplete.
 - Gateway: `GET /api/v1/health` only; it reports that persistence is not
   connected and mutations are disabled.
+- Local demo adapter: optionally serves the versioned, read-only
+  `GET /api/v1/demo/snapshot` storyboard; it provides no command or persistence
+  behavior and is not part of the production API.
 - Firebat runtime: PostgreSQL, generated LOGOS sites, the health-only LOGOS
   gateway, and read-only pgAdmin are defined as a tailnet-bound Compose stack.
+- Data: a deterministic representative-v1 seed, exact 792-field coverage gate,
+  deterministic operator view export, and scratch-only backup/restore drill.
 
 These templates are visible and testable; they are not presented as CRUD. The
 first mutation slice is the typed append-message command in
@@ -155,6 +162,8 @@ page intentionally does not duplicate those runbooks.
   ERDs, and schema-management policy.
 - [`database/README.md`](database/README.md) — PostgreSQL 16 migration,
   verification, backup, and operations runbook.
+- [`database/DATA_WORKERS.md`](database/DATA_WORKERS.md) — representative data,
+  typed export, CAS, backup/restore, and schema-audit contracts.
 
 ## Core model
 
