@@ -6,6 +6,76 @@ tree `9f251ad38ed49834d8224bbf6b928cb5ba1aa1c5`. The build wrapper rejects
 another commit, tree, Cargo lock, `largo` binary, dirty tracked source, or
 unrelated origin. MaCSad does not install or resolve LOGOS from crates.io.
 
+## Snapshot status
+
+The commit above remains the **admitted baseline** in the MaCSad toolchain
+lock. A newer LOGOS `0.10.1` snapshot is under evaluation, not promoted:
+
+- commit `cf69fb5a93ba801bedd37066170e5012104fbdf8`;
+- tree `e055d8230b43b49561399aa34101cdc02fc05366`;
+- `Cargo.lock` SHA-256
+  `a4822e3424f1310d9367ab024b67dd75f7738e11afb253569d5c3be2250976c9`; and
+- locally built `largo` SHA-256
+  `456b1a39222946177a83fb7fd1b746ad96312986cd77ce0cb811836725523167`.
+
+Current candidate evidence is mixed. The focused `closure_lock` regression is
+green, but `check_deep_regression` is 7/8 with the source-mapped deep-finding
+case red. The upstream `extension` job also failed. These failures block
+promotion, and this ledger update does not change the MaCSad toolchain lock.
+
+Focused Firebat One evidence for this unpromoted snapshot:
+
+- G2: `http_headers_lock` is 16/16 green, while a trusted, overwrite-safe
+  identity boundary is still absent.
+- G3: `postgres_wire` is 33/33 green, but `postgres_protocol` is 11/12; the
+  full SCRAM exchange fails in the VM with `Cannot divide Nothing by Int`.
+- G5: `closure_lock` is 7/7 green.
+- G8: `http_binary_parity_lock` is 2/2 green and `file_io_cross_tier` is 4/4
+  green.
+- G9: `check_deep_regression` is 7/8; the source-mapped deep finding is red.
+- G11: `json_conformance_lock` is 16/16 green, but duplicate object keys are
+  still last-write-wins and bounded typed decoding is absent.
+- G15: `http_workers` is 0/3 because of startup and timeout failures; the
+  production lifecycle contract remains open.
+
+The upstream extension grammar job is red on four documented reactive forms.
+None of these focused results overrides the full promotion rule. Isolated
+diagnostic fixes used while locating two failures were discarded rather than
+included in this documentation-only update.
+
+Status legend:
+
+- **Open** — no candidate yet satisfies the required contract.
+- **Partial upstream** — useful implementation or coverage has landed, but the
+  required contract remains incomplete.
+- **Upstream candidate / promotion pending** — focused upstream work exists,
+  but the promotion rule at the end of this document has not passed.
+- **Closed** — the complete contract passed the promotion rule and was pinned
+  by MaCSad. No gap is closed in the current admitted baseline.
+
+The gap bodies below remain the acceptance requirements and admitted-baseline
+findings. A status records current evidence; it does not weaken or replace any
+required contract.
+
+| Gap | Status |
+| --- | --- |
+| G1 | Open |
+| G2 | Partial upstream |
+| G3 | Partial upstream |
+| G4 | Open |
+| G5 | Upstream candidate / promotion pending |
+| G6 | Open |
+| G7 | Open |
+| G8 | Upstream candidate / promotion pending |
+| G9 | Upstream candidate / promotion pending |
+| G10 | Open |
+| G11 | Partial upstream |
+| G12 | Open |
+| G13 | Open |
+| G14 | Open |
+| G15 | Partial upstream |
+| G16 | Open |
+
 The baseline intentionally uses only framework behavior demonstrated by that
 revision. This is the complete gap register found while building Sprint 001.
 Each gap is a RED capability gate: it must be fixed in the local source,
@@ -21,6 +91,8 @@ application layer: it accepts typed commands, contains no MaCSad policy, and
 must disappear or narrow when LOGOS gains the capability.
 
 ## G1 — typed browser requests
+
+**Status: Open (unchanged).**
 
 Current WASM-DOM exposes `fetchText(url, callback)`, which performs a GET and
 returns only response text.
@@ -53,6 +125,9 @@ remain side-effect free.
 
 ## G2 — header-aware LOGOS HTTP
 
+**Status: Partial upstream.** Header transport has advanced, but the trusted,
+overwrite-safe identity boundary and the full adversarial contract remain open.
+
 Current LOGOS `Request` exposes method, path, and body. It drops parsed headers
 and query values at the language bridge. `Response` cannot set arbitrary headers.
 
@@ -68,6 +143,10 @@ Required contract:
   malformed encodings, and response splitting.
 
 ## G3 — typed PostgreSQL adapter
+
+**Status: Partial upstream.** PostgreSQL and TCP work has landed as useful
+substrate, but it does not yet provide this typed adapter contract. TCP support
+alone does not close G3.
 
 LOGOS has no PostgreSQL client or linked local path dependency implementation.
 
@@ -94,12 +173,18 @@ and compare decisions with LOGOS reference fixtures.
 
 ## G4 — routing and navigation
 
+**Status: Open (unchanged).**
+
 WASM-DOM currently has no native history/location router. The baseline uses
 in-memory navigation. Before deep-linkable admin routes ship, LOGOS needs typed
 location, push/replace navigation, pop-state handling, safe path parameters, and
 browser tests for refresh/back/forward behavior.
 
 ## G5 — complete project assembly
+
+**Status: Upstream candidate / promotion pending.** The focused
+`closure_lock` regression is green locally; the complete promotion rule still
+applies.
 
 `largo test` reads only the entry file. DOM watch mode also reads the entry file
 and watches only its immediate directory. Imported test modules can therefore be
@@ -137,6 +222,8 @@ before the leaf harness can be retired.
 
 ## G6 — honest cross-tier evidence
 
+**Status: Open (unchanged).**
+
 Current `--tiers all` checks that VM computation does not raise a runtime error;
 it does not compare output, state, DOM operations, AOT, or browser execution.
 
@@ -150,6 +237,8 @@ Required evidence:
 
 ## G7 — deterministic static publication
 
+**Status: Open (unchanged).**
+
 WASM-DOM emits an empty host shell and renders client-side. MaCSad's public site
 requires a deterministic static generator that can render sealed publication
 input to complete HTML and assets without browser execution.
@@ -159,6 +248,10 @@ endpoint or credential, fail on unclassified content, and emit a signed manifest
 covering every public byte.
 
 ## G8 — binary HTTP response parity
+
+**Status: Upstream candidate / promotion pending.** Focused binary HTTP and
+file-I/O parity fixtures exist upstream, but they have not passed the complete
+MaCSad promotion rule.
 
 The interpreter honors the byte payload produced by `bytesResponse`, while the
 current native HTTP code generator serializes only the text body. A native
@@ -178,6 +271,10 @@ working native `readText` and `readBytes` bindings.
 
 ## G9 — deep-check stability
 
+**Status: Upstream candidate / promotion pending.** The current local
+`check_deep_regression` run is 7/8: the source-mapped deep-finding case remains
+red, so this candidate cannot be promoted yet.
+
 On the pinned source revision, `largo check --deep` panics in
 `apply_prelude` with the invariant that the prelude must prepend before span
 translation. The supported `largo check --json` path, test runner, and
@@ -189,6 +286,8 @@ that every MaCSad entry file completes without panic and produces stable,
 source-mapped diagnostics.
 
 ## G10 — local dependency linking
+
+**Status: Open (unchanged).**
 
 `Largo.toml` accepts dependency entries using version, path, or Git forms, but
 the inspected project assembly does not link those declarations into the
@@ -212,6 +311,10 @@ largo`, or a floating local checkout as a workaround.
 
 ## G11 — typed structured data
 
+**Status: Partial upstream.** JSON support and conformance coverage have
+advanced, but duplicate-key handling, bounded decoding, and total typed
+decoding do not yet satisfy this contract.
+
 The pure-LOGOS JSON parser on the pinned revision can represent a `JStr`
 variant, but the parser surface inspected for Sprint 001 does not correctly
 cover ordinary JSON objects and strings, negative numbers, decimals, escapes,
@@ -234,6 +337,8 @@ marshal typed ABI values, but LOGOS still validates and decides the command.
 
 ## G12 — genuine engine differentiation
 
+**Status: Open (unchanged).**
+
 The MCP `logos_run` labels `tw` and `vm` are not reliable differential
 evidence. On the inspected source, the two paths can reach the same synchronous
 VM/JIT routine, and that routine may silently fall back to the tree walker.
@@ -251,6 +356,8 @@ Required contract:
 cross-engine parity.
 
 ## G13 — proof semantics and non-vacuity
+
+**Status: Open (unchanged).**
 
 `largo test --prove` proves supported finite `For all` properties. It does not
 prove every `## Theorem`; theorem and axiom declarations are not automatically
@@ -275,6 +382,8 @@ promoted into an unrestricted mathematical proof.
 
 ## G14 — honest external-tool preflights
 
+**Status: Open (unchanged).**
+
 Some upstream Rust tests print `SKIP` and return from an ordinary test when an
 AOT toolchain or Node is unavailable, causing Cargo to report PASS. The
 WASM-DOM emitter test can omit JavaScript syntax validation when Node cannot
@@ -292,6 +401,10 @@ Required contract:
 - CI reports which tiers and external validators actually ran.
 
 ## G15 — production server and lifecycle
+
+**Status: Partial upstream.** TCP and HTTP worker support is useful substrate,
+but readiness, drain, cancellation, bounded backpressure, and the production
+lifecycle contract remain open. TCP support alone does not close G15.
 
 `largo serve --watch` is an interpreter development facility, not production
 evidence. On the pinned revision it does not assemble/watch the same imported
@@ -313,6 +426,8 @@ Sprint 001's LOGOS gateway exposes only an honest read-only health response on
 loopback. It does not claim production CRUD.
 
 ## G16 — nested Component scope attribution
+
+**Status: Open (unchanged).**
 
 The pinned scope checker can attribute a function call inside an imported
 Component body to the entry `main.lg` rather than the Component's defining
