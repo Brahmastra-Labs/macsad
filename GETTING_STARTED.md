@@ -24,6 +24,10 @@ PostgreSQL adapter remain executable framework gaps in `LOGOS_GAPS.md`.
 The live environment is not running until the one-time Docker/Tailscale
 bootstrap and Headscale enrollment below are completed.
 
+This runtime is Firebat One. Firebat2 is the separate test/deploy-pipeline host;
+its checked-in lane remains disabled until its isolated one-job KVM runner
+contract is provisioned and verified.
+
 ## Prerequisites
 
 On Firebat One:
@@ -37,7 +41,7 @@ On Firebat One:
 - approved tailnet identities and ACLs for the intended human operators.
 
 Docker and Tailscale are not application dependencies checked into the repo.
-The Firebat bootstrap installs exact reviewed versions and holds them until a
+The Firebat bootstrap installs exact verified versions and holds them until a
 deliberate upgrade.
 
 ## 1. Inspect the checkout
@@ -111,7 +115,7 @@ make up
 
 1. verifies the exact local LOGOS source, tree, lock file, binary, and tests;
 2. emits deterministic admin/public bundles;
-3. stages only the reviewed bundles, gateway source, migration files, and exact
+3. stages only the verified bundles, gateway source, migration files, and exact
    `largo` binary into the ignored build area;
 4. builds locally tagged images from digest-pinned bases;
 5. starts PostgreSQL and waits for readiness;
@@ -169,9 +173,27 @@ make db-shell           # read-only psql session
 make down               # stop containers; preserve both data volumes
 ```
 
-Use a short branch, commit small coherent changes, and open a pull request. The
-change loop and evidence rules are in `CONTRIBUTING.md`; agent-specific rules
-are canonical in `AGENTS.md`.
+Use a short branch, commit small coherent changes, and open a pull request. Each
+commit is an immutable GitHub queue item. Protected `main` requires the strict
+`Credential-free governance and PostgreSQL 16` check, administrator enforcement,
+and linear history while forbidding force pushes and deletions. It requires zero
+approving reviews and no last-pusher approval, so auto-merge may advance an
+ordinary non-control-plane candidate as soon as its machine gates accept the
+exact SHA. A control-plane candidate is held until an independent policy gate
+evaluates it outside its replacement implementation.
+
+Do not give an agent or Firebat2 verifier credentials to make that automation
+work. When a deployment lane is enabled, a separate least-privileged deploy
+identity must re-verify the admitted main-branch artifact and hash manifest.
+Firebat2 currently stays disabled with `FIREBAT2_ENABLED=false` until its KVM
+image/controller, restricted organization runner group, ephemeral cleanup, and
+runner-management authority are ready. Human action is limited to
+credential/bootstrap work, exceptional destructive actions, incident recovery,
+and explicit editorial research publication; it cannot waive a failed required
+gate.
+
+The change loop and evidence rules are in `CONTRIBUTING.md`; agent-specific
+rules are canonical in `AGENTS.md`.
 
 ## When something fails
 

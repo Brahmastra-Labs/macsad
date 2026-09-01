@@ -8,6 +8,8 @@ Candidate SHA and trusted base SHA:
 
 Granted authority and explicit non-goals:
 
+Requested machine transition (`merge`, `merge + configured deploy`, or `test only`):
+
 ## Contract and design
 
 - [ ] The change has one clear owning layer: LOGOS, PostgreSQL, host adapter, or operations.
@@ -29,11 +31,17 @@ GitHub Foundation CI run:
 
 Firebat2 evidence (`not admitted`, `queued`, `passed`, or `failed`) and exact run/attempt:
 
+Deploy artifact SHA-256/manifest and exact target (`not configured` when absent):
+
 ## Security and operations
 
 - [ ] No secret, credential, private artifact, or machine-specific path is committed.
 - [ ] No wildcard/LAN/public database exposure was introduced.
 - [ ] Failure, denial, replay, and recovery behavior were considered.
 - [ ] Relevant runbooks and `LOGOS_GAPS.md` were updated.
-- [ ] Runner, workflow, admission, test-discovery, or toolchain-control changes are called out for separate human review.
-- [ ] This ordinary change did not fetch, pull, rebuild, or repin `logicaffeine-private`; an authorized promotion instead follows `docs/runbooks/upgrading-logos.md`.
+- [ ] Runner, workflow, admission, test-discovery, guardrail, toolchain-lock, or deployment-policy changes are classified as a control-plane candidate, include positive/adversarial fixtures, and have independent policy-activation evidence from the trusted base or external policy identity.
+- [ ] The candidate does not redefine the authority that admits it; a missing independent control-policy gate is a hold, not an ordinary merge.
+- [ ] No required machine gate is bypassed or made advisory; an ordinary non-control-plane merge and configured deployment need no human approval.
+- [ ] A deploy worker, when applicable, consumes only the exact admitted artifact through a separate least-privileged identity unavailable to agents and test runners.
+- [ ] This ordinary change did not fetch, pull, rebuild, or repin `logicaffeine-private`; a separately scoped promotion instead follows `docs/runbooks/upgrading-logos.md`.
+- [ ] Any credential/bootstrap action, exceptional destructive action, incident recovery, or editorial research publication is identified as an explicit human exception rather than hidden in this ordinary lane.

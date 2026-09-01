@@ -16,6 +16,13 @@ validate Cloudflare Access, or deploy anything. GitHub-hosted runner software is
 also a mutable dependency; the future release gate must pin the application
 toolchain rather than treating the runner image as release evidence.
 
+The checked-in Firebat2 ingestion and reusable verification workflows define
+the next gate, but `FIREBAT2_ENABLED=false` and Firebat2 has no runner,
+disposable VM controller, QEMU tooling, browser, or system Node installation.
+They cannot produce execution evidence today. The capacity-one design and
+activation boundary are in
+[`docs/decisions/0002-firebat2-pipeline.md`](./decisions/0002-firebat2-pipeline.md).
+
 The complete local baseline gate is:
 
 ```bash
@@ -83,8 +90,12 @@ JavaScript or GET-mutation workaround.
 ## Credential and trust boundaries
 
 No credential exists in this repository. When the platform is ready, create
-GitHub environments named `staging` and `production`; require human approval for
-production. Configure values in their narrowest owner:
+GitHub environments named `staging` and `production` to scope credentials,
+deployment history, and concurrency. Ordinary non-control-plane merge and
+application promotion are autonomous after the required deterministic checks;
+neither environment has a routine human approval gate. A control-plane change
+first needs independent machine policy activation. Configure values in their
+narrowest owner:
 
 | Name | Location | Scope |
 |---|---|---|
@@ -94,9 +105,10 @@ production. Configure values in their narrowest owner:
 | Access audience and issuer | Future admin Worker and origin secret stores | Validate the one production admin Access application. |
 | Origin service credential | Future Worker and origin secret stores | Dedicated Worker-to-origin authentication, rotated independently from human Access. |
 
-Agents receive none of these values. A human configures them through GitHub and
-Cloudflare control planes. Logs must redact authentication headers and must not
-serialize the environment.
+Agents and the credential-free verifier receive none of these values. An
+operator bootstraps them through GitHub and Cloudflare control planes; only the
+fixed-function deployer identity may use the narrow environment credential.
+Logs must redact authentication headers and must not serialize the environment.
 
 ## Release gates to add after credentials exist
 
@@ -117,7 +129,8 @@ The future Cloudflare release check must fail fast in this order:
    revision, schema compatibility range, and locked toolchain closure. Deploy
    those same bytes; do not rebuild in the deployment job.
 6. Generate an artifact attestation, deploy a preview/version, execute smoke
-   checks, and only then promote the version after environment approval.
+   checks, and promote automatically only when every environment invariant is
+   green.
 
 The planned workflow actions are exact commits, not tags:
 
@@ -134,13 +147,20 @@ These pins are a reviewed readiness record, not permission to deploy. Recheck
 their upstream provenance and compatibility when the deployment workflow is
 implemented.
 
-## Cloudflare admin release
+## Cloudflare application release
 
-The first deployment workflow will be manual. It must reject missing secrets,
-an unexpected repository/ref/environment, a dirty artifact manifest, an
-unapproved production environment, or a failed Access/origin smoke test before
-promotion. A push may produce a tested candidate, but it does not automatically
-grant production authority.
+The deployment workflow is separate from verification. A credential-free
+Firebat2 verifier emits an exact byte manifest; a fixed-function deployer accepts
+only a successful verifier identity, independently verifies that manifest, and
+promotes those same bytes without checking out or compiling source. It must
+reject missing secrets, an unexpected repository/ref/environment, a dirty
+manifest, an incompatible schema range, or a failed Access/origin smoke test.
+The narrow deploy credential cannot enter the verifier guest.
+
+After those gates exist, a successful `main` candidate may deploy
+automatically. No human approval click is required for an ordinary application
+release. The emergency disable switch, credential rotation, runner-image
+changes, and destructive data recovery remain operator actions.
 
 Cloudflare Access must protect any future admin hostname. Its exact origin
 transport remains a separately reviewed deployment decision. The admin Worker
@@ -154,15 +174,23 @@ manifest. Database rollback is never destructive: releases declare an inclusive
 schema compatibility range and schema fixes roll forward with the next numbered
 migration.
 
+Only after staging and that rollback artifact exist, add two Firebat2 schedules:
+a small black-box smoke against the currently deployed staging manifest at
+off-hour minutes, and a nightly backup restore plus compatibility/rollback drill
+using disposable storage. Both share Firebat2's capacity-one queue. Scheduled
+checks monitor deployed state; they never replace exact per-main-SHA verification
+and never trigger research publication.
+
 ## Public publication
 
-The daily job is not a blind cron deployment. A controller on Firebat creates a
-publication candidate from eligible, closed cases; fails closed on private or
-unclassified content; records the evidence closure; and awaits the required
-seal/editorial decision. A sealed batch dispatches a narrow GitHub workflow with
-its immutable batch and manifest digest. The workflow verifies those exact
-bytes, publishes them to the public Worker, smoke-tests the deployment, and only
-then advances the publication head.
+Application deployment and research publication are different authorities. A
+platform release may be automatic after CI, but it cannot make a finding public.
+The daily research job creates a publication candidate only from eligible,
+closed cases, fails closed on private or unclassified content, records the
+evidence closure, and obtains the domain-policy seal. A sealed batch dispatches
+a narrow GitHub workflow with its immutable batch and manifest digest. The
+workflow verifies those exact bytes, publishes them to the public Worker,
+smoke-tests the deployment, and only then advances the publication head.
 
 An empty or rejected batch publishes nothing and leaves the existing public
 head intact. The public site never calls the admin origin at runtime.
@@ -187,8 +215,9 @@ Do not enable a live workflow until all boxes are backed by executable evidence:
       are green.
 - [ ] Preview, promotion, smoke, rollback, and sealed-publication paths are green
       using non-production test resources.
-- [ ] Branch and environment protections require the complete release check and
-      human production approval.
+- [ ] Branch and environment protections require the complete release check,
+      exact-artifact promotion, and autonomous failure-closed deployment.
 
-Until then, `Foundation CI` is the only checked-in workflow and performs no
-external write.
+Until then, Foundation is the only executable GitHub gate. Firebat2 workflows
+remain disabled, and no checked-in workflow performs an external deployment
+write.
