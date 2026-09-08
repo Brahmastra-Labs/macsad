@@ -72,6 +72,18 @@ CLI SHA256:
 This is build evidence, not promotion, byte-reproducibility, full upstream test
 success or completed website/database integration.
 
+The selected upstream invocation subsequently passed **113 tests, zero failed,
+zero ignored and zero filtered**: `json_typed_decode_lock` 17,
+`postgres_aot_lock` 2, `postgres_protocol` 27 and `postgres_wire` 67. It ran
+September 8, 23:09:25–23:29:59 UTC (20 minutes 34 seconds including compilation),
+offline with two build jobs and serialized tests. Retained log SHA256:
+`0202c0f5fc8121641bffbe2de4edcc427c34472d43578d948616e21e776767a1`.
+The candidate Cargo.lock stayed unchanged and tracked source remained clean.
+The AOT cases test native frame/parser behavior; the protocol exchanges use
+owned loopback mock peers. These results are **not** a native MaCSad/real-PG16
+round trip, full upstream-suite acceptance or evidence that the source findings
+below have been fixed.
+
 Focused evaluation uses an isolated temporary/cache directory and explicitly
 binds `LOGOS_WORKSPACE` to the exact candidate. Otherwise a CLI binary outside
 its source checkout can discover published runtime crates with the same version
@@ -469,6 +481,22 @@ local `target/debug/largo` through `scripts/logos.sh`. Required upstream work:
 
 No MaCSad change may add `## Requires`, a registry LOGOS crate, `cargo install
 largo`, or a floating local checkout as a workaround.
+
+Exact d9 source review adds two generated-native-build requirements, without
+claiming that the older dependency-linking findings still describe every newer
+API. `apps/logicaffeine_cli/src/project/build.rs` stages local runtime sources
+when `LOGOS_WORKSPACE` is bound, but emits semver dependencies such as `tokio =
+"1"` and invokes Cargo without `--locked` (lines 431–549). An offline locked
+compiler build is therefore not proof of a locked generated application.
+Retain the generated Cargo.lock and source/runtime manifest, then require an
+explicit locked-offline rebuild and unchanged identities for application
+evaluation. Do not infer deployment reproducibility from a successful compile.
+
+The same file's stable-artifact copy is best-effort (678–712), while its returned
+binary path does not follow `CARGO_TARGET_DIR`. With a nondefault target directory,
+verify the actual built binary and any copied artifact byte-for-byte; do not trust
+an old stable file or infer that `largo run` will execute the new output. This
+remains a source-scoped G10 handoff, not an upstream patch or a promoted workaround.
 
 ## G11 — typed structured data
 

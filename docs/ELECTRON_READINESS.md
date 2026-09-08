@@ -1693,3 +1693,34 @@ add capability checks, expected versions, idempotency and atomic domain events.
 The fixture's example identity and publication capability are not a working
 authentication system or authority to append messages. A loopback fixture test
 does not establish the multi-user deployment boundary.
+
+### 19.4 Exact candidate build and selected upstream tests completed
+
+The isolated d9 candidate's locked offline CLI build finished successfully in
+179 seconds. Its measured CLI SHA256 is
+`b937f4ea8e8d3f6067bf119add89c3476066924422794da61440cc83d246ad5b`.
+Build-log SHA256:
+`d73e8401bf061dd992e193a23ce94606ec984d533e712ee39fbf2264d6974cfb`.
+
+The one subsequent selected-test invocation ran September 8,
+23:09:25–23:29:59 UTC, offline with two build jobs, serialized tests and an outer
+30-minute bound. All four targets completed: 17 JSON typed-decoding locks,
+two native PostgreSQL frame/parser locks, 27 PostgreSQL protocol cases and
+67 PostgreSQL wire cases. Total: **113 passed, zero failed, zero ignored and
+zero filtered**. Test-log SHA256:
+`0202c0f5fc8121641bffbe2de4edcc427c34472d43578d948616e21e776767a1`.
+Cargo.lock was unchanged; tracked candidate source remained clean.
+
+The network cases used owned loopback mock peers. Do not relabel these as a
+MaCSad read through native LOGOS against real PostgreSQL 16.15. That separate
+application evaluation is next, with a newly owned fixture database, exact
+result shape, alternate-workspace rejection before network effects, bounded
+failure, deterministic output and unchanged data/audit fingerprints. No live
+website integration or candidate promotion is implied by these upstream tests.
+
+The generated native application also needs its own retained dependency lock
+and explicit locked-offline rebuild. A locked compiler alone is insufficient:
+the candidate generator emits semver dependencies and does not itself invoke
+Cargo with `--locked`. The G10 handoff records this distinction and its
+nondefault-target artifact-path hazard. MaCSad does not patch upstream to work
+around either finding.
