@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "release": "2.337.0",
+  "platform": "linux-x64",
+  "archive_name": "actions-runner-linux-x64-2.337.0.tar.gz",
+  "source_url": "https://github.com/actions/runner/releases/download/v2.337.0/actions-runner-linux-x64-2.337.0.tar.gz",
+  "archive_sha256": "70920811a4f8ad4328818682bca5c6469c1c942fab52448868071d0063816613",
+  "guest_archive_path": "/opt/macsad/actions-runner-archives/actions-runner-linux-x64-2.337.0.tar.gz",
+  "guest_install_root": "/opt/macsad/actions-runner",
+  "guest_lock_path": "/etc/macsad/actions-runner-lock.json"
+}

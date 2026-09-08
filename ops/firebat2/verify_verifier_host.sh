@@ -14,7 +14,10 @@ readonly EXPECTED_IMAGE_MARKER='macsad-firebat2-ephemeral-vm-v1'
 readonly RUNNER_ROOT='/opt/macsad/actions-runner'
 readonly RUNNER_LISTENER='/opt/macsad/actions-runner/bin/Runner.Listener'
 readonly RUNNER_SETTINGS='/opt/macsad/actions-runner/.runner'
-readonly EXPECTED_RUNNER_VERSION='2.334.0'
+readonly EXPECTED_RUNNER_VERSION='2.337.0'
+readonly RUNNER_LOCK='/etc/macsad/actions-runner-lock.json'
+readonly RUNNER_ARCHIVE='/opt/macsad/actions-runner-archives/actions-runner-linux-x64-2.337.0.tar.gz'
+readonly EXPECTED_RUNNER_ARCHIVE_SHA256='70920811a4f8ad4328818682bca5c6469c1c942fab52448868071d0063816613'
 readonly VIRT_BIN='/usr/bin/systemd-detect-virt'
 readonly PYTHON_BIN='/usr/bin/python3'
 readonly NODE_BIN='/usr/bin/node'
@@ -66,13 +69,153 @@ root_owned_runner_tree() {
   local unsafe_entry
   unsafe_entry="$(find "${path}" -xdev \
     -path "${diagnostics}" -prune -o \
-    \( -type l -o ! -user root -o -perm /022 -o -writable \) -print -quit)"
+    ! -type l \( ! -user root -o -perm /022 -o -writable \) -print -quit)"
   [[ -z "${unsafe_entry}" ]] ||
-    die "runner distribution contains a link, non-root owner, or group/world-writable entry: ${unsafe_entry}"
+    die "runner distribution contains a non-root owner or writable static entry: ${unsafe_entry}"
   unsafe_entry="$(find "${diagnostics}" -xdev \
     \( -type l -o ! -user "${EXPECTED_USER}" -o -perm /077 \) -print -quit)"
   [[ -z "${unsafe_entry}" ]] ||
     die "runner diagnostics contain a link, foreign owner, or group/world access: ${unsafe_entry}"
+}
+
+verify_runner_release_integrity() {
+  root_owned_read_only_path "${RUNNER_LOCK}"
+  root_owned_read_only_path "${RUNNER_ARCHIVE}"
+  root_owned_read_only_path "${PYTHON_BIN}"
+  [[ -x "${PYTHON_BIN}" ]] || die 'fixed Python executable is unavailable'
+  "${PYTHON_BIN}" - \
+    "${RUNNER_LOCK}" \
+    "${RUNNER_ARCHIVE}" \
+    "${RUNNER_ROOT}" \
+    "${EXPECTED_RUNNER_VERSION}" \
+    "${EXPECTED_RUNNER_ARCHIVE_SHA256}" <<'PY'
+import hashlib
+import json
+import os
+from pathlib import Path, PurePosixPath
+import stat
+import sys
+import tarfile
+
+lock_path, archive_path, runner_root, version, expected_archive_sha256 = sys.argv[1:]
+expected_lock = {
+    "schema_version": 1,
+    "release": version,
+    "platform": "linux-x64",
+    "archive_name": f"actions-runner-linux-x64-{version}.tar.gz",
+    "source_url": (
+        f"https://github.com/actions/runner/releases/download/v{version}/"
+        f"actions-runner-linux-x64-{version}.tar.gz"
+    ),
+    "archive_sha256": expected_archive_sha256,
+    "guest_archive_path": archive_path,
+    "guest_install_root": runner_root,
+    "guest_lock_path": lock_path,
+}
+actual_lock = json.loads(Path(lock_path).read_text(encoding="utf-8"))
+if actual_lock != expected_lock:
+    raise SystemExit("root-owned Actions Runner release lock does not match the admitted contract")
+
+def digest_file(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+actual_archive_sha256 = digest_file(archive_path)
+if actual_archive_sha256 != expected_archive_sha256:
+    raise SystemExit(
+        "Actions Runner archive digest mismatch: "
+        f"expected {expected_archive_sha256}, found {actual_archive_sha256}"
+    )
+
+root = Path(runner_root)
+runtime_files = {".credentials", ".credentials_rsaparams", ".env", ".path", ".runner"}
+runtime_trees = {"_diag"}
+expected = {}
+
+def normalized_member_name(name):
+    while name.startswith("./"):
+        name = name[2:]
+    name = name.rstrip("/")
+    if not name:
+        return "."
+    candidate = PurePosixPath(name)
+    if candidate.is_absolute() or ".." in candidate.parts or str(candidate) != name:
+        raise SystemExit(f"unsafe Actions Runner archive member: {name}")
+    return name
+
+with tarfile.open(archive_path, mode="r:gz") as archive:
+    for member in archive.getmembers():
+        name = normalized_member_name(member.name)
+        if name in expected:
+            raise SystemExit(f"duplicate Actions Runner archive member: {name}")
+        if member.isdir():
+            kind = "directory"
+        elif member.isfile():
+            kind = "file"
+        elif member.issym():
+            kind = "symlink"
+        else:
+            raise SystemExit(f"unsupported Actions Runner archive member type: {name}")
+        expected[name] = (kind, member.mode & 0o7777, member)
+
+    actual_static = {"."}
+    for directory, directory_names, file_names in os.walk(root, topdown=True, followlinks=False):
+        relative_directory = Path(directory).relative_to(root)
+        if relative_directory == Path("."):
+            directory_names[:] = [name for name in directory_names if name not in runtime_trees]
+        for name in directory_names + file_names:
+            relative = (relative_directory / name).as_posix()
+            if relative in runtime_files or relative in runtime_trees:
+                continue
+            actual_static.add(relative)
+
+    expected_names = set(expected)
+    if actual_static != expected_names:
+        missing = sorted(expected_names - actual_static)[:5]
+        extra = sorted(actual_static - expected_names)[:5]
+        raise SystemExit(
+            f"Actions Runner extracted tree membership mismatch; missing={missing}, extra={extra}"
+        )
+
+    for name in sorted(expected_names):
+        kind, expected_mode, member = expected[name]
+        candidate = root if name == "." else root / Path(*PurePosixPath(name).parts)
+        candidate_stat = candidate.lstat()
+        actual_mode = stat.S_IMODE(candidate_stat.st_mode)
+        if actual_mode != expected_mode:
+            raise SystemExit(
+                f"Actions Runner mode mismatch for {name}: expected {expected_mode:o}, found {actual_mode:o}"
+            )
+        if candidate_stat.st_uid != 0:
+            raise SystemExit(f"Actions Runner extracted member is not root-owned: {name}")
+        if kind == "directory":
+            if not stat.S_ISDIR(candidate_stat.st_mode):
+                raise SystemExit(f"Actions Runner directory was replaced: {name}")
+        elif kind == "file":
+            if not stat.S_ISREG(candidate_stat.st_mode):
+                raise SystemExit(f"Actions Runner file was replaced: {name}")
+            source = archive.extractfile(member)
+            if source is None:
+                raise SystemExit(f"Actions Runner archive file cannot be read: {name}")
+            digest = hashlib.sha256()
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(chunk)
+            if digest.hexdigest() != digest_file(candidate):
+                raise SystemExit(f"Actions Runner file digest mismatch: {name}")
+        else:
+            if not stat.S_ISLNK(candidate_stat.st_mode):
+                raise SystemExit(f"Actions Runner symlink was replaced: {name}")
+            if os.readlink(candidate) != member.linkname:
+                raise SystemExit(f"Actions Runner symlink target mismatch: {name}")
+            resolved = (candidate.parent / member.linkname).resolve(strict=False)
+            try:
+                resolved.relative_to(root)
+            except ValueError:
+                raise SystemExit(f"Actions Runner symlink escapes its immutable tree: {name}")
+PY
 }
 
 assert_unprivileged_process() {
@@ -126,13 +269,17 @@ main() {
 
   root_owned_immutable_directory_node '/opt'
   root_owned_immutable_directory_node '/opt/macsad'
+  root_owned_immutable_directory_node '/opt/macsad/actions-runner-archives'
   root_owned_immutable_directory_node '/opt/macsad/toolchains'
+  root_owned_immutable_directory_node '/etc'
+  root_owned_immutable_directory_node '/etc/macsad'
   root_owned_immutable_directory_node '/usr'
   root_owned_immutable_directory_node '/usr/bin'
   [[ -L /bin && "$(realpath -- /bin)" == '/usr/bin' ]] ||
     die '/bin must be the canonical root-owned usrmerge link to /usr/bin'
   root_owned_read_only_path '/bin'
   root_owned_runner_tree "${RUNNER_ROOT}"
+  verify_runner_release_integrity
   root_owned_read_only_path "${RUNNER_LISTENER}"
   [[ -x "${RUNNER_LISTENER}" ]] || die 'GitHub runner listener is not executable'
   local runner_version
@@ -140,8 +287,6 @@ main() {
   [[ "${runner_version}" == "${EXPECTED_RUNNER_VERSION}" ]] ||
     die "GitHub runner must be exactly ${EXPECTED_RUNNER_VERSION}; found ${runner_version}"
   root_owned_read_only_path "${RUNNER_SETTINGS}"
-  root_owned_read_only_path "${PYTHON_BIN}"
-  [[ -x "${PYTHON_BIN}" ]] || die 'fixed Python executable is unavailable'
   "${PYTHON_BIN}" - "${RUNNER_SETTINGS}" <<'PY'
 import json
 import pathlib

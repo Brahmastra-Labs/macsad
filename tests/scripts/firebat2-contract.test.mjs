@@ -13,6 +13,7 @@ const foundationPath = ".github/workflows/foundation-ci.yml";
 const ingestionPath = ".github/workflows/firebat2-ingestion.yml";
 const reusablePath = ".github/workflows/firebat2-verify.yml";
 const hostPath = "ops/firebat2/verify_verifier_host.sh";
+const runnerLockPath = "ops/firebat2/actions-runner-lock.json";
 const actionsAuditPath = "scripts/ci/audit-github-actions-settings.mjs";
 const browserProbePath = "scripts/ci/browser-probe.mjs";
 const verifierHarnessPath = "scripts/ci/firebat2-verify.sh";
@@ -116,6 +117,72 @@ test("a filtered Foundation push trigger is rejected", () => {
     (error) =>
       error instanceof Firebat2ContractError &&
       error.message.includes("Foundation must retain the exact unfiltered push event"),
+  );
+});
+
+test("a runner release lock with a different official archive digest is rejected", () => {
+  const original = readFileSync(join(repositoryRoot, ...runnerLockPath.split("/")), "utf8");
+  const unsafe = original.replace(
+    "70920811a4f8ad4328818682bca5c6469c1c942fab52448868071d0063816613",
+    "0".repeat(64),
+  );
+  assert.notEqual(unsafe, original);
+  assert.throws(
+    () => verifyFirebat2Contract(new Map([[runnerLockPath, unsafe]])),
+    (error) =>
+      error instanceof Firebat2ContractError &&
+      error.message.includes("Actions Runner release lock must remain exact"),
+  );
+});
+
+test("an Actions settings audit that infers state instead of requiring it is rejected", () => {
+  const original = readFileSync(join(repositoryRoot, ...actionsAuditPath.split("/")), "utf8");
+  const unsafe = original.replace("arguments_.length !== 1", "arguments_.length > 1");
+  assert.notEqual(unsafe, original);
+  assert.throws(
+    () => verifyFirebat2Contract(new Map([[actionsAuditPath, unsafe]])),
+    (error) =>
+      error instanceof Firebat2ContractError &&
+      error.message.includes("GitHub Actions read-only audit is incomplete"),
+  );
+});
+
+test("a disabled-ready audit that skips the runner group is rejected", () => {
+  const original = readFileSync(join(repositoryRoot, ...actionsAuditPath.split("/")), "utf8");
+  const unsafe = original.replace(
+    '["disabled-ready", { enabled: false, requireRunnerGroup: true }]',
+    '["disabled-ready", { enabled: false, requireRunnerGroup: false }]',
+  );
+  assert.notEqual(unsafe, original);
+  assert.throws(
+    () => verifyFirebat2Contract(new Map([[actionsAuditPath, unsafe]])),
+    (error) =>
+      error instanceof Firebat2ContractError &&
+      error.message.includes("GitHub Actions read-only audit is incomplete"),
+  );
+});
+
+test("a readiness audit that accepts more than one standby runner is rejected", () => {
+  const original = readFileSync(join(repositoryRoot, ...actionsAuditPath.split("/")), "utf8");
+  const unsafe = original.replace("groupRunners.total_count !== 1", "groupRunners.total_count < 1");
+  assert.notEqual(unsafe, original);
+  assert.throws(
+    () => verifyFirebat2Contract(new Map([[actionsAuditPath, unsafe]])),
+    (error) =>
+      error instanceof Firebat2ContractError &&
+      error.message.includes("GitHub Actions read-only audit is incomplete"),
+  );
+});
+
+test("a readiness audit that accepts a busy standby runner is rejected", () => {
+  const original = readFileSync(join(repositoryRoot, ...actionsAuditPath.split("/")), "utf8");
+  const unsafe = original.replace('runner.busy !== false', 'runner.busy !== true');
+  assert.notEqual(unsafe, original);
+  assert.throws(
+    () => verifyFirebat2Contract(new Map([[actionsAuditPath, unsafe]])),
+    (error) =>
+      error instanceof Firebat2ContractError &&
+      error.message.includes("GitHub Actions read-only audit is incomplete"),
   );
 });
 
@@ -226,8 +293,38 @@ test("commented-out high-risk bumpers cannot satisfy the contract", async (conte
     {
       name: "exact runner version",
       path: hostPath,
-      line: "readonly EXPECTED_RUNNER_VERSION='2.334.0'",
+      line: "readonly EXPECTED_RUNNER_VERSION='2.337.0'",
       failure: "missing exact runner version host bumper",
+    },
+    {
+      name: "exact official runner archive digest",
+      path: hostPath,
+      line: "readonly EXPECTED_RUNNER_ARCHIVE_SHA256='70920811a4f8ad4328818682bca5c6469c1c942fab52448868071d0063816613'",
+      failure: "missing exact runner archive digest host bumper",
+    },
+    {
+      name: "official runner archive checksum",
+      path: hostPath,
+      line: "actual_archive_sha256 = digest_file(archive_path)",
+      failure: "missing official runner archive checksum host bumper",
+    },
+    {
+      name: "runner extracted-tree membership",
+      path: hostPath,
+      line: "    if actual_static != expected_names:",
+      failure: "missing archive manifest extracted-tree membership host bumper",
+    },
+    {
+      name: "runner extracted-file digest",
+      path: hostPath,
+      line: "            if digest.hexdigest() != digest_file(candidate):",
+      failure: "missing archive manifest extracted-file digest host bumper",
+    },
+    {
+      name: "runner release integrity gate invocation",
+      path: hostPath,
+      line: "  verify_runner_release_integrity",
+      failure: "missing runner release integrity gate invocation host bumper",
     },
     {
       name: "host requires a private exact group",
@@ -299,6 +396,42 @@ test("commented-out high-risk bumpers cannot satisfy the contract", async (conte
       name: "runner group is organization-local",
       path: actionsAuditPath,
       line: "    group.inherited !== false ||",
+      failure: "GitHub Actions read-only audit is incomplete",
+    },
+    {
+      name: "explicit Actions expected state",
+      path: actionsAuditPath,
+      line: "  if (arguments_.length !== 1 || !arguments_[0].startsWith(\"--expect-firebat2=\")) {",
+      failure: "GitHub Actions read-only audit is incomplete",
+    },
+    {
+      name: "disabled but runner-ready audit mode",
+      path: actionsAuditPath,
+      line: '["disabled-ready", { enabled: false, requireRunnerGroup: true }],',
+      failure: "GitHub Actions read-only audit is incomplete",
+    },
+    {
+      name: "exactly one standby runner",
+      path: actionsAuditPath,
+      line: "    groupRunners.total_count !== 1 ||",
+      failure: "GitHub Actions read-only audit is incomplete",
+    },
+    {
+      name: "online standby runner",
+      path: actionsAuditPath,
+      line: '    runner.status !== "online" ||',
+      failure: "GitHub Actions read-only audit is incomplete",
+    },
+    {
+      name: "idle standby runner",
+      path: actionsAuditPath,
+      line: "    runner.busy !== false ||",
+      failure: "GitHub Actions read-only audit is incomplete",
+    },
+    {
+      name: "exact standby runner labels",
+      path: actionsAuditPath,
+      line: "    JSON.stringify(actualRunnerLabels) !== JSON.stringify(expectedRunnerLabels)",
       failure: "GitHub Actions read-only audit is incomplete",
     },
     {

@@ -22,7 +22,7 @@ lint-logos:
 	@bash scripts/dev.sh lint-logos
 
 audit-actions:
-	@bash scripts/dev.sh audit-actions
+	@bash scripts/dev.sh audit-actions --expect-firebat2=disabled
 
 configure:
 	@bash scripts/dev.sh configure

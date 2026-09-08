@@ -17,10 +17,12 @@ output or successful execution as verified truth.
 > LOGOS admin and public templates, a read-only LOGOS health gateway, the
 > canonical PostgreSQL 16 schema, a representative database scenario and narrow
 > operator data-worker contracts, a private Firebat Compose environment, and
-> strict build/test guardrails. Firebat still needs its one-time privileged
-> Docker/Tailscale bootstrap before that environment can run. Domain mutations,
-> PostgreSQL connectivity from LOGOS, agent workers, and live Cloudflare
-> deployment are intentionally not claimed yet.
+> strict build/test guardrails. Protected `main` uses a required machine check
+> with no approving-review requirement. Firebat One still needs its one-time
+> privileged Docker/Tailscale bootstrap before that environment can run. Domain
+> mutations, PostgreSQL connectivity from LOGOS, agent workers, the Firebat2
+> ephemeral runner lane, and live Cloudflare deployment are intentionally not
+> claimed yet.
 
 ## Repository map
 
@@ -37,7 +39,7 @@ output or successful execution as verified truth.
 | `scripts/` | Reproducible local build and quality entry points |
 | `ops/compose/` | Pinned Firebat containers, private networking, and lifecycle harness |
 | `ops/firebat/` | One-time Docker/Tailscale host bootstrap |
-| `.github/workflows/` | Protected foundation CI; deployment stays credential-gated |
+| `.github/workflows/` | Protected machine-gated queue and exact-SHA test lanes; deployment remains a separate contract |
 | `docs/runbooks/` | Executable operations, database, testing, and incident procedures |
 | `docs/` | API, deployment, decisions, and bounded sprint records |
 
@@ -152,6 +154,26 @@ Routine commands and recovery procedures live in
 [`docs/runbooks/README.md`](docs/runbooks/README.md). The repository landing
 page intentionally does not duplicate those runbooks.
 
+### Protected automation
+
+Git commits and workflow runs are the durable work queue. `main` requires pull
+requests and the strict `Credential-free governance and PostgreSQL 16` check,
+includes administrators, requires linear history, and forbids force pushes and
+deletions. It requires zero approving reviews and no last-pusher approval;
+auto-merge is enabled so required machine evidence—not a standing human gate—can
+advance an ordinary non-control-plane candidate. Control-plane candidates need
+the separate independent policy-activation gate described in `AGENTS.md`.
+
+Firebat2 is a future isolated verification worker for exact admitted SHAs. It
+remains disabled with `FIREBAT2_ENABLED=false` until the KVM image/controller,
+one-job ephemeral lifecycle, restricted organization runner group, and runner
+administration authority exist. Never register the privileged bare-metal host
+account as a shortcut. When deployment is enabled, a separate least-privileged
+deploy identity will accept only a verified main-branch artifact and hash
+manifest; agents and test runners do not receive that identity or its secrets.
+Humans intervene only for credential/bootstrap work, exceptional destructive
+actions, incident recovery, or explicit editorial research publication.
+
 ## Product and data contracts
 
 - [`design_document.md`](design_document.md) — purpose, authority, workflow,
@@ -177,8 +199,8 @@ page intentionally does not duplicate those runbooks.
 - Director, Investigator, and Verifier roles operate through explicit
   capabilities, assignments, task threads, handoffs, budgets, and decision
   matrices.
-- Creative discovery is separate from independent checking and human
-  publication approval.
+- Creative discovery is separate from independent checking and explicit human
+  editorial research-publication approval; this is not a code-deployment gate.
 - Publication freezes an evidence closure and advances the public head only
   after an exact sealed deployment succeeds.
 

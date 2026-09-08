@@ -16,6 +16,8 @@ These rules are requirements, not suggestions.
   memberships, login defaults, and empty-volume database creation.
 - `.macsad/toolchains/logos.lock.toml` owns the exact admitted local LOGOS
   source and runtime identity.
+- `ops/firebat2/actions-runner-lock.json` owns the retained official Actions
+  Runner archive identity installed in each verifier image.
 - `.macsad/policies/logos-source-quality.json` owns LOGOS module, definition,
   line-length, duplication, unfinished-marker, and exact scoped-style debt limits.
 - `tests/logos-module-manifest.json` owns LOGOS project, module-closure, and
@@ -26,6 +28,10 @@ These rules are requirements, not suggestions.
 - `docs/runbooks/agent-request-intake.md` owns the bounded request-to-evidence
   control flow; `docs/runbooks/upgrading-logos.md` owns LOGOS promotion and
   rollback.
+- The protected GitHub control-policy lane owns permission to change workflow,
+  admission, guardrail, toolchain-lock, and deployment-policy definitions. A
+  candidate may test those files, but it may not authorize its own policy
+  activation.
 
 When two sources disagree, stop at the conflict and repair the contract plus
 its executable check. Do not choose the more convenient interpretation.
@@ -33,10 +39,20 @@ its executable check. Do not choose the more convenient interpretation.
 ## The working loop
 
 Enter every task through `docs/runbooks/agent-request-intake.md`. A pushed
-commit is immutable test input and neither a green check nor Firebat2 evidence
-grants merge, deployment, policy-activation, or toolchain-promotion authority.
-Firebat2 remains disabled while the required ruleset/admission control is a
-visible RED governance gap.
+commit is immutable test input and an entry in the GitHub-backed work queue.
+Ordinary test, merge, and deployment transitions are decided by protected
+machine policy and exact-SHA evidence; they do not wait for a human approval.
+A passing check grants only the narrow transition encoded for that check. It
+never grants credentials, broad operational authority, policy activation,
+toolchain promotion, or editorial research publication.
+
+`main` currently enforces pull requests, the strict required
+`Credential-free governance and PostgreSQL 16` check, administrator inclusion,
+and linear history, with zero required approving reviews and no last-pusher
+approval. Force pushes and deletions are disabled, and repository auto-merge is
+enabled. Preserve those protections. Firebat2 remains disabled because its
+ephemeral KVM guest/controller, restricted runner group, and runner-management
+authority are not ready—not because `main` lacks protection.
 
 Use RED, GREEN, REFACTOR for every behavior:
 
@@ -54,11 +70,27 @@ test.
 
 Run one test suite at a time. Do not leave duplicate suites or servers running.
 
+## Control-plane mutation boundary
+
+An ordinary candidate must not redefine the mechanism that admits it. Changes
+to workflows, admission predicates, test discovery, required guardrails,
+toolchain locks, deployment policy, or this constitution are control-plane
+candidates. They require a separate policy-activation check evaluated from a
+trusted base revision or an external GitHub App/ruleset identity, never from the
+candidate's replacement implementation.
+
+The external control-policy check is not a routine human review gate. It is a
+separate machine authority with a fixed path set, exact base and candidate
+digests, and fail-closed output. Until that authority is installed and required
+by branch policy, a control-plane candidate is held and cannot claim the
+ordinary autonomous merge transition. A local unit test, Foundation result, or
+pull-request checkbox cannot substitute for that missing independent check.
+
 ## Firebat Compose runtime
 
 - Compose is the sole authority for long-running MaCSad processes on Firebat.
   Do not start undocumented background services beside it.
-- Pulled images use reviewed immutable digests. Locally built images are tied
+- Pulled images use verified immutable digests. Locally built images are tied
   to an exact clean MaCSad revision and admitted staged inputs.
 - PostgreSQL is never published on a host port. Application startup never runs
   migrations; the one-shot migration service applies and verifies them first.
@@ -96,6 +128,10 @@ Run one test suite at a time. Do not leave duplicate suites or servers running.
   authoritative domain state.
 - Agents never receive database, GitHub deployment, Cloudflare, OpenRouter, or
   private-repository credentials.
+- Automated deployment uses a separate least-privileged identity that consumes
+  only the exact verified main-branch artifact and its hash manifest. A test
+  runner cannot impersonate or supply inputs to that identity outside the
+  checked-in workflow.
 
 ## Every mutation
 
@@ -129,7 +165,7 @@ The gate must remain strict:
 - Real PostgreSQL integration tests use a fresh PostgreSQL 16 database.
 - Mocked ports require a separate real-adapter contract suite.
 - Generated bundles are built twice and their digests must match.
-- Snapshot changes are reviewed artifacts; CI never blesses snapshots.
+- Snapshot changes are explicit diff artifacts; CI never blesses snapshots.
 - Network is disabled in deterministic tests unless a test declares a live
   capability and the separate live gate is deliberately invoked.
 - Browser tests cover loading, empty, success, validation, stale-version,
@@ -155,7 +191,8 @@ Do not introduce:
 - secrets, tokens, database URLs, private keys, or developer absolute paths in
   Git;
 - test-only production branches or mocks presented as integration evidence;
-- automatic policy activation, self-verification, or automatic publication; or
+- automatic policy activation, self-verification, or automatic editorial
+  research publication; or
 - changes to an applied migration. Add the next numbered migration instead.
 
 ## Current LOGOS boundary
@@ -199,6 +236,14 @@ Work is done only when:
 6. documentation and machine contracts agree;
 7. no secret or machine-specific path entered Git; and
 8. the repository is clean at the pushed commit.
+
+For an ordinary non-control-plane change, the protected queue may merge and
+deploy automatically after every required machine gate accepts the exact
+candidate and the deploy job re-verifies the immutable artifact. Human
+intervention is reserved for
+credential/bootstrap work, exceptional destructive actions, incident recovery,
+or an explicit editorial decision to publish research. A human may not waive a
+failed required gate; repair the candidate or the checked-in contract instead.
 
 ## Repository and documentation discipline
 

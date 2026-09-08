@@ -204,12 +204,13 @@ Rollback commit/lock/bundle:
 Preparer and approving reviewer:
 ```
 
-Promotion requires the repository's reviewed admission controls to be present,
-normal human review, and explicit human approval of this evidence. The current
-private-plan `403` ruleset gap therefore blocks promotion; do not describe the
-present branch as protected. Once that gap is closed, merge the exact reviewed
-lock commit. A successful push, green Firebat2 check, newer version number, or
-locally working binary cannot activate the candidate by itself.
+Promotion requires the repository's active admission controls plus explicit
+toolchain-promotion authority; the ordinary autonomous merge queue does not
+grant that separate capability. `main` protection is active. Firebat2 promotion
+evidence remains unavailable until the disposable runner/controller and the
+organization runner-group permission currently returning HTTP 403 are ready.
+A successful push, green Firebat2 check, newer version number, or locally
+working binary cannot activate the candidate by itself.
 
 After merge, run the normal post-merge gate and authorized Firebat smoke checks
 using the promoted immutable bytes. Record the exact deployed/tested MaCSad and

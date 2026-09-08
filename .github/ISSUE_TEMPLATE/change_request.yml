@@ -81,7 +81,9 @@ body:
       options:
         - label: I understand that ordinary work must not pull, rebuild, or repin `logicaffeine-private`.
           required: true
-        - label: I understand that a green test run is evidence, not merge, deployment, publication, or promotion authority.
+        - label: I understand that a green test run is evidence; only protected machine policy may map that evidence to an ordinary merge or configured deployment, and it never grants publication, policy-activation, or toolchain-promotion authority.
+          required: true
+        - label: I understand that a control-plane change cannot authorize itself and must use the independent policy-activation lane.
           required: true
         - label: I have not included a secret, credential, private artifact, or reusable authentication token in this request.
           required: true
