@@ -1,0 +1,12 @@
+Selected diagnostic excerpt only; not the complete native build log.
+Original log SHA256: 9aaa5ccedbb02fd03fe561d1e91e586de2427f4b7cb6392048814e9e44a36ff1
+Original MaCSad board_database.lg SHA256: b7eeff89eaa7a3b5569f794f9a33e9b449e2c38f566452a40ec8914d64c7a35f
+Private framework paths, compiler-generated Rust, and unrelated warnings are omitted.
+
+error[E0382]: borrow of moved value: `result.rows`
+error[E0382]: borrow of moved value: `workspace`
+
+The LOGOS compiler reported that its generated Rust failed to compile.
+These are native code-generation failures, not successful PostgreSQL results.
+source-history/board_database.codegen-red.lg.txt retains the MaCSad-owned source;
+no generated Rust is included in this proposal.

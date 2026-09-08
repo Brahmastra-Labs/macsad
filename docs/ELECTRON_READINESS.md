@@ -2,11 +2,11 @@
 
 **Internal working reference for Alejandro, Tristen, and authorized datacenter.dev collaborators.**
 
-- Initial assessment date: **2026-09-07**. Implementation update: **2026-09-08**, section 18.
+- Initial assessment date: **2026-09-07**. Implementation and delivery updates: **2026-09-08**, sections 18–19.
 - Wednesday milestone: **2026-09-09**, assuming the coming Wednesday. Exact presentation time and timezone remain to be confirmed.
-- Document status: **initial analysis plus dated implementation evidence; not a release approval or deployment instruction**. Sections 1–17 preserve the original assessment; section 18 supersedes its execution-status statements where explicitly stated.
-- Initial assessment authority was read-only plus this file. The September 8 user request subsequently authorized implementation toward a working demonstration. Source changes, tests and incident recovery under that request are recorded in section 18. No commits, remote pushes, upstream LOGOS changes or new public deployment have been made by this implementation workstream.
-- Canonical intended location: `Brahmastra-Labs/macsad/docs/ELECTRON_READINESS.md`. This copy remains uncommitted. A file in one checkout is not automatically available in GitHub or to every member of datacenter.dev.
+- Document status: **initial analysis plus dated implementation evidence; not a release approval or deployment instruction**. Sections 1–17 preserve the original assessment except explicitly dated amendments; sections 18–19 supersede execution and delivery status where stated.
+- Initial assessment authority was read-only plus this file. Alejandro subsequently authorized implementation, MaCSad commits/pushes and exact d9 LOGOS evaluation in a separate copy. The completed baseline implementation and this report are committed and pushed in [MaCSad PR #6](https://github.com/Brahmastra-Labs/macsad/pull/6). Remote main has not received the PR; the missing independent control-policy check remains a written-policy hold. No upstream LOGOS edit/push, candidate promotion or new deployment occurred.
+- Canonical location: `Brahmastra-Labs/macsad/docs/ELECTRON_READINESS.md`. Repository access remains subject to existing permissions; the report does not grant access to every datacenter.dev member.
 - Proposed document stewards: Alejandro for mathematical/product decisions; Tristen for LOGOS capability status; the MaCSad delivery lead for implementation evidence; the operations owner for deployment/recovery evidence. These are proposed responsibilities, not assignments made by this report.
 
 ## Read this first
@@ -14,6 +14,12 @@
 **There is real implementation, including real LOGOS proof machinery. There is not yet a demonstrated end-to-end, durable, multi-contestant Mathematics Factory in the running MaCSad application.**
 
 The largest difference from the earlier assessment is that LOGOS upstream now contains a September 7 update. It adds substantive web, HTTP, proof-inventory, certificate and tooling capabilities. It must not be judged solely by September 1 bugs. Conversely, it must not be treated as an admitted working release: its observed upstream test jobs are not all green, it has not been integrated into MaCSad, and several old defects and new trust concerns remain.
+
+September 8 implementation evidence now includes a green complete admitted-baseline
+gate, 113 selected tests on exact d9, and seven native MaCSad/real-PostgreSQL-16
+read contracts passing in an isolated fixture evaluation. The running website
+still does not use that new reader. See section 19 and the separately retained
+[candidate evaluation proposal](proposals/LOGOS_D9_WEBSITE_EVALUATION.md).
 
 The immediate goal is a **truthful, bounded Wednesday demonstration with reusable deployment foundations**. The deployment goal is a **recoverable service that accepts real users and real research without losing work, leaking it, spending without bounds, or calling unverified output a proof**. These are distinct acceptance levels.
 
@@ -23,7 +29,7 @@ The long-term ambition is to industrialize a mathematical research workflow acro
 
 1. Name the Wednesday presentation time, delivery lead, and precise demonstration contract.
 2. Select the first mathematical problems and accepted proof/checker family, including a negative control and an inconclusive case.
-3. Name one exact LOGOS candidate and authorize its separate evaluation/promotion process; do not use a floating “latest.”
+3. Complete the separate promotion evidence for authorized candidate `d9baaff5`; evaluation is now authorized and partly green, but promotion is not complete. Do not use a floating “latest.”
 4. Choose the access model: a trusted shared team, isolated deployments per competing team, or a deliberate multi-tenant expansion.
 5. Name the operator with host, Headscale, runner-management, backup and deployment authority.
 
@@ -235,6 +241,15 @@ Do not publish one undifferentiated “all bugs” number. Scope and evidence ma
 - No claim is made that these exhaust all defects. Full latest-source testing, hostile-certificate testing, real PG integration and load testing were not performed.
 
 Priority definitions: **P0** blocks accepting the affected trust claim; **P1** blocks reliable use of the affected demo/deployment path; **P2** is narrower or example-only but must be resolved before reuse. Priority is not the same as reproduction confidence.
+
+**September 8 counting amendment:** [LOGOS_GAPS.md](../LOGOS_GAPS.md) adds F10–F13:
+two source findings (native global TCP locking and MaCSad title UTF-8 rejection)
+and two experimentally observed native compiler failures (value moves and a
+temporary-borrow lifetime). Thus the additional technical-finding inventory is
+now **13 IDs**, not nine. F12 has two observed failing constructs but remains
+one finding. The tested application workarounds do not close the upstream
+defects. Do not add these IDs to capability-family, risk, test-failure or trust
+concern counts to manufacture an overall bug total.
 
 ### 5.2 Earlier defects re-evaluated against `d9baaff5...`
 
@@ -1724,3 +1739,78 @@ the candidate generator emits semver dependencies and does not itself invoke
 Cargo with `--locked`. The G10 handoff records this distinction and its
 nondefault-target artifact-path hazard. MaCSad does not patch upstream to work
 around either finding.
+
+### 19.5 Native LOGOS / PostgreSQL 16 read slice — RED to GREEN
+
+The candidate-only program now reads the existing `macsad.case_board_v` through
+LOGOS `pgQueryParams`, without a new schema field or table. It accepts only the
+synthetic fixture workspace, the viewer role and a canonical loopback test URL.
+It rechecks schema 1, PostgreSQL 16, the actual connected role and its read-only
+default before querying. Each connection is owned by one bounded process and
+closed after the returned query outcome; internal upstream authentication-error
+cleanup and native concurrency defects are not thereby repaired.
+The disposable viewer connection uses test-only loopback `trust` authentication;
+these results are not credentialed SCRAM, TLS or human-login acceptance.
+
+Pure result-shape TDD: the absent validator first failed all five tests. The
+minimal implementation then passed the unchanged five tests and one finite
+property on both d9 and the admitted 132 baseline. The candidate additionally
+reported five VM agreements. These are shape properties, not mathematical
+proofs or end-to-end authorization tests.
+
+Real database TDD: a native placeholder returning only `error` passed rejection
+checks but failed exact-case output and the positive network-connection witness.
+The final seven-method contract retained those two failures before the working
+reader was accepted. The implementation then encountered two distinct compiler
+defects, F12 and F13, recorded with failed-build hashes in the gap ledger. Small
+MaCSad source workarounds were applied; upstream code was not modified.
+
+The final native build passed both the strict candidate wrapper and an explicit
+`cargo build --locked --offline --jobs 2` on the retained generated closure.
+Generated-source and Cargo.lock manifests matched before/after that rebuild;
+the actual and stable-copied executables had identical bytes, also unchanged by
+the locked rebuild. This establishes that particular artifact, not general
+reproducible-build or promotion approval.
+
+- Native executable SHA256:
+  `a766b4393255e3b48daf4280d857ba0ce9e9bed1b9e74adb4ce980a30c4dd860`.
+- Generated Cargo.lock SHA256:
+  `1da98e786e9723e5592fe52a70d089446e4bd2a02100fbbbc9c28ceb11a5a9bf`.
+- Retained build artifact identity: `macsad-board-build.xldyomCj`.
+
+**All seven real-PG16 methods passed in 7.877 seconds, zero skipped**. Together
+they made 22 native CLI invocations, including two identical reads of the three
+closed seeded cases. Coverage includes actual database version/role/ACL/defaults;
+exact deterministic wire output; foreign workspace; 13 disallowed URL forms;
+four invalid argument counts; requested TLS options rejected rather than ignored;
+and an owned silent peer that did receive a connection but returned a bounded
+error. No-connect witnesses apply to the owned endpoint; the alternate-loopback
+and `localhost` rejection cases do not prove absence of networking elsewhere.
+
+Every method compared complete counts and row fingerprints for all 47 domain
+and metadata tables before/after, including audit data. No changes were detected.
+The fresh fixture cluster was stopped and its PID file was absent. Existing
+recovered services were not targeted or changed by the evaluation.
+
+- Seven-method RED log SHA256:
+  `1dbf0ff81184d7ff6673f1f381e6ac59c3017682cba9b60548ab8140d04f025a`.
+- GREEN log SHA256:
+  `49fb899168ce9a793d18476e349831fd2e540e911578c0eec1b020ed24687658`.
+- GREEN source-manifest SHA256, identical before/after:
+  `86e2311706fce16e8365ab32c90cd078b54f63bd12fe098991af3084cd0a8516`.
+- Retained database-test artifact identity: `macsad-board-pg16.CfZkkhCf`.
+
+Durable review inputs and sanitized observations are kept as an **inert,
+not-applied candidate evaluation proposal**. They are not an unregistered
+executable path around the admitted toolchain or test inventory. The canonical
+gateway, its imports and the admitted 132 lock remain unchanged. A real
+candidate/promotion PR still needs the application call graph, exact test
+registration, complete candidate gate and independent activation evidence.
+
+Remaining website work is concrete: connect an authenticated server-owned
+workspace to the read route, validate correlated HTTP status/headers/bytes,
+apply the existing board-envelope and row decoder, render actual cases, and
+exercise browser refresh/focus/error behavior. CLI stdout includes its terminal
+line delimiter; it must not be mistaken for an already validated HTTP body.
+No HTTP/browser integration, durable write, AI formalization or portable proof
+certificate is claimed by this read-only database result.

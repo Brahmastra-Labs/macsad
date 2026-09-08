@@ -1,0 +1,9 @@
+Selected diagnostic excerpt only; not the complete native build log.
+Original log SHA256: 0d35a7c7944a849ac1cbfad077985993d31419419862dc39ee1df3ba4c797e39
+Original MaCSad board_database.lg SHA256: 4b4c10d4bb22d5437bb25d117aa44bc9b2bb87d01c097e107ef1ef566de5f5c5
+Private framework paths, compiler-generated Rust, and unrelated warnings are omitted.
+
+error[E0597]: `parameters` does not live long enough
+
+This attempt did not produce an accepted native executable. Its source is retained
+as source-history/board_database.borrow-red.lg.txt. No generated Rust is included.

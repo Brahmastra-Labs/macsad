@@ -89,9 +89,18 @@ binds `LOGOS_WORKSPACE` to the exact candidate. Otherwise a CLI binary outside
 its source checkout can discover published runtime crates with the same version
 string. MaCSad must retain the exact source/runtime closure, not only a binary.
 
-Two additional source findings are tracked below; they are not runtime
-reproductions or closures of the historical G1–G17 contracts. Existing timeout,
-socket-cleanup, TLS and JSON-number-token issues are not counted again.
+F10 and F11 below are additional source findings; neither is a runtime
+reproduction or closure of the historical G1–G17 contracts. F12 and F13 are later
+observed native compilation failures. Existing timeout, socket-cleanup, TLS and
+JSON-number-token issues are not counted again.
+
+The subsequent MaCSad candidate-only read experiment passed all seven methods
+against a newly owned PostgreSQL 16.15 fixture cluster, using an actually native
+LOGOS executable and the existing schema. It returned three closed cases twice
+identically and preserved all 47 table fingerprints. This narrows the G3/G15
+application-read uncertainty; it does not promote d9 or connect the live website.
+The full TDD sequence and exact evidence are in readiness section 19.5 and the
+[inert evaluation proposal](docs/proposals/LOGOS_D9_WEBSITE_EVALUATION.md).
 
 ### F10 — native TCP registry serializes blocking I/O — P1
 
@@ -125,6 +134,55 @@ candidate; that function is absent from the admitted baseline. The proof-worker
 prevalidation already implemented does not automatically protect this separate
 admin call site. Do not copy policy across projects or weaken the module-closure
 guard to conceal the missing reuse boundary.
+
+### F12 — native ownership emission loses reused values — P1
+
+Owner: LOGOS upstream; MaCSad documents only. The exact d9 native MaCSad board
+build failed with two Rust `E0382` errors after accepting the LOGOS source:
+
+- Passing `result's rows` to the shape validator emitted a move of the record
+  field, then attempted to iterate that same field again.
+- Passing `[workspace]` to `pgQueryParams` emitted `vec![workspace]`, then
+  attempted to reuse the moved string when serializing the result.
+
+Count this as one ownership-code-generation finding with two observed cases,
+not two failures of PostgreSQL itself. The CLI explicitly classified the
+generated-Rust failure as a compiler bug. The failed build's retained log
+SHA256 is
+`9aaa5ccedbb02fd03fe561d1e91e586de2427f4b7cb6392048814e9e44a36ff1`.
+The existing stable executable was not accepted or run as a successful build.
+
+The candidate-only MaCSad workaround binds rows to a named local before
+validation/reuse and constructs a fresh interpolated parameter string. Native
+rebuild and real-PG contract results must be recorded separately; merely
+rewriting the application source does not close F12. Upstream should add
+native regression cases for reused record fields and sequence-literal elements
+and compare behavior with interpreter/VM tiers. No upstream patch was made.
+
+### F13 — terminal Inspect retains a temporary sequence borrow — P1
+
+Owner: LOGOS upstream; MaCSad documents only. After the two F12 move sites were
+rewritten, the next exact d9 native build failed with Rust `E0597`: a named
+parameter sequence did not live long enough. The generated terminal `match`
+for `Inspect pgQueryParams(connection, sql, parameters)` kept the temporary
+`parameters.borrow()` guard alive past the local's destruction. Both LOGOS
+branches returned; the generated Rust still failed lifetime checking.
+
+This is a separately observed borrow-lifetime failure, not a database error or
+a repeated count of the earlier moves. Retained build-log SHA256:
+`0d35a7c7944a849ac1cbfad077985993d31419419862dc39ee1df3ba4c797e39`.
+The candidate-only workaround evaluates the query into a named result before
+`Inspect`, ending the argument borrow at the preceding statement. Record the
+subsequent native build and real-PG evidence before claiming the workaround
+works. Upstream needs a focused terminal-inspection/native borrow regression;
+MaCSad made no upstream edit.
+
+F12/F13 workaround outcome: the final native artifact passed its explicit
+locked-offline rebuild and all seven real-PG methods. Executable SHA256:
+`a766b4393255e3b48daf4280d857ba0ce9e9bed1b9e74adb4ce980a30c4dd860`.
+That accepts the bounded application workaround in this isolated evaluation,
+not the unfixed original source forms or general upstream ownership/lifetime
+correctness. Both upstream findings remain open.
 
 ## Historical candidate snapshot status
 

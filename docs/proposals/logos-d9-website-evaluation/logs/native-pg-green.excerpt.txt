@@ -1,0 +1,18 @@
+Selected test-result excerpt; not a full build, deployment, or promotion receipt.
+Original log SHA256: 49fb899168ce9a793d18476e349831fd2e540e911578c0eec1b020ed24687658
+Original source manifest SHA256: 86e2311706fce16e8365ab32c90cd078b54f63bd12fe098991af3084cd0a8516
+Original evidence root: /tmp/macsad-board-pg16.CfZkkhCf
+The complete small test-result section follows; the enclosing driver logs are not included.
+
+test_alternate_workspace_is_rejected_before_any_tcp_connection (host_adapters.tests.board_pg_contract.NativePostgreSQLBoardContract.test_alternate_workspace_is_rejected_before_any_tcp_connection) ... ok
+test_disallowed_database_urls_return_error (host_adapters.tests.board_pg_contract.NativePostgreSQLBoardContract.test_disallowed_database_urls_return_error) ... ok
+test_missing_or_extra_arguments_are_rejected_before_tcp_connection (host_adapters.tests.board_pg_contract.NativePostgreSQLBoardContract.test_missing_or_extra_arguments_are_rejected_before_tcp_connection) ... ok
+test_native_read_returns_exact_three_closed_cases_and_is_deterministic (host_adapters.tests.board_pg_contract.NativePostgreSQLBoardContract.test_native_read_returns_exact_three_closed_cases_and_is_deterministic) ... ok
+test_pg16_schema_one_and_restricted_viewer_are_real (host_adapters.tests.board_pg_contract.NativePostgreSQLBoardContract.test_pg16_schema_one_and_restricted_viewer_are_real) ... ok
+test_url_query_options_are_rejected_before_any_tcp_connection (host_adapters.tests.board_pg_contract.NativePostgreSQLBoardContract.test_url_query_options_are_rejected_before_any_tcp_connection) ... ok
+test_valid_workspace_connects_but_silent_database_peer_returns_error (host_adapters.tests.board_pg_contract.NativePostgreSQLBoardContract.test_valid_workspace_connects_but_silent_database_peer_returns_error) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 7.877s
+
+OK

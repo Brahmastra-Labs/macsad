@@ -1,0 +1,317 @@
+{
+  "format": "macsad-candidate-evaluation-archive/1",
+  "purpose": "Inert proposal data only. This record format is not an installed admission or deployment contract.",
+  "status": "evaluated-in-isolation-not-admitted",
+  "macsadBaseCommit": "13f503a6b70708c1d0b5026aa76b5b98628d6025",
+  "evaluationRoot": "/tmp/macsad-website-d9-eval.PMwbZo5u",
+  "admitted": {
+    "commit": "132dc5346728e2d204df798dd7544e6405306a2c",
+    "tree": "9f251ad38ed49834d8224bbf6b928cb5ba1aa1c5",
+    "cargoLockSha256": "e92ad213de9cb29e8956baf82701d27a244a8cfb6a23d08380532bdbe2ed3148",
+    "binarySha256": "8c75eeb6180a7f4692ad5abba32b562d4a1cbc08792da95ae58770d4a3cc77f1",
+    "activeRegisteredApplicationTreeChangedByArchive": false
+  },
+  "candidate": {
+    "commit": "d9baaff5b6749c961a13cd2eca427434c5959b17",
+    "tree": "34f712714619bc9049a4dc9c1d22962dd67d63c4",
+    "cargoLockSha256": "341398289909e4b5c85520e1554308bb285f081cae3935147efb282ab4bf23c2",
+    "binarySha256": "b937f4ea8e8d3f6067bf119add89c3476066924422794da61440cc83d246ad5b",
+    "isolatedProposedLockSha256": "349476978edc96f7f79752dae700ca25312dd791684aea88bf326561bf7f3e8a",
+    "promoted": false
+  },
+  "patch": {
+    "path": "application.patch",
+    "sha256": "158fc8494bd3beaaaf6c24eb1b5956fd6ee196b8e9b917b262abd8427af4e8f0",
+    "appliedToMain": false,
+    "automaticExecution": false,
+    "completeRunnableDistribution": false,
+    "scope": "Exact final MaCSad-owned isolated native source, Python acceptance test, static PG fixtures and proposed candidate lock; private path-bearing driver bytes are retained separately by hash, not embedded.",
+    "sourceFiles": [
+      {
+        "path": "logos/gateway/target/board-read-contract/Largo.toml",
+        "bytes": 125,
+        "sha256": "48431d7bb8f1392c3d11f60a37f523bab777d621be3dcbd815f4a3a170363805"
+      },
+      {
+        "path": "logos/gateway/target/board-read-contract/src/board_database.lg",
+        "bytes": 4853,
+        "sha256": "a724c6837638c679975f3e59183160d5b690af626511868d882c0285629b29f1"
+      },
+      {
+        "path": "logos/gateway/target/board-read-contract/src/board_read_driver.lg",
+        "bytes": 1796,
+        "sha256": "0c612558077d8085e44a0248eb73b93500ed65d49f7d32c6232ed5b7209bac33"
+      },
+      {
+        "path": "logos/gateway/target/board-read-contract/src/main.lg",
+        "bytes": 477,
+        "sha256": "ee7c67f45663192450db9c73d54e1964c75163c28d824385ef93ee97292b860e"
+      },
+      {
+        "path": "logos/gateway/target/board-read-contract/src/board_result_shape.lg",
+        "bytes": 6134,
+        "sha256": "e539df63f12bfdab1221a6f58dc379624bbbbef0f604b67ff86fb0b11625577b"
+      },
+      {
+        "path": "logos/gateway/target/board-read-contract/src/schema_probe_policy.lg",
+        "sha256": "f371f11bbba7d05d277e862def0582663c58d9aaba5c55e0ded78ebbb13067af"
+      },
+      {
+        "path": "host_adapters/tests/board_pg_contract.py",
+        "bytes": 12944,
+        "sha256": "9a70747da838dc11f8b91d15ab25f9f0b211803df7c6ddb57facbd3202d7ffe4"
+      },
+      {
+        "path": "host_adapters/tests/fixtures/native_board_pg_hba.conf",
+        "bytes": 199,
+        "sha256": "524c9c00ae221037e9fbad0dda4f841cac6e0f69c740cf8144f112e70bba6530"
+      },
+      {
+        "path": "host_adapters/tests/fixtures/native_board_snapshot.sql",
+        "bytes": 841,
+        "sha256": "9bc59f83932b170256d976f045b34e3b0e5bd70b1677373968f341cbd783181e"
+      }
+    ]
+  },
+  "observations": [
+    {
+      "name": "shape-red",
+      "sourcePath": "/tmp/macsad-website-d9-eval.PMwbZo5u/logos/gateway/target/board-shape-contract/src/main.lg",
+      "sourceSha256": "f87ebca34e3a9a0a8926baebdaa2a19dc056f26cd4daacb0c405ae41139ec9d6",
+      "testArguments": [
+        "test",
+        "--quiet",
+        "--seed",
+        "7",
+        "--format",
+        "json",
+        "--prove",
+        "--tiers",
+        "all",
+        "--color",
+        "never"
+      ],
+      "passed": 0,
+      "failed": 5,
+      "skipped": 0,
+      "properties": 1,
+      "proven": 0,
+      "reason": "Unknown function: boardResultShapeAccepted",
+      "log": "logs/shape-red.excerpt.json"
+    },
+    {
+      "name": "shape-candidate-green",
+      "sourcePath": "/tmp/macsad-website-d9-eval.PMwbZo5u/logos/gateway/target/board-shape-contract/src/main.lg",
+      "sourceSha256": "e539df63f12bfdab1221a6f58dc379624bbbbef0f604b67ff86fb0b11625577b",
+      "sameTestCasesAsRed": true,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "properties": 1,
+      "proven": 1,
+      "interpreterTests": 5,
+      "vmAgreed": 5,
+      "vmRefused": 0,
+      "vmDiverged": 0,
+      "log": "logs/shape-candidate-green.excerpt.json"
+    },
+    {
+      "name": "shape-admitted-green",
+      "sourceSha256": "e539df63f12bfdab1221a6f58dc379624bbbbef0f604b67ff86fb0b11625577b",
+      "sameTestCasesAsRed": true,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "properties": 1,
+      "proven": 1,
+      "vmCoverage": "not separately reported by admitted output",
+      "log": "logs/shape-admitted-green.excerpt.json"
+    },
+    {
+      "name": "native-pg-red",
+      "evidenceRoot": "/tmp/macsad-board-pg16.vAo558M1",
+      "sourceManifest": "source-manifests/native-red.sha256",
+      "sourceManifestSha256": "aadec2cecec6e62bc2f56dbfa79b777994317a8c9d1a95c1516d0bd4a8bd4bf8",
+      "originalLogSha256": "1dbf0ff81184d7ff6673f1f381e6ac59c3017682cba9b60548ab8140d04f025a",
+      "entrySourceSha256": "44f0b32bff9668b676eaa1ae35917e5e4dc80d3590046af77b3743cb469f1a87",
+      "methods": 7,
+      "passed": 5,
+      "failed": 2,
+      "seconds": 2.582,
+      "reason": "Stub returned error instead of board and did not connect to the controlled silent peer.",
+      "log": "logs/native-pg-red.excerpt.txt"
+    },
+    {
+      "name": "native-codegen-red",
+      "sourceSha256": "b7eeff89eaa7a3b5569f794f9a33e9b449e2c38f566452a40ec8914d64c7a35f",
+      "originalLogSha256": "9aaa5ccedbb02fd03fe561d1e91e586de2427f4b7cb6392048814e9e44a36ff1",
+      "errors": [
+        "E0382 result.rows moved before reuse",
+        "E0382 workspace moved before reuse"
+      ],
+      "log": "logs/native-codegen-red.excerpt.txt"
+    },
+    {
+      "name": "native-borrow-red",
+      "sourceSha256": "4b4c10d4bb22d5437bb25d117aa44bc9b2bb87d01c097e107ef1ef566de5f5c5",
+      "originalLogSha256": "0d35a7c7944a849ac1cbfad077985993d31419419862dc39ee1df3ba4c797e39",
+      "errors": [
+        "E0597 parameters does not live long enough"
+      ],
+      "log": "logs/native-borrow-red.excerpt.txt"
+    },
+    {
+      "name": "native-build-green",
+      "evidenceRoot": "/tmp/macsad-board-build.xldyomCj",
+      "actualAndStableBinarySha256": "a766b4393255e3b48daf4280d857ba0ce9e9bed1b9e74adb4ce980a30c4dd860",
+      "generatedCargoLockSha256": "1da98e786e9723e5592fe52a70d089446e4bd2a02100fbbbc9c28ceb11a5a9bf",
+      "artifactManifestSha256": "6edb736b398735c1d59aebbf6817b874f21164f0e1a9ea8a021a1445306bd180",
+      "evidenceManifestSha256": "f51d167ce8d1ca047fc52141ccb05cf57427627f7ecf4a9710b314bfebdbdd64",
+      "generatedSourceManifestSha256": "4a839ed9fd1929eeadc6c6195ee02b4c86698d959cca3f065a57a343ff15238f",
+      "verification": "Strict-wrapper build and explicit locked-offline rebuild completed; stable/actual artifact bytes matched. Copied artifact and evidence manifests were hash-verified locally within this task. Generated/private source and binaries are excluded."
+    },
+    {
+      "name": "native-pg-green",
+      "evidenceRoot": "/tmp/macsad-board-pg16.CfZkkhCf",
+      "sourceManifest": "source-manifests/native-green.sha256",
+      "sourceManifestSha256": "86e2311706fce16e8365ab32c90cd078b54f63bd12fe098991af3084cd0a8516",
+      "originalLogSha256": "49fb899168ce9a793d18476e349831fd2e540e911578c0eec1b020ed24687658",
+      "testContractSha256": "9a70747da838dc11f8b91d15ab25f9f0b211803df7c6ddb57facbd3202d7ffe4",
+      "sameSevenMethodsAsRed": true,
+      "methods": 7,
+      "passed": 7,
+      "failed": 0,
+      "seconds": 7.877,
+      "sourceBeforeAfter": "Before/after manifest equality was checked; copied before manifest matches each archived final source hash.",
+      "cleanup": "Owned PostgreSQL stopped and its PID file absence was checked; no existing cluster targeted.",
+      "log": "logs/native-pg-green.excerpt.txt"
+    }
+  ],
+  "externalRetainedInputs": [
+    {
+      "path": "/tmp/macsad-website-d9-eval.PMwbZo5u/build_board_native.sh",
+      "bytes": 10534,
+      "sha256": "25bf32f5bfd430b7946c587ec07d10e3d092e35fed85644ebf46c0cfab4bbae0",
+      "embedded": false,
+      "reason": "Exact driver contains developer-specific paths; retained privately. No rewritten driver is claimed executed."
+    },
+    {
+      "path": "/tmp/macsad-website-d9-eval.PMwbZo5u/run_board_pg_contract.sh",
+      "bytes": 7510,
+      "sha256": "4f93efcd19ae7beef76c6e3d978131afbf6417fdf249cdda7c0bc6f41cfe13f5",
+      "embedded": false,
+      "reason": "Exact driver contains developer-specific paths; retained privately. No rewritten driver is claimed executed."
+    }
+  ],
+  "inheritedMechanicalHelper": {
+    "path": "host_adapters/proof_process.py",
+    "sha256": "1a0f596954119dbf8c235acfbf7d21f1b300b8b6a5c28d7645d6ee643ecef9fc",
+    "providedBy": "named MaCSad base; unchanged in this archival patch"
+  },
+  "syntheticReadScope": {
+    "workspace": "10000000-0000-4000-8000-000000000001",
+    "caseCount": 3,
+    "allCasesClosed": true,
+    "projection": "macsad.case_board_v",
+    "wire": "macsad-board/1",
+    "returnedFields": [
+      "case id",
+      "research kind",
+      "case state",
+      "control state",
+      "priority",
+      "live task id",
+      "board phase",
+      "task state",
+      "title hex"
+    ],
+    "transport": "supervised one-shot native process over restricted test-only loopback PostgreSQL",
+    "postgresAuthentication": "test-only trust for the synthetic loopback viewer; not credentialed SCRAM or TLS evidence",
+    "authority": "test-only trusted local synthetic workspace; not human login or tenant isolation"
+  },
+  "unavailable": [
+    "HTTP route and browser acceptance",
+    "authenticated private-workspace authorization",
+    "append-message or any mutation",
+    "full MaCSad compatibility gate for candidate",
+    "deterministic website bundle emission for candidate",
+    "independent Firebat2 evidence",
+    "control-policy activation",
+    "toolchain promotion",
+    "deployment"
+  ],
+  "omitted": [
+    "unexecuted board_fetch_policy fixture",
+    "private upstream source",
+    "generated Rust and binaries",
+    "database data or credentials",
+    "unbounded raw build logs",
+    "developer-specific path-bearing driver bytes"
+  ],
+  "archiveFiles": [
+    {
+      "path": "application.patch",
+      "bytes": 33873,
+      "sha256": "158fc8494bd3beaaaf6c24eb1b5956fd6ee196b8e9b917b262abd8427af4e8f0"
+    },
+    {
+      "path": "logs/native-borrow-red.excerpt.txt",
+      "bytes": 569,
+      "sha256": "3a2cfcbadd96327c485890c74bda11c6e065cae0ce5fcad3f984a9d75ed5aeb0"
+    },
+    {
+      "path": "logs/native-codegen-red.excerpt.txt",
+      "bytes": 729,
+      "sha256": "647cb68bdecad07d2e0e74a0eb6e911194627b0b9a217b6e363a28ed3b3b69da"
+    },
+    {
+      "path": "logs/native-pg-green.excerpt.txt",
+      "bytes": 1906,
+      "sha256": "f85e1ed897b6043706f8897c76fbfbe42aa411f4831fa6018ab916b4ca7e1879"
+    },
+    {
+      "path": "logs/native-pg-red.excerpt.txt",
+      "bytes": 2533,
+      "sha256": "f37ec06b7645286fabf0aa421ef1f7afc8f332886fe8158a16027d15696e7b7c"
+    },
+    {
+      "path": "logs/shape-admitted-green.excerpt.json",
+      "bytes": 1423,
+      "sha256": "9660a4b251b745de54ce0abd5aba3213016207023ed2bbd92cd43baa3851a306"
+    },
+    {
+      "path": "logs/shape-candidate-green.excerpt.json",
+      "bytes": 2203,
+      "sha256": "5c63b5d5c9a359f92443fe2b82769b8a84566d1779287fb73292cfdf1d657912"
+    },
+    {
+      "path": "logs/shape-red.excerpt.json",
+      "bytes": 2361,
+      "sha256": "5cbdbf696f8d46c8e43b789986f0e67411c4410a84c27266fe4fbe95460ef198"
+    },
+    {
+      "path": "source-history/board_database.borrow-red.lg.txt",
+      "bytes": 4817,
+      "sha256": "4b4c10d4bb22d5437bb25d117aa44bc9b2bb87d01c097e107ef1ef566de5f5c5"
+    },
+    {
+      "path": "source-history/board_database.codegen-red.lg.txt",
+      "bytes": 4766,
+      "sha256": "b7eeff89eaa7a3b5569f794f9a33e9b449e2c38f566452a40ec8914d64c7a35f"
+    },
+    {
+      "path": "source-manifests/native-green.sha256",
+      "bytes": 19968,
+      "sha256": "86e2311706fce16e8365ab32c90cd078b54f63bd12fe098991af3084cd0a8516"
+    },
+    {
+      "path": "source-manifests/native-red.sha256",
+      "bytes": 19432,
+      "sha256": "aadec2cecec6e62bc2f56dbfa79b777994317a8c9d1a95c1516d0bd4a8bd4bf8"
+    }
+  ],
+  "archiveLimits": {
+    "maximumTotalBytes": 1048576,
+    "policy": "task-specific archival limit, not a new runtime/admission contract"
+  }
+}
