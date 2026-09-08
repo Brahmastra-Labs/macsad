@@ -206,7 +206,7 @@ test("the checked-in policy is exact and the repository baseline is admitted onl
   );
   const result = lintLogosSources();
   assert.deepEqual(result.failures, []);
-  assert.equal(result.filesChecked, 16);
+  assert.equal(result.filesChecked, 26);
   assert.deepEqual(
     result.activeDebt.map(({ rule }) => rule).sort(),
     [

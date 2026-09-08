@@ -1,0 +1,87 @@
+# MaCSad proof worker argument boundary
+
+Import ProofResultPolicy from "./proof_result_policy.lg".
+Import ProofWireEncoding from "./proof_wire_encoding.lg".
+
+The fixed argument vector carries mechanically decoded facts, never source code.
+The result is a stateless report classification, not scientific acceptance.
+
+## To proofWireDecimal (value: Text) -> Int:
+    If length of text_bytes(value) is greater than 5:
+        Return -1.
+    If allDigits(value) is equal to false:
+        Return -1.
+    Let number be parseInt(value).
+    If numText(number) is equal to value:
+        Return number.
+    Return -1.
+
+## To proofWireNames (value: Text) -> Seq of Text:
+    Let absent be a new Seq of Text.
+    If length of text_bytes(value) is greater than 16415:
+        Return absent.
+    Let fields be split(value, ",").
+    If length of fields is greater than 32:
+        Return absent.
+    Let names be a new Seq of Text.
+    Repeat for field in fields:
+        Let size be length of text_bytes(field).
+        If size is less than 2:
+            Return absent.
+        If size is greater than 512:
+            Return absent.
+        If proofWireHexAccepted(field) is equal to false:
+            Return absent.
+        Let decoded be fromHex(field).
+        If toHex(decoded) is equal to field:
+            Push decoded to names.
+        Otherwise:
+            Return absent.
+    Return names.
+
+## To proofWireBits (value: Text) -> Seq of Bool:
+    Let absent be a new Seq of Bool.
+    If length of text_bytes(value) is greater than 63:
+        Return absent.
+    Let fields be split(value, ",").
+    If length of fields is greater than 32:
+        Return absent.
+    Let flags be a new Seq of Bool.
+    Repeat for field in fields:
+        If field is equal to "1":
+            Push true to flags.
+        Otherwise:
+            If field is equal to "0":
+                Push false to flags.
+            Otherwise:
+                Return absent.
+    Return flags.
+
+## To proofWorkerStatus (arguments: Seq of Text) -> Text:
+    Let countMatches be length of arguments is equal to 11.
+    If countMatches is equal to false:
+        Return "rejected".
+    Let mutable byteTotal be 0.
+    Repeat for argument in arguments:
+        Set byteTotal to byteTotal + length of text_bytes(argument).
+        If byteTotal is greater than 65536:
+            Return "rejected".
+    Let schemaMatches be item 2 of arguments is equal to "macsad-proof-facts/1".
+    If schemaMatches is equal to false:
+        Return "rejected".
+    Let validFlags be proofWireBits(item 3 of arguments).
+    Let summaryFlags be proofWireBits(item 7 of arguments).
+    Let validCountMatches be length of validFlags is equal to 1.
+    Let summaryCountMatches be length of summaryFlags is equal to 1.
+    If validCountMatches is equal to false:
+        Return "rejected".
+    If summaryCountMatches is equal to false:
+        Return "rejected".
+    Let byteCount be proofWireDecimal(item 4 of arguments).
+    Let exitCode be proofWireDecimal(item 5 of arguments).
+    Let axioms be proofWireDecimal(item 6 of arguments).
+    Let expected be proofWireNames(item 8 of arguments).
+    Let names be proofWireNames(item 9 of arguments).
+    Let verified be proofWireBits(item 10 of arguments).
+    Let errorNull be proofWireBits(item 11 of arguments).
+    Return proofResultStatus(item 1 of validFlags, byteCount, exitCode, axioms, item 1 of summaryFlags, expected, names, verified, errorNull).

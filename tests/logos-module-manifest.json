@@ -121,6 +121,12 @@
           "severity": "warning",
           "file": "src/main.lg",
           "message": "`Import SchemaProbePolicy` is unused — no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import CommandEnvelope` is unused — no name from it is referenced here."
         }
       ],
       "domBundle": false,
@@ -141,6 +147,68 @@
             "PostgreSQL sixteen is required",
             "Schema probe shape is exact",
             "Schema version one is required"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/command_envelope.lg",
+          "expectedTests": [
+            "Append message fields preserve accepted text",
+            "Append message rejects authority and duplicate fields",
+            "Append message rejects missing null and wrong types",
+            "Append message field rules are applied",
+            "Append message bounds and versions fail closed"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        }
+      ]
+    },
+    {
+      "name": "proof-worker",
+      "directory": "logos/proof-worker",
+      "entry": "src/main.lg",
+      "logicalRoot": "src/proof_worker.lg",
+      "entryClosureLock": "pinned-transitive-scope-workaround",
+      "allowedDiagnostics": [
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import ProofResultPolicy` is unused — no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import ProofWireEncoding` is unused — no name from it is referenced here."
+        }
+      ],
+      "domBundle": false,
+      "testLeaves": [
+        {
+          "path": "src/proof_result_policy.lg",
+          "expectedTests": [
+            "Proof result reports checked under supplied assumptions",
+            "Proof result retains not proved",
+            "Proof result rejects malformed transport",
+            "Proof result requires exact unique targets",
+            "Proof result rejects inconsistent checker fields",
+            "Proof result enforces byte and axiom bounds",
+            "Proof result measures target names in UTF8 bytes",
+            "Proof result caps requested theorem count"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/proof_wire_encoding.lg",
+          "expectedTests": [
+            "Proof wire accepts canonical UTF8 boundaries",
+            "Proof wire rejects malformed hex and UTF8",
+            "Proof wire bounds individual encoded names",
+            "Proof wire requires lowercase hex"
           ],
           "minimumProperties": 1,
           "minimumProven": 1

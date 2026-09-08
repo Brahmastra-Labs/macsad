@@ -99,6 +99,9 @@ done
 printf '== LOGOS exact test manifest ==\n'
 node scripts/verify-logos-tests.mjs
 
+printf '== Real LOGOS proof loop and adversarial wire contracts ==\n'
+python3 -m unittest host_adapters.tests.proof_demo_contract host_adapters.tests.proof_worker_contract -v
+
 hash_tree() {
   local directory="$1"
   local file_count

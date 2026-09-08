@@ -1,0 +1,120 @@
+# MaCSad append-message field validation
+After strict JSON parsing, preserve every field occurrence, escaped JSON Pointer path, decoded string, exact integer lexeme, and original wire byte count. This leaf neither parses JSON nor grants authority.
+## An AppendMessageField has:
+    a path, which is Text.
+    a kind, which is Text.
+    a value, which is Text.
+## To commandField (path: Text, kind: Text, value: Text) -> AppendMessageField:
+    Return a new AppendMessageField with path path and kind kind and value value.
+## To commandFieldValue (fields: Seq of AppendMessageField, path: Text) -> Text:
+    Repeat for field in fields:
+        If field's path is equal to path:
+            Return field's value.
+    Return "".
+## To commandUuidAccepted (value: Text) -> Bool:
+    If (length of text_bytes(value) is equal to 36) is equal to false:
+        Return false.
+    Repeat for position from 1 to 36:
+        Let digit be charAt(value, position).
+        Let mutable allowed be "0123456789abcdef".
+        If position is equal to 9 or position is equal to 14 or position is equal to 19 or position is equal to 24:
+            Set allowed to "-".
+        If indexOf(allowed, digit) is equal to 0:
+            Return false.
+    Return true.
+## To commandVersionAccepted (value: Text) -> Bool:
+    Let count be length of text_bytes(value).
+    If count is less than 1 or count is greater than 19 or allDigits(value) is equal to false:
+        Return false.
+    If count is equal to 19:
+        If compareText(value, "9223372036854775807") is greater than 0:
+            Return false.
+    Return numText(parseInt(value)) is equal to value.
+## To commandFieldsStatus (fields: Seq of AppendMessageField, wireByteCount: Int) -> Text:
+    If wireByteCount is less than 1 or wireByteCount is greater than 131072:
+        Return "wire_size".
+    Let paths be ["/schema", "/idempotency_key", "/expected_version", "/payload", "/payload/thread_id", "/payload/format", "/payload/body"].
+    Let kinds be ["string", "string", "integer", "object", "string", "string", "string"].
+    If (length of fields is equal to length of paths) is equal to false:
+        Return "field_set".
+    Repeat for position from 1 to 7:
+        Let path be item position of paths.
+        Let kind be item position of kinds.
+        Let mutable count be 0.
+        Repeat for field in fields:
+            If field's path is equal to path:
+                Set count to count + 1.
+                If (field's kind is equal to kind) is equal to false:
+                    Return "field_type".
+        If (count is equal to 1) is equal to false:
+            Return "field_set".
+    If (commandFieldValue(fields, "/schema") is equal to "macsad-command/1") is equal to false or (commandFieldValue(fields, "/payload") is equal to "") is equal to false:
+        Return "schema".
+    If commandUuidAccepted(commandFieldValue(fields, "/idempotency_key")) is equal to false:
+        Return "idempotency_key".
+    If commandUuidAccepted(commandFieldValue(fields, "/payload/thread_id")) is equal to false:
+        Return "thread_id".
+    If commandVersionAccepted(commandFieldValue(fields, "/expected_version")) is equal to false:
+        Return "expected_version".
+    Let format be commandFieldValue(fields, "/payload/format").
+    If (format is equal to "plain_text") is equal to false and (format is equal to "markdown") is equal to false:
+        Return "format".
+    Let body be commandFieldValue(fields, "/payload/body").
+    If length of text_bytes(body) is less than 1 or length of text_bytes(body) is greater than 16384 or indexOf(body, text_from_bytes([0])) is greater than 0:
+        Return "body".
+    Return "ok".
+## To validateAppendMessageFields (fields: Seq of AppendMessageField, wireByteCount: Int) -> Text:
+    Return commandFieldsStatus(fields, wireByteCount).
+## To appendMessageTestFields (body: Text) -> Seq of AppendMessageField:
+    Let fields be a new Seq of AppendMessageField.
+    Push commandField("/schema", "string", "macsad-command/1") to fields.
+    Push commandField("/idempotency_key", "string", "11111111-1111-4111-8111-111111111111") to fields.
+    Push commandField("/expected_version", "integer", "0") to fields.
+    Push commandField("/payload", "object", "") to fields.
+    Push commandField("/payload/thread_id", "string", "22222222-2222-4222-8222-222222222222") to fields.
+    Push commandField("/payload/format", "string", "plain_text") to fields.
+    Push commandField("/payload/body", "string", body) to fields.
+    Return fields.
+## Test: Append message fields preserve accepted text
+    Let fields be appendMessageTestFields("α\n'|").
+    Expect that validateAppendMessageFields(fields, 200) is equal to "ok".
+    Expect that commandFieldValue(fields, "/payload/body") is equal to "α\n'|".
+## Test: Append message rejects authority and duplicate fields
+    Repeat for path in ["/actor", "/workspace", "/capability", "/payload/actor", "/schema", "/payload~1thread_id"]:
+        Let mutable fields be appendMessageTestFields("note").
+        Push commandField(path, "string", "untrusted") to fields.
+        Expect that commandFieldsStatus(fields, 200) is equal to "field_set".
+        Set fields to appendMessageTestFields("note").
+        Set item 7 of fields to commandField(path, "string", "untrusted").
+        Expect that commandFieldsStatus(fields, 200) is equal to "field_set".
+## Test: Append message rejects missing null and wrong types
+    Let empty be a new Seq of AppendMessageField.
+    Expect that commandFieldsStatus(empty, 200) is equal to "field_set".
+    Repeat for kind in ["null", "array", "boolean", "number", "object"]:
+        Let mutable fields be appendMessageTestFields("note").
+        Set item 7 of fields to commandField("/payload/body", kind, "note").
+        Expect that commandFieldsStatus(fields, 200) is equal to "field_type".
+## Test: Append message field rules are applied
+    Let errors be ["schema", "idempotency_key", "expected_version", "schema", "thread_id", "format", "ok"].
+    Repeat for position from 1 to 7:
+        Let mutable fields be appendMessageTestFields("note").
+        Let field be item position of fields.
+        Set item position of fields to commandField(field's path, field's kind, "invalid").
+        Expect that commandFieldsStatus(fields, 200) is equal to item position of errors.
+## Test: Append message bounds and versions fail closed
+    Expect that commandFieldsStatus(appendMessageTestFields("note"), 0) is equal to "wire_size".
+    Expect that commandFieldsStatus(appendMessageTestFields("note"), -1) is equal to "wire_size".
+    Repeat for body in ["", repeatText("a", 16385), text_from_bytes([0])]:
+        Expect that commandFieldsStatus(appendMessageTestFields(body), 20000) is equal to "body".
+    Expect that commandFieldsStatus(appendMessageTestFields(repeatText("a", 16384)), 20000) is equal to "ok".
+    Expect that commandVersionAccepted("9223372036854775807") is equal to true.
+    Repeat for version in ["", "-1", "01", "1.0", "1e0", "9223372036854775808", "null"]:
+        Expect that commandVersionAccepted(version) is equal to false.
+    Repeat for identifier in ["", "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA", "11111111_1111-4111-8111-111111111111"]:
+        Expect that commandUuidAccepted(identifier) is equal to false.
+    For all booleans oversized:
+        Let mutable count be 131072.
+        If oversized:
+            Set count to 131073.
+        Let status be commandFieldsStatus(appendMessageTestFields("note"), count).
+        Expect that (status is equal to "ok") is equal to (oversized is equal to false).

@@ -1,0 +1,11 @@
+# MaCSad stateless proof worker entry
+
+Import ProofResultPolicy from "./proof_result_policy.lg".
+Import ProofWireEncoding from "./proof_wire_encoding.lg".
+Import ProofWorker from "./proof_worker.lg".
+
+## To native args () -> Seq of Text
+
+## Main
+Let arguments be args().
+Show proofWorkerStatus(arguments).

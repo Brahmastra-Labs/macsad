@@ -1,0 +1,114 @@
+# MaCSad stateless LOGOS proof-report policy
+
+The mechanical reader supplies strict JSON shape and type facts. This policy
+classifies that report, not a case disposition. Axiom count excludes English
+Given premises; checked does not claim assumption freedom or independent replay.
+
+## To proofResultStatus (valid: Bool, byteCount: Int, exitCode: Int, axioms: Int, allVerified: Bool, expected: Seq of Text, names: Seq of Text, verified: Seq of Bool, errorNull: Seq of Bool) -> Text:
+    If valid is equal to false:
+        Return "rejected".
+    If byteCount is less than 1:
+        Return "rejected".
+    If byteCount is greater than 32768:
+        Return "rejected".
+    If axioms is less than 0:
+        Return "rejected".
+    If axioms is greater than 4096:
+        Return "rejected".
+    Let count be length of expected.
+    If count is less than 1:
+        Return "rejected".
+    If count is greater than 32:
+        Return "rejected".
+    Let nameCountMatches be length of names is equal to count.
+    If nameCountMatches is equal to false:
+        Return "rejected".
+    Let verdictCountMatches be length of verified is equal to count.
+    If verdictCountMatches is equal to false:
+        Return "rejected".
+    Let errorCountMatches be length of errorNull is equal to count.
+    If errorCountMatches is equal to false:
+        Return "rejected".
+    Let seen be a new Seq of Text.
+    Let mutable everyVerified be true.
+    Let mutable index be 1.
+    While index is at most count:
+        Let name be item index of expected.
+        Let size be length of text_bytes(name).
+        If size is less than 1:
+            Return "rejected".
+        If size is greater than 256:
+            Return "rejected".
+        Let targetMatches be item index of names is equal to name.
+        If targetMatches is equal to false:
+            Return "rejected".
+        Repeat for previous in seen:
+            If previous is equal to name:
+                Return "rejected".
+        Push name to seen.
+        If item index of verified is equal to true:
+            If item index of errorNull is equal to false:
+                Return "rejected".
+        Otherwise:
+            Set everyVerified to false.
+        Set index to index + 1.
+    Let summaryMatches be allVerified is equal to everyVerified.
+    If summaryMatches is equal to false:
+        Return "rejected".
+    If everyVerified:
+        If exitCode is equal to 0:
+            Return "checked".
+    Otherwise:
+        If exitCode is equal to 1:
+            Return "not-proved".
+    Return "rejected".
+
+## Test: Proof result reports checked under supplied assumptions
+    Expect that proofResultStatus(true, 120, 0, 0, true, ["Socrates"], ["Socrates"], [true], [true]) is equal to "checked".
+    Expect that proofResultStatus(true, 200, 0, 2, true, ["A", "B"], ["A", "B"], [true, true], [true, true]) is equal to "checked".
+## Test: Proof result retains not proved
+    Expect that proofResultStatus(true, 120, 1, 1, false, ["A"], ["A"], [false], [false]) is equal to "not-proved".
+    Expect that proofResultStatus(true, 120, 1, 0, false, ["A"], ["A"], [false], [true]) is equal to "not-proved".
+    Expect that proofResultStatus(true, 200, 1, 2, false, ["A", "B"], ["A", "B"], [true, false], [true, false]) is equal to "not-proved".
+## Test: Proof result rejects malformed transport
+    For all booleans allVerified:
+        Expect that proofResultStatus(false, 120, 0, 0, allVerified, ["A"], ["A"], [true], [true]) is equal to "rejected".
+## Test: Proof result requires exact unique targets
+    Let absent be a new Seq of Text.
+    Expect that proofResultStatus(true, 120, 0, 0, true, absent, absent, [true], [true]) is equal to "rejected".
+    Expect that proofResultStatus(true, 120, 0, 0, true, [""], [""], [true], [true]) is equal to "rejected".
+    Expect that proofResultStatus(true, 120, 0, 0, true, ["A"], ["B"], [true], [true]) is equal to "rejected".
+    Expect that proofResultStatus(true, 200, 0, 0, true, ["A", "A"], ["A", "A"], [true, true], [true, true]) is equal to "rejected".
+    Expect that proofResultStatus(true, 200, 0, 0, true, ["A", "B"], ["B", "A"], [true, true], [true, true]) is equal to "rejected".
+    Expect that proofResultStatus(true, 120, 0, 0, true, ["A"], ["A"], [true, true], [true]) is equal to "rejected".
+    Expect that proofResultStatus(true, 120, 0, 0, true, ["A"], ["A"], [true], [true, true]) is equal to "rejected".
+## Test: Proof result rejects inconsistent checker fields
+    Expect that proofResultStatus(true, 120, 0, 0, true, ["A"], ["A"], [true], [false]) is equal to "rejected".
+    Expect that proofResultStatus(true, 120, 1, 0, true, ["A"], ["A"], [false], [true]) is equal to "rejected".
+    Expect that proofResultStatus(true, 120, 1, 0, false, ["A"], ["A"], [true], [true]) is equal to "rejected".
+    Expect that proofResultStatus(true, 120, 1, 0, true, ["A"], ["A"], [true], [true]) is equal to "rejected".
+    Expect that proofResultStatus(true, 120, 0, 0, false, ["A"], ["A"], [false], [true]) is equal to "rejected".
+    Expect that proofResultStatus(true, 120, 124, 0, false, ["A"], ["A"], [false], [true]) is equal to "rejected".
+## Test: Proof result enforces byte and axiom bounds
+    Expect that proofResultStatus(true, 0, 0, 0, true, ["A"], ["A"], [true], [true]) is equal to "rejected".
+    Expect that proofResultStatus(true, 32769, 0, 0, true, ["A"], ["A"], [true], [true]) is equal to "rejected".
+    Expect that proofResultStatus(true, 120, 0, -1, true, ["A"], ["A"], [true], [true]) is equal to "rejected".
+    Expect that proofResultStatus(true, 120, 0, 4097, true, ["A"], ["A"], [true], [true]) is equal to "rejected".
+    Expect that proofResultStatus(true, 32768, 0, 4096, true, ["A"], ["A"], [true], [true]) is equal to "checked".
+## Test: Proof result measures target names in UTF8 bytes
+    Let accepted be repeatText("é", 128).
+    Let excessive be repeatText("é", 129).
+    Expect that proofResultStatus(true, 1024, 0, 0, true, [accepted], [accepted], [true], [true]) is equal to "checked".
+    Expect that proofResultStatus(true, 1024, 0, 0, true, [excessive], [excessive], [true], [true]) is equal to "rejected".
+## Test: Proof result caps requested theorem count
+    Let names be a new Seq of Text.
+    Let flags be a new Seq of Bool.
+    Let mutable index be 1.
+    While index is at most 32:
+        Push numText(index) to names.
+        Push true to flags.
+        Set index to index + 1.
+    Expect that proofResultStatus(true, 4096, 0, 0, true, names, names, flags, flags) is equal to "checked".
+    Push "33" to names.
+    Push true to flags.
+    Expect that proofResultStatus(true, 4096, 0, 0, true, names, names, flags, flags) is equal to "rejected".

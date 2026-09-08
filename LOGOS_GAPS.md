@@ -6,7 +6,61 @@ tree `9f251ad38ed49834d8224bbf6b928cb5ba1aa1c5`. The build wrapper rejects
 another commit, tree, Cargo lock, `largo` binary, dirty tracked source, or
 unrelated origin. MaCSad does not install or resolve LOGOS from crates.io.
 
-## Snapshot status
+## September 8, 2026 integration update
+
+The admitted toolchain is still `132dc5346728e2d204df798dd7544e6405306a2c`.
+Its matching local checkout is `logicaffeine-macsad-admitted`; using that copy
+does not promote the newer LOGOS checkout. No upstream edits or pushes are
+part of this MaCSad workstream.
+
+The later source-only readiness audit inspected upstream
+`d9baaff5b6749c961a13cd2eca427434c5959b17`. See
+[the shared readiness report](docs/ELECTRON_READINESS.md), especially its
+version-scoped inventory and T01 proof-context trust finding. Newer source
+availability is not completed runtime, security or promotion evidence.
+The candidate snapshot below is retained as historical evidence, not as a
+claim that it is the latest upstream commit.
+
+MaCSad now has a native LOGOS proof-report policy and a bounded argument port
+under `logos/proof-worker`. The baseline can run `largo prove --json`, validate
+the exact requested targets through LOGOS, preserve the source and observations,
+and repeat the same-source check. This narrows G13 for a local demonstration;
+it does not close the complete mathematical trust/publication contract.
+
+The completed MaCSad gate at this admitted baseline passed 33 native LOGOS
+tests, 10 finite application properties and nine real-LOGOS integration methods
+(eight demonstration runs and 42 adversarial wire/report cases), alongside the
+existing Node/Python, deterministic-bundle and fresh PostgreSQL 16 tiers.
+Exact snapshot/log identities and the retained demonstration bundles are in
+section 18.6 of the readiness report. These are not newest-upstream gate results.
+
+Baseline limitations directly relevant to this integration:
+
+- `prove` JSON's `axioms` field counts theory axioms, not English `Given`
+  premises. Zero there is not an assumption-free result. Preserve `input.lg`.
+- Running `prove` again is source replay, not replay of a retained proof-term
+  certificate. The baseline CLI does not provide the required portable
+  certificate export/replay interface. Do not claim independent checker
+  agreement from its `all_verified` field.
+- For the retained theory examples, `prove --trace` emits a short checked-result
+  summary, not an exported proof term or detailed derivation. Save it honestly
+  as CLI diagnostics; it does not substitute for certificate evidence.
+- The supported theorem blocks are checked; whole-program definitions and
+  import-closure coverage are not established by this entry point.
+- Baseline interpreter console input and strict JSON object decoding cannot
+  supply this worker's complete typed input boundary. The narrow workaround
+  uses bounded host-side structural JSON decoding and canonical data arguments;
+  mathematical report classification remains LOGOS code.
+- `fromHex` can throw on invalid UTF-8 rather than returning a typed decoding
+  failure. The MaCSad argument boundary now validates canonical UTF-8 before
+  calling it; adversarial tests cover overlong encodings, surrogates and invalid
+  continuation bytes. This workaround is not a general upstream parser fix.
+
+The local process-cleanup incident is a MaCSad implementation/test defect,
+not a LOGOS bug. Its recovery and residual verification limits are recorded in
+[the incident report](docs/INCIDENT_2026-09-08_PROCESS_CLEANUP.md).
+
+## Historical candidate snapshot status
 
 The commit above remains the **admitted baseline** in the MaCSad toolchain
 lock. A newer LOGOS `0.10.1` snapshot is under evaluation, not promoted:
