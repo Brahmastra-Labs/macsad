@@ -1590,3 +1590,106 @@ bounded AI formalization proposals; stable native browser integration; and
 contestant-isolated operations plus backup/restore rehearsal. None is replaced
 by a successful toy proof, a static website, a source rerun or finite Boolean
 application properties.
+
+## 19. Committed delivery and website dependency evaluation — September 8
+
+This dated record supersedes earlier **delivery-status** statements, not their
+historical test evidence or limitations.
+
+### 19.1 Durable Git delivery, not remote-main activation
+
+Alejandro explicitly authorized committing and pushing the completed MaCSad
+work, prioritizing website/database integration, and evaluating the named newer
+LOGOS version in a separate copy. Upstream LOGOS edits and pushes remain out of
+scope. He separately requested a proposal for the missing policy-activation
+check, not installation or a bypass.
+
+- Implementation commit:
+  `b72bad7992011a73f8575d8e4236d6aa515d1fab`.
+- Current remote-main infrastructure changes were integrated without rewriting
+  either history. The combined tested revision is
+  `db29fd641ab7080f7fc51903622c222a3ecca57d`.
+- The canonical local checkout remains on `main`.
+- The combined work was pushed to `codex/proof-loop-2026-09-08` and
+  [MaCSad PR #6](https://github.com/Brahmastra-Labs/macsad/pull/6).
+- Remote `main` has **not** received that PR. Pull requests, strict checks and
+  linear history remain enforced. No force push, automatic merge, deployment,
+  toolchain promotion or upstream LOGOS mutation was performed.
+
+The independent check required for test-runner/test-inventory control changes
+does not yet exist. [The separate proposal](proposals/INDEPENDENT_POLICY_ACTIVATION.md)
+describes its trust boundary, exact revision binding, adversarial tests and
+bootstrap sequence. The proposal itself grants no activation authority.
+
+### 19.2 Full gate on the combined committed revision
+
+The new gate tested the exact clean combined revision above, not merely the
+earlier unmerged snapshot. It used a newly owned PostgreSQL 16.15 cluster and
+left the existing recovered services unchanged.
+
+| Tier | Outcome |
+|---|---|
+| Node | 212 passed |
+| Python mechanical | 31 passed |
+| Native LOGOS | 33 tests passed; 10 finite application properties proved |
+| Real LOGOS integration | Nine methods passed in 185.781 seconds; eight demonstration runs and 42 wire/report cases |
+| Browser artifacts | Both bundles built twice with identical digests |
+| PostgreSQL 16.15 | Bootstrap/repeat, migrate/repeat, catalog, invariants, representative seed and 792-field coverage passed |
+| Database permissions | Viewer defaults and actual write-denial checks passed |
+
+Zero failed or skipped tests. The disposable database was stopped and its PID
+file was absent after cleanup. This remains local evidence, not real-browser
+interaction, independent proof checking, deployment or backup/restore evidence.
+
+Retained artifact identity: `macsad-final-pg16-gate.XE3ybUsC`.
+180-file source-manifest SHA256:
+`4032c59467831815746a90435eebb9f83b132fb0c38ac325bc2e6361da387beb`.
+Gate-log SHA256:
+`0f38e38d7437ae3c30f8ae71e8a1377342e7c7d227cd03a1d03443d7b7119295`.
+Before/after source manifests matched. This section and the proposal are later
+documentation changes, not part of that exact source-manifest claim.
+
+GitHub's initial Foundation runs `34288598409` and `34288608380` failed before
+test execution: the pinned actionlint archive download returned HTTP 500 on
+three attempts and curl exited 22. No failing product assertion was observed
+there. Same-SHA infrastructure retries were explicitly requested; both runs
+then passed on attempt 2 (40 and 34 seconds respectively). The failed attempts
+are retained. These GitHub results do not substitute for the independent policy
+check, the complete local private-toolchain gate, or browser interaction tests.
+
+### 19.3 New LOGOS evaluation boundary
+
+The separately isolated candidate is exactly:
+
+- commit `d9baaff5b6749c961a13cd2eca427434c5959b17`;
+- tree `34f712714619bc9049a4dc9c1d22962dd67d63c4`;
+- Cargo.lock SHA256
+  `341398289909e4b5c85520e1554308bb285f081cae3935147efb282ab4bf23c2`.
+
+Its locked offline CLI build started with two build jobs and a 30-minute bound.
+At this record's creation it was in progress, not accepted. The admitted
+`132dc534` lock and checkout are unchanged. Candidate application builds must
+explicitly bind their runtime source to the exact candidate; identifying only
+the `largo` binary is insufficient because runtime dependency discovery can
+otherwise select published crates with the same version string.
+
+The next native integration slice is a bounded read of `macsad.case_board_v`,
+through LOGOS's parameterized PostgreSQL client, into the existing versioned
+board wire and native browser components. Use an isolated fixture workspace,
+not real private data, for initial evaluation. The current representative seed
+contains three closed cases: do not label them active tasks or fabricate live
+metrics. No schema addition is needed for this read path.
+
+Source review found native PostgreSQL limits to test before relying on that
+path: incomplete operation deadlines, missing close calls on some failed
+connection/authentication branches, ignored URL options including TLS intent,
+and a process-global native TCP mutex held during blocking reads. These are
+version-scoped source findings, not newly executed runtime reproductions.
+`LOGOS_GAPS.md` remains the upstream handoff; MaCSad will not repair upstream
+source in place or silently promote this candidate.
+
+Private GETs still need authenticated server-bound workspace selection. Writes
+add capability checks, expected versions, idempotency and atomic domain events.
+The fixture's example identity and publication capability are not a working
+authentication system or authority to append messages. A loopback fixture test
+does not establish the multi-user deployment boundary.
