@@ -60,6 +60,60 @@ The local process-cleanup incident is a MaCSad implementation/test defect,
 not a LOGOS bug. Its recovery and residual verification limits are recorded in
 [the incident report](docs/INCIDENT_2026-09-08_PROCESS_CLEANUP.md).
 
+## Exact d9 website-integration evaluation
+
+Alejandro authorized evaluating `d9baaff5b6749c961a13cd2eca427434c5959b17`
+in a separate copy. The admitted `132dc534` toolchain is unchanged. The isolated
+offline, locked, two-job CLI build succeeded in 179 seconds. Candidate tree:
+`34f712714619bc9049a4dc9c1d22962dd67d63c4`; Cargo.lock SHA256:
+`341398289909e4b5c85520e1554308bb285f081cae3935147efb282ab4bf23c2`;
+CLI SHA256:
+`b937f4ea8e8d3f6067bf119add89c3476066924422794da61440cc83d246ad5b`.
+This is build evidence, not promotion, byte-reproducibility, full upstream test
+success or completed website/database integration.
+
+Focused evaluation uses an isolated temporary/cache directory and explicitly
+binds `LOGOS_WORKSPACE` to the exact candidate. Otherwise a CLI binary outside
+its source checkout can discover published runtime crates with the same version
+string. MaCSad must retain the exact source/runtime closure, not only a binary.
+
+Two additional source findings are tracked below; they are not runtime
+reproductions or closures of the historical G1–G17 contracts. Existing timeout,
+socket-cleanup, TLS and JSON-number-token issues are not counted again.
+
+### F10 — native TCP registry serializes blocking I/O — P1
+
+Owner: LOGOS upstream; MaCSad documents only. In exact d9
+`crates/logicaffeine_system/src/tcp.rs`, `send`, `recv` and `recv_exact` hold the
+process-global registry mutex while performing blocking socket I/O (lines
+140–185). Connection registration and close need the same lock (100–109,
+189–193). Therefore separate native database connections can block one another;
+even establishing a cancellation connection can wait behind the target read.
+This is distinct from the HTTP handler-lifetime finding F03.
+
+Required runtime RED: one owned loopback peer stalls while a different native
+connection performs a bounded exchange or close; the second operation must not
+wait for the first socket's read deadline. Exercise the AOT/native tier, not
+only interpreter mocks or pure PostgreSQL frame parsers. Confirm all owned
+connections and processes are cleaned up. Until then, an isolated sequential
+board-read test is not evidence for concurrent multi-user database service.
+
+### F11 — MaCSad board title decoder can throw on invalid UTF-8 — P1
+
+Owner: MaCSad application. `logos/admin/src/board_row_decoder.lg` validates
+lowercase hex shape, then calls `fromHex` without UTF-8 prevalidation. Inputs
+such as `ff`, `c0af`, `eda080`, `f4908080` and truncated `e282` can reach the
+trapping decoder instead of returning a rejected row. Source finding only at
+this record; the malformed-wire runtime regression remains to execute.
+
+Required RED: each invalid input returns false without a thrown runtime error;
+valid ASCII, Greek and four-byte Unicode remain accepted at the existing
+4096-byte title bound. Reuse candidate `validUtf8` only in an explicitly tested
+candidate; that function is absent from the admitted baseline. The proof-worker
+prevalidation already implemented does not automatically protect this separate
+admin call site. Do not copy policy across projects or weaken the module-closure
+guard to conceal the missing reuse boundary.
+
 ## Historical candidate snapshot status
 
 The commit above remains the **admitted baseline** in the MaCSad toolchain
