@@ -184,6 +184,45 @@ That accepts the bounded application workaround in this isolated evaluation,
 not the unfixed original source forms or general upstream ownership/lifetime
 correctness. Both upstream findings remain open.
 
+## Lean-bridge audit and Tristan handoff — September 8–9, 2026
+
+The full compatibility target is any valid finite Lean theorem/project under a
+declared compatible toolchain, including long proofs and dependency libraries.
+Small regression fixtures are implementation milestones, not the final product
+boundary. A large proof exhausting a declared quota is resource-limited, not
+automatically mathematically unsupported. Actual core/proof translation,
+faithful statement mapping and kernel checking must remain distinct claims.
+
+Two sendable handoff documents consolidate the existing audit without treating
+all capability gaps as separately reproduced bugs:
+
+- [Plain-language explanation](docs/LOGOS_READINESS_PLAIN_LANGUAGE.md).
+- [Technical findings, source identities and acceptance tests](docs/LOGOS_BLOCKERS_TECHNICAL.md).
+
+The retained core/runtime/interface register now has 11 open findings: two
+exact-d9 reproduced compiler findings (F12/F13) and nine other source-established
+mechanisms/interface gaps, including F14 below. Two example-only findings, T01
+certificate-environment trust, L03 static-file containment, historical failures
+and MaCSad-owned findings are separately classified. This is not an exhaustive
+count of all LOGOS defects, a proof of unsoundness, or a claim of Lean parity.
+
+### F14 — kernel term parsing does not require complete input consumption — P1 for bridge acceptance
+
+Owner: LOGOS upstream; MaCSad documents only. In exact d9,
+`crates/logicaffeine_kernel/src/interface/term_parser.rs:38–47`,
+`parse_with_implicits` parses a term, skips trailing whitespace, and returns
+without requiring end of input. Source finding only: no forged proof or runtime
+trailing-input exploit was executed in this audit. Caller-level validation must
+be evaluated separately; do not infer that every parser caller accepts garbage.
+
+A bridge must not treat that parser's success alone as evidence that all emitted
+or submitted mathematical code was checked. Required regression: a valid term
+with harmless trailing whitespace succeeds, while the same term followed by a
+second term, unsupported syntax or trailing garbage fails at the correct byte
+position. Test the public parser and actual certificate/bridge caller. Compare
+the exact parsed structure with the emitted proof/type constructors, not just a
+pretty-printed prefix. No upstream source was edited or pushed.
+
 ## Historical candidate snapshot status
 
 The commit above remains the **admitted baseline** in the MaCSad toolchain
