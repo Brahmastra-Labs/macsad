@@ -1,0 +1,35 @@
+# MaCSad Lean core expansion preflight RED fixture
+
+No implementation or executable evidence yet. Costs saturate before arithmetic
+can grow with the mathematical expansion. The driver calls this before rendering.
+
+## Test: Lean core preflight saturates a doubling DAG
+    Let tags be ["sort"].
+    Let left be [0].
+    Let right be [0].
+    Repeat for position from 2 to 128:
+        Push "app" to tags.
+        Let previous be position - 1.
+        Push previous to left.
+        Push previous to right.
+    Expect that leanCoreBudgetStatus(tags, left, right, 128, 128, 4096) is equal to "resource-limit".
+
+## Test: Lean core preflight accounts for both roots at the quota boundary
+    Expect that leanCoreBudgetStatus(["sort"], [0], [0], 1, 1, 2) is equal to "within-budget".
+    Expect that leanCoreBudgetStatus(["sort"], [0], [0], 1, 1, 1) is equal to "resource-limit".
+    Expect that leanCoreBudgetStatus(["sort"], [0], [0], 1, 1, 0) is equal to "invalid".
+    Expect that leanCoreBudgetStatus(["sort"], [0], [0], 1, 1, 1000001) is equal to "invalid".
+
+## Test: Lean core preflight rejects malformed references before indexing
+    Expect that leanCoreBudgetStatus(["app"], [1], [1], 1, 1, 4096) is equal to "invalid".
+    Expect that leanCoreBudgetStatus(["sort", "app"], [0, 3], [0, 1], 2, 2, 4096) is equal to "invalid".
+    Expect that leanCoreBudgetStatus(["sort"], [0, 0], [0], 1, 1, 4096) is equal to "invalid".
+    Expect that leanCoreBudgetStatus(["sort"], [0], [0], 0, 1, 4096) is equal to "invalid".
+
+## Test: Lean core preflight preserves unsupported status
+    Expect that leanCoreBudgetStatus(["const"], [0], [0], 1, 1, 4096) is equal to "unsupported".
+    For all booleans useMeta:
+        Let mutable tag be "const".
+        If useMeta:
+            Set tag to "mvar".
+        Expect that leanCoreBudgetStatus([tag], [0], [0], 1, 1, 4096) is equal to "unsupported".

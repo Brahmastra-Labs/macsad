@@ -1,0 +1,86 @@
+# MaCSad Lean core expansion preflight
+
+Costs saturate before mathematical expansion. The driver calls this first.
+
+## To leanCoreBudgetStatus (tags: Seq of Text, left: Seq of Int, right: Seq of Int, proofRoot: Int, claimRoot: Int, quota: Int) -> Text:
+    Let count be length of tags.
+    If quota is less than 1 or quota is greater than 1000000:
+        Return "invalid".
+    If count is greater than 128:
+        Return "resource-limit".
+    If count is less than 1 or proofRoot is less than 1 or claimRoot is less than 1 or proofRoot is greater than count or claimRoot is greater than count:
+        Return "invalid".
+    If (length of left is equal to count) is equal to false or (length of right is equal to count) is equal to false:
+        Return "invalid".
+    Let costs be a new Seq of Int.
+    Let sizes be a new Seq of Int.
+    Repeat for position from 1 to count:
+        Let tag be item position of tags.
+        Let first be item position of left.
+        Let second be item position of right.
+        Let mutable cost be 1.
+        Let mutable size be 32.
+        If tag is equal to "sort" or tag is equal to "bvar":
+            If (first is equal to 0 and second is equal to 0) is equal to false:
+                Return "invalid".
+        Otherwise:
+            If (tag is equal to "forallE" or tag is equal to "lam" or tag is equal to "app") is equal to false:
+                Return "unsupported".
+            If first is less than 1 or second is less than 1 or first is at least position or second is at least position:
+                Return "invalid".
+            Set cost to 1 + item first of costs + item second of costs.
+            Set size to 128 + item first of sizes + item second of sizes.
+        If cost is greater than quota:
+            Set cost to quota + 1.
+        If size is greater than 65408:
+            Set size to 65409.
+        Push cost to costs.
+        Push size to sizes.
+    Let totalCost be item proofRoot of costs + item claimRoot of costs.
+    Let totalSize be item proofRoot of sizes + item claimRoot of sizes.
+    If totalCost is greater than quota or totalSize is greater than 65408:
+        Return "resource-limit".
+    Return "within-budget".
+
+## Test: Lean core preflight saturates a doubling DAG
+    Let tags be ["sort"].
+    Let left be [0].
+    Let right be [0].
+    Repeat for position from 2 to 128:
+        Push "app" to tags.
+        Let previous be position - 1.
+        Push previous to left.
+        Push previous to right.
+    Expect that leanCoreBudgetStatus(tags, left, right, 128, 128, 4096) is equal to "resource-limit".
+
+## Test: Lean core preflight accounts for both roots at the quota boundary
+    Expect that leanCoreBudgetStatus(["sort"], [0], [0], 1, 1, 2) is equal to "within-budget".
+    Expect that leanCoreBudgetStatus(["sort"], [0], [0], 1, 1, 1) is equal to "resource-limit".
+    Expect that leanCoreBudgetStatus(["sort"], [0], [0], 1, 1, 0) is equal to "invalid".
+    Expect that leanCoreBudgetStatus(["sort"], [0], [0], 1, 1, 1000001) is equal to "invalid".
+
+## Test: Lean core preflight rejects malformed references before indexing
+    Expect that leanCoreBudgetStatus(["app"], [1], [1], 1, 1, 4096) is equal to "invalid".
+    Expect that leanCoreBudgetStatus(["sort", "app"], [0, 3], [0, 1], 2, 2, 4096) is equal to "invalid".
+    Expect that leanCoreBudgetStatus(["sort"], [0, 0], [0], 1, 1, 4096) is equal to "invalid".
+    Expect that leanCoreBudgetStatus(["sort"], [0], [0], 0, 1, 4096) is equal to "invalid".
+
+## Test: Lean core preflight preserves unsupported status
+    Expect that leanCoreBudgetStatus(["const"], [0], [0], 1, 1, 4096) is equal to "unsupported".
+    For all booleans useMeta:
+        Let mutable tag be "const".
+        If useMeta:
+            Set tag to "mvar".
+        Expect that leanCoreBudgetStatus([tag], [0], [0], 1, 1, 4096) is equal to "unsupported".
+
+## Test: Lean core scalar fields preserve exact indices and level support
+    Expect that leanCoreFieldStatus(["sort", "bvar"], ["", "12345678901234567890"], ["zero", ""]) is equal to "fields-valid".
+    Expect that leanCoreFieldStatus(["bvar"], ["01"], [""]) is equal to "invalid".
+    Expect that leanCoreFieldStatus(["sort"], [""], ["succ"]) is equal to "unsupported".
+    Expect that leanCoreFieldStatus(["sort"], [""], [""]) is equal to "invalid".
+    Expect that leanCoreFieldStatus(["sort"], [""], ["zero", ""]) is equal to "invalid".
+
+## Test: Lean core scalar fields reject hidden unused payload
+    Expect that leanCoreFieldStatus(["sort"], ["0"], ["zero"]) is equal to "invalid".
+    Expect that leanCoreFieldStatus(["lam"], ["1"], [""]) is equal to "invalid".
+    Expect that leanCoreFieldStatus(["bvar"], ["0"], ["zero"]) is equal to "invalid".

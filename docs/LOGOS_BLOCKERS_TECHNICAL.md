@@ -46,6 +46,16 @@ Evidence records: MaCSad `LOGOS_GAPS.md`, `docs/ELECTRON_READINESS.md` sections 
 
 ## 2. Evidence classes, priorities and counting
 
+Subsequent MaCSad-only bridge increment: a real Lean4.31 exporter, LOGOS-owned
+closed-core mapping and an isolated exact-d9 `Certificate` rechecker passed the
+first seven-method end-to-end gate. Three distinct closed propositional proofs
+were transferred; a changed target was rejected by the real kernel. This does
+not use the submitted-context `TheoremCertificate` route, close T01/F14, admit
+the checker, or establish whole-Lean compatibility. The separately documented
+[bridge delivery record](LEAN_LOGOS_BRIDGE.md) owns its exact evidence, quotas,
+new-work bugs and residual coverage. The upstream finding counts below do not
+increase because of bugs in that MaCSad prototype.
+
 Use these labels in issue trackers and release decisions:
 
 - **D9 reproduced:** the exact candidate executed or compiled the original failing case and failed observably.

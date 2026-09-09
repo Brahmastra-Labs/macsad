@@ -1,0 +1,129 @@
+{
+  "repository": "/REPLACE_WITH_OWNED_MACSAD_SNAPSHOT",
+  "project": "/REPLACE_WITH_OWNED_MACSAD_SNAPSHOT/logos/lean-bridge",
+  "logos_workspace": "/REPLACE_WITH_EXACT_ADMITTED132_CHECKOUT",
+  "checker": "/REPLACE_WITH_EXACT_D9_RECHECK_EXECUTABLE",
+  "checker_sha256": "56a4bc1fbb6b4a4495c67616c5f66d55929b0e78532145bbfb00ca5421353914",
+  "exports": "/REPLACE_WITH_OWNED_EXPORT_DIRECTORY",
+  "fixtures": {
+    "composition": {
+      "file": "composition-04.json",
+      "lean_exit_code": 0,
+      "export_sha256": "b2a55f208502253bc1e26929a356c507d18355a42a2894ed41f2c906753fa44a",
+      "targetName": {
+        "prefix": {
+          "prefix": {
+            "tag": "anonymous"
+          },
+          "tag": "str",
+          "value": "MaCSadFixture"
+        },
+        "tag": "str",
+        "value": "composition"
+      },
+      "source_sha256": "a813d49e7923e087bd01c6141e0e5525c9cc64c71665ad6aba6dc081342f9f7f"
+    },
+    "sorry": {
+      "file": "sorry-04.json",
+      "lean_exit_code": 1,
+      "export_sha256": "635a0acc5d125038d655e546a53cd33e67ee58cd7d494851587e1bced91a7ad6",
+      "targetName": {
+        "prefix": {
+          "prefix": {
+            "tag": "anonymous"
+          },
+          "tag": "str",
+          "value": "MaCSadFixture"
+        },
+        "tag": "str",
+        "value": "contains_sorry"
+      },
+      "source_sha256": "840391d551107aefe7bbe37354e9b57c82542dac426a7750b4a127c3c870fcaf"
+    },
+    "axiom_dependency": {
+      "file": "axiom_dependency-04.json",
+      "lean_exit_code": 0,
+      "export_sha256": "98c71bc9b4400a918bb2b528f9347a971882ebed88fa037a9be116609027fe38",
+      "targetName": {
+        "prefix": {
+          "prefix": {
+            "tag": "anonymous"
+          },
+          "tag": "str",
+          "value": "MaCSadFixture"
+        },
+        "tag": "str",
+        "value": "assumes"
+      },
+      "source_sha256": "331be44a2d32a6bf1a4adbc8c37ba727fe9e04166b2a529798e9bf7c1eb6fdab"
+    },
+    "repeated_binders": {
+      "file": "repeated_binders-04.json",
+      "lean_exit_code": 0,
+      "export_sha256": "629340613661760c0be0a16e0ecad73986a8730193b292a1b0217535fa29d9b5",
+      "targetName": {
+        "prefix": {
+          "prefix": {
+            "tag": "anonymous"
+          },
+          "tag": "str",
+          "value": "MaCSadFixture"
+        },
+        "tag": "str",
+        "value": "repeated_binders"
+      },
+      "source_sha256": "dc0a991e6681bc42acc0f405892879bfbe421fb73e6a89bc0a41b1094480aa9d"
+    },
+    "long_composition": {
+      "file": "long_composition-04.json",
+      "lean_exit_code": 0,
+      "export_sha256": "4d71baf7305a536b8da3fcf7d640d66dfbbf89bacfc0e2f510a953bb9a8bd9cf",
+      "targetName": {
+        "prefix": {
+          "prefix": {
+            "tag": "anonymous"
+          },
+          "tag": "str",
+          "value": "MaCSadFixture"
+        },
+        "tag": "str",
+        "value": "long_composition"
+      },
+      "source_sha256": "356ca324639ee707c96261ba365b8d21411a554b00bee0fc38926f5a8a5c5d54"
+    },
+    "invalid_proof": {
+      "file": "invalid_proof-04.json",
+      "lean_exit_code": 1,
+      "export_sha256": "0c276d4b7a34c2a4e6c62f657a3c994a2d1b4aba0a6ef2398db2fd458543c99d",
+      "targetName": {
+        "prefix": {
+          "prefix": {
+            "tag": "anonymous"
+          },
+          "tag": "str",
+          "value": "MaCSadFixture"
+        },
+        "tag": "str",
+        "value": "invalid_proof"
+      },
+      "source_sha256": "f53eb7d67e5d8d3c9da9ebab9daee2b73a86f780876bb39378e90615515d66ae"
+    },
+    "identity": {
+      "file": "identity-04.json",
+      "lean_exit_code": 0,
+      "export_sha256": "9acb705940bba343e249bcf494920f0a1b4a88299e06dd065fdd17a9637ab4b6",
+      "targetName": {
+        "prefix": {
+          "prefix": {
+            "tag": "anonymous"
+          },
+          "tag": "str",
+          "value": "MaCSadFixture"
+        },
+        "tag": "str",
+        "value": "identity"
+      },
+      "source_sha256": "25c888f2371ce0ca8a2cb9045183d3f65b90559c71ca6e088eaeab733d2e6db8"
+    }
+  }
+}

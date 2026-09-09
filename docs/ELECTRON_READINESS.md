@@ -1814,3 +1814,53 @@ exercise browser refresh/focus/error behavior. CLI stdout includes its terminal
 line delimiter; it must not be mistaken for an already validated HTTP body.
 No HTTP/browser integration, durable write, AI formalization or portable proof
 certificate is claimed by this read-only database result.
+
+## 20. Lean-to-LOGOS proof-transfer prototype — September 8–9, 2026
+
+The next MaCSad-only increment produced a real, isolated proof-transfer loop:
+Lean4.31 checked authored fixture source; a Lean-side mechanical exporter
+preserved exact theorem/type/proof structure; LOGOS application code translated
+the supported core; an existing exact-d9 LOGOS kernel rechecked the emitted
+closed-term certificates. Identity, implication composition and repeated-binder
+proofs passed. A changed target was rejected by the actual kernel.
+
+Final selected evidence: 23 LOGOS tests and six finite properties; eight separate
+Lean regression cases; 48 Python tests including nine real bridge integration
+methods, zero failures/skips, 49.431 seconds. The latter log SHA256 is
+`c1c55bef84fbf10671944a37867ec767b46079f5c772effda8fe042af44ee24a`.
+This is not a complete new Node/browser/PostgreSQL/application admission gate.
+
+The full requested target remains any valid finite Lean theorem/project under a
+declared compatible toolchain, including its libraries and large proofs. That
+target is **not achieved**: the longer valid 256-step Lean fixture exports 530
+nodes and hits the current translator's 128-node job quota. Arbitrary uploaded
+source execution, general validated declaration environments, Lean/Mathlib
+coverage, human-friendly explanations and website integration remain unfinished.
+
+Two sendable reports and the exact implementation record now provide the shared
+handoff:
+
+- [Plain-language LOGOS readiness](LOGOS_READINESS_PLAIN_LANGUAGE.md).
+- [Technical upstream defect/blocker register](LOGOS_BLOCKERS_TECHNICAL.md).
+- [Bridge implementation, tests, identities and limitations](LEAN_LOGOS_BRIDGE.md).
+- [Inert 26-file source/evidence proposal](proposals/LEAN_LOGOS_BRIDGE_EVALUATION.md).
+
+The register now retains 11 LOGOS core/runtime/interface findings: two reproduced
+compiler findings and nine other source-established mechanisms/interface gaps,
+including new F14 (kernel parser exact-consumption). Examples, MaCSad bugs,
+historical regressions, static containment and T01 certificate-context trust stay
+separate. No claim to have found every LOGOS bug or to have disproved soundness
+is made.
+
+During prototype construction, a Lean exporter early-return bug discarded the
+declaration object; exact declaration/type/proof-root tests reproduced it and
+verified its repair. Resource-error evidence, DAG expansion, path containment
+and process/file boundaries also received explicit handling and regressions.
+Old malformed exports and resource-capped runs remain failure evidence, not
+successful conversions. These are MaCSad prototype findings, not new upstream
+LOGOS compiler findings.
+
+The source/archive belongs only to MaCSad. The local checkout remains main;
+delivery uses the existing PR branch while the separate control-policy activation
+requirement remains unresolved. No upstream edit/push, active graph or lock
+change, policy bypass, database mutation, service restart or deployment occurred.

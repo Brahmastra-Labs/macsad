@@ -223,6 +223,29 @@ position. Test the public parser and actual certificate/bridge caller. Compare
 the exact parsed structure with the emitted proof/type constructors, not just a
 pretty-printed prefix. No upstream source was edited or pushed.
 
+### Evaluated closed-term Lean bridge — not full G13 closure
+
+The MaCSad-only prototype now checks real Lean4.31 fixture source, exports actual
+core terms, translates supported binders/constructors in LOGOS, and rechecks the
+resulting existing-format certificates with an identified exact-d9 kernel.
+Three distinct closed propositional proofs passed; an altered target failed
+the real kernel. The final selected evidence is 23 LOGOS tests/six finite
+properties, eight Lean fixture cases, and 48 Python tests including nine real
+bridge methods. No skipped or failed cases are counted as passing.
+
+This is an isolated prototype, not a full-Lean/Mathlib bridge, an admitted
+checker, or website integration. The valid 530-node Lean example hits the current
+128-node translator job quota and is explicitly resource-limited. T01 and F14
+remain open; the prototype uses the closed-term Certificate path without an
+incoming declaration context. New exporter/adapter bugs were found and repaired
+within MaCSad and are not added to the LOGOS upstream count.
+
+The [delivery record](docs/LEAN_LOGOS_BRIDGE.md) and
+[inert source/evidence handoff](docs/proposals/LEAN_LOGOS_BRIDGE_EVALUATION.md)
+retain exact identities, RED/GREEN evidence, portable sample certificates and
+the remaining compatibility/security/admission work. No toolchain lock, active
+test inventory, upstream source or deployed service was changed by this archive.
+
 ## Historical candidate snapshot status
 
 The commit above remains the **admitted baseline** in the MaCSad toolchain

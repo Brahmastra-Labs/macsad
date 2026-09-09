@@ -1,0 +1,1 @@
+{"proof_term":{"Lambda":{"param":"b0","param_type":{"Sort":"Prop"},"body":{"Lambda":{"param":"b1","param_type":{"Var":"b0"},"body":{"Var":"b1"}}}}},"claimed_type":{"Pi":{"param":"b0","param_type":{"Sort":"Prop"},"body_type":{"Pi":{"param":"b1","param_type":{"Var":"b0"},"body_type":{"Var":"b0"}}}}},"prelude_version":"logos-coc-1"}

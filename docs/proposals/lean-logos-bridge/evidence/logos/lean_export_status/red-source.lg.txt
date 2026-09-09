@@ -1,0 +1,22 @@
+# MaCSad Lean export acceptance RED fixture
+
+The host reports strict primitive facts without selecting a supported logic.
+Only this LOGOS gate owns the first profile's source and assumption admission.
+
+## Test: Lean bridge admits a complete checked closed theorem export
+    Expect that leanExportStatus(true, true, true, "exported", "theorem", 0, 0) is equal to "eligible".
+
+## Test: Lean bridge rejects untrusted or incomplete transport facts
+    Expect that leanExportStatus(false, true, true, "exported", "theorem", 0, 0) is equal to "invalid".
+    Expect that leanExportStatus(true, false, true, "exported", "theorem", 0, 0) is equal to "invalid".
+    Expect that leanExportStatus(true, true, false, "exported", "theorem", 0, 0) is equal to "invalid".
+    Expect that leanExportStatus(true, true, true, "elaboration-error", "theorem", 0, 0) is equal to "invalid".
+    Expect that leanExportStatus(true, true, true, "resource-limit", "theorem", 0, 0) is equal to "resource-limit".
+
+## Test: Lean bridge does not silently drop assumptions or universe parameters
+    Expect that leanExportStatus(true, true, true, "exported", "axiom", 0, 0) is equal to "unsupported".
+    Expect that leanExportStatus(true, true, true, "exported", "theorem", 1, 0) is equal to "unsupported".
+    Expect that leanExportStatus(true, true, true, "exported", "theorem", 0, 1) is equal to "unsupported".
+    Expect that leanExportStatus(true, true, true, "exported", "theorem", -1, 0) is equal to "invalid".
+    For all booleans complete:
+        Expect that leanExportStatus(false, true, complete, "exported", "theorem", 0, 0) is equal to "invalid".

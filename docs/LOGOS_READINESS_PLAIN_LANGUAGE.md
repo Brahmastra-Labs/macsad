@@ -34,6 +34,27 @@ produce convincing English. We are not redefining the product as a translator
 for short classroom examples. Small examples are regression tests while the
 general machinery is built.
 
+## What you can now show Tristan
+
+There is now a working **proof-transfer prototype**. Real Lean source for three
+different propositional proofs was checked, exported, translated by LOGOS, and
+accepted by the LOGOS kernel. A deliberately changed target was rejected by the
+real checker. The first complete bridge test run passed seven integration tests.
+
+The deliverable includes actual code, proof certificates and correspondence
+records—not only this plan. The output is currently LOGOS's mathematical kernel
+language; it is not yet a polished, friendlier-than-Lean explanation interface.
+The [delivery record](LEAN_LOGOS_BRIDGE.md) states the exact proof/checker versions,
+test results, limits and artifacts.
+
+It is important to include the next sentence when showing it: **this prototype
+does not yet translate arbitrary Lean or Mathlib projects**. Lean checked a
+longer 256-step example, but our current translation job's node quota rejected it
+as resource-limited. We saved that result instead of presenting it as a success.
+Arbitrary uploaded code still needs a real sandbox, and the prototype is not
+connected to the website. Full compatibility remains the target, not an achieved
+claim.
+
 ## What each component does
 
 **Lean** is a language, a proof-checking system and an ecosystem of mathematical

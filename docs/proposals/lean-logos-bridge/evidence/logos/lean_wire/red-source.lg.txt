@@ -1,0 +1,26 @@
+# MaCSad Lean bridge mechanical scalar wire RED fixture
+
+## Test: Lean wire retains only exact bounded decimal scalars
+    Expect that leanWireDecimal("0") is equal to 0.
+    Expect that leanWireDecimal("1000000") is equal to 1000000.
+    Let malformed be ["", "-1", "+1", "01", "1.0", "1e0", " 1", "10000000"].
+    Repeat for value in malformed:
+        Expect that leanWireDecimal(value) is equal to -1.
+
+## Test: Lean wire preserves reference order and rejects empty fields
+    Let values be leanWireRefs("0,1,2").
+    Expect that length of values is equal to 3.
+    Expect that item 1 of values is equal to 0.
+    Expect that item 3 of values is equal to 2.
+    Expect that length of leanWireRefs("0,,2") is equal to 0.
+    Expect that length of leanWireRefs("01,2") is equal to 0.
+    For all booleans valid:
+        Let mutable wire be "01".
+        If valid:
+            Set wire to "-1".
+        Expect that length of leanWireRefs(wire) is equal to 0.
+
+## Test: Lean wire constructor correspondence is explicit and ordered
+    Let expected be "1|sort|Sort\n2|bvar|Var\n3|forallE|Pi\n4|lam|Lambda\n5|app|App\n".
+    Expect that leanCoreCorrespondence(["sort", "bvar", "forallE", "lam", "app"]) is equal to expected.
+    Expect that leanCoreCorrespondence(["const"]) is equal to "".

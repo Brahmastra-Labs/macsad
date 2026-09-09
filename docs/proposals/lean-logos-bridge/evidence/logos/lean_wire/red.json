@@ -1,0 +1,37 @@
+{
+  "seed": 7,
+  "outcomes": [
+    {
+      "name": "Lean wire constructor correspondence is explicit and ordered",
+      "verdict": "failed",
+      "failures": [
+        "Unknown function: leanCoreCorrespondence"
+      ],
+      "skip_reason": null,
+      "ops": 2
+    },
+    {
+      "name": "Lean wire preserves reference order and rejects empty fields",
+      "verdict": "failed",
+      "failures": [
+        "Unknown function: leanWireRefs"
+      ],
+      "skip_reason": null,
+      "ops": 1
+    },
+    {
+      "name": "Lean wire retains only exact bounded decimal scalars",
+      "verdict": "failed",
+      "failures": [
+        "Unknown function: leanWireDecimal"
+      ],
+      "skip_reason": null,
+      "ops": 1
+    }
+  ],
+  "passed": 0,
+  "failed": 3,
+  "skipped": 0,
+  "properties": 1,
+  "proven": 0
+}
