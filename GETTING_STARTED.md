@@ -162,6 +162,12 @@ boundary.
 
 ## Everyday development
 
+For an explicitly authorized connection to a working private LOGOS directory,
+use [the development-directory runbook](docs/runbooks/local-logos-directory.md).
+`scripts/dev.sh logos` runs that recorded executable. The standard `make test`,
+doctor, and Compose commands retain the admitted release pin; connecting a
+development directory does not change release admission or start services.
+
 ```bash
 make help              # discover the supported commands
 make doctor            # validate the workstation/Firebat prerequisites

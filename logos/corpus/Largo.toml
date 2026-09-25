@@ -1,0 +1,8 @@
+[package]
+name = "macsad_corpus"
+version = "0.1.0"
+authors = []
+entry = "src/main.lg"
+
+[test]
+skip_budget = 0

@@ -1,0 +1,46 @@
+{
+  "seed": 7,
+  "outcomes": [
+    {
+      "name": "Lean core preflight accounts for both roots at the quota boundary",
+      "verdict": "failed",
+      "failures": [
+        "Unknown function: leanCoreBudgetStatus"
+      ],
+      "skip_reason": null,
+      "ops": 1
+    },
+    {
+      "name": "Lean core preflight preserves unsupported status",
+      "verdict": "failed",
+      "failures": [
+        "Unknown function: leanCoreBudgetStatus"
+      ],
+      "skip_reason": null,
+      "ops": 1
+    },
+    {
+      "name": "Lean core preflight rejects malformed references before indexing",
+      "verdict": "failed",
+      "failures": [
+        "Unknown function: leanCoreBudgetStatus"
+      ],
+      "skip_reason": null,
+      "ops": 1
+    },
+    {
+      "name": "Lean core preflight saturates a doubling DAG",
+      "verdict": "failed",
+      "failures": [
+        "Unknown function: leanCoreBudgetStatus"
+      ],
+      "skip_reason": null,
+      "ops": 513
+    }
+  ],
+  "passed": 0,
+  "failed": 4,
+  "skipped": 0,
+  "properties": 1,
+  "proven": 0
+}

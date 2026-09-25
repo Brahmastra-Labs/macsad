@@ -1,0 +1,18 @@
+# MaCSad admin invariants
+
+This import-free leaf owns the existing six-column board and terminal-state
+rules independently of transport and rendering.
+
+## To invariantKanbanColumnCount () -> Int:
+    Return 6.
+
+## To invariantClosedAcceptsOrdinaryWork (anyCommand: Bool) -> Bool:
+    Return false.
+
+## Test: Column count stays six
+    Expect that invariantKanbanColumnCount() is 6.
+
+## Test: Closed is terminal
+    For all booleans anyCommand:
+        Let accepted be invariantClosedAcceptsOrdinaryWork(anyCommand).
+        Expect that accepted is equal to false.

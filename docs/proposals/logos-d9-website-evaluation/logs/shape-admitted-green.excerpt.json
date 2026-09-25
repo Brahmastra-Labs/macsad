@@ -1,0 +1,7 @@
+{
+  "status": "selected evaluation-result excerpt; not a complete suite or deployment receipt",
+  "originalEvidenceSha256": "f25096959740e488f92bbab3d9d785ec896ab063799e1e2c8d84f00eddabef3f",
+  "sourceSha256": "e539df63f12bfdab1221a6f58dc379624bbbbef0f604b67ff86fb0b11625577b",
+  "exitCode": 0,
+  "output": "{\n  \"seed\": 7,\n  \"outcomes\": [\n    {\n      \"name\": \"Board result accepts exact empty and populated shapes\",\n      \"verdict\": \"passed\",\n      \"failures\": [],\n      \"skip_reason\": null,\n      \"ops\": 3175\n    },\n    {\n      \"name\": \"Board result rejects every SQL NULL\",\n      \"verdict\": \"passed\",\n      \"failures\": [],\n      \"skip_reason\": null,\n      \"ops\": 478\n    },\n    {\n      \"name\": \"Board result rejects ragged rows and null masks\",\n      \"verdict\": \"passed\",\n      \"failures\": [],\n      \"skip_reason\": null,\n      \"ops\": 303\n    },\n    {\n      \"name\": \"Board result requires bounded rows and exact command tag\",\n      \"verdict\": \"passed\",\n      \"failures\": [],\n      \"skip_reason\": null,\n      \"ops\": 559\n    },\n    {\n      \"name\": \"Board result requires exact column names and text OIDs\",\n      \"verdict\": \"passed\",\n      \"failures\": [],\n      \"skip_reason\": null,\n      \"ops\": 345\n    }\n  ],\n  \"passed\": 5,\n  \"failed\": 0,\n  \"skipped\": 0,\n  \"properties\": 1,\n  \"proven\": 1\n}\n"
+}

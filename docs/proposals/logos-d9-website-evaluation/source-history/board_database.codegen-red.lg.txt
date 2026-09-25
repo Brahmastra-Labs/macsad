@@ -1,0 +1,84 @@
+# MaCSad isolated PostgreSQL board query
+
+Import BoardResultShape from "./board_result_shape.lg".
+Import SchemaProbePolicy from "./schema_probe_policy.lg".
+
+The database owns case invariants and canonical UUID/enum/integer values. This
+adapter checks exact metadata, bounded text and the actual read-only connection.
+The caller closes the connection on every returned outcome. The supervisor owns
+the absolute process deadline; TCP limits alone are not an operation deadline.
+
+## To boardDatabaseSchemaAccepted (result: QueryResult) -> Bool:
+    Let columns be result's columns.
+    Let oids be result's typeOids.
+    Let rows be result's rows.
+    Let masks be result's nullMask.
+    If (length of columns is equal to 4) is equal to false or (length of oids is equal to 4) is equal to false:
+        Return false.
+    If (length of rows is equal to 1) is equal to false or (length of masks is equal to 1) is equal to false:
+        Return false.
+    If (result's cmdTag is equal to "SELECT 1") is equal to false:
+        Return false.
+    Let row be item 1 of rows.
+    Let mask be item 1 of masks.
+    If (length of row is equal to 4) is equal to false or (length of mask is equal to 4) is equal to false:
+        Return false.
+    Let names be ["schema_version", "server_version", "role_name", "read_only"].
+    Repeat for position from 1 to 4:
+        If (item position of columns is equal to item position of names) is equal to false or (item position of oids is equal to 25) is equal to false:
+            Return false.
+        If item position of mask:
+            Return false.
+    Let version be item 1 of row.
+    Let serverVersion be item 2 of row.
+    If (length of text_bytes(version) is equal to 1) is equal to false or allDigits(version) is equal to false:
+        Return false.
+    If (length of text_bytes(serverVersion) is equal to 6) is equal to false or allDigits(serverVersion) is equal to false:
+        Return false.
+    If schemaVersionAccepted(parseInt(version)) is equal to false or postgresVersionAccepted(parseInt(serverVersion)) is equal to false:
+        Return false.
+    Return item 3 of row is equal to "macsad_viewer" and item 4 of row is equal to "on".
+
+## To boardDatabaseWire (result: QueryResult, workspace: Text) -> Text:
+    If boardResultShapeAccepted(result's columns, result's typeOids, result's rows, result's nullMask, result's cmdTag) is equal to false:
+        Return "error".
+    Let outputLines be ["macsad-board/1|1|{workspace}"].
+    Repeat for row in result's rows:
+        Let titleBytes be length of text_bytes(item 9 of row).
+        If titleBytes is equal to 0 or titleBytes is greater than 8192:
+            Return "error".
+        Push "case|" combined with join(row, "|") to outputLines.
+    Let wire be join(outputLines, "\n").
+    If length of text_bytes(wire) is greater than 1048575:
+        Return "error".
+    Return wire.
+
+## To boardDatabaseRead (connection: PgConn, workspace: Text) -> Text:
+    Inspect tcpSetTimeout(connection's conn, 3000):
+        When Ok (armed):
+            Let timeoutReady be true.
+        When Err (timeoutError):
+            Return "error".
+    Inspect pgSetStatementTimeout(connection, 2000):
+        When Ok (configured):
+            Let statementReady be true.
+        When Err (statementError):
+            Return "error".
+    Let mutable schemaSql be "SELECT current_version::text AS schema_version, current_setting('server_version_num') AS server_version, ".
+    Set schemaSql to schemaSql combined with "current_user::text AS role_name, current_setting('transaction_read_only') AS read_only FROM macsad.schema_version_v".
+    Inspect pgQuery(connection, schemaSql):
+        When Ok (schemaResult):
+            If boardDatabaseSchemaAccepted(schemaResult) is equal to false:
+                Return "error".
+        When Err (schemaError):
+            Return "error".
+    Let mutable sql be "SELECT research_case_id::text AS case_id, research_kind::text AS research_kind, case_state::text AS case_state, ".
+    Set sql to sql combined with "control_state::text AS control_state, priority::text AS priority, COALESCE(live_task_id::text,'-') AS live_task_id, ".
+    Set sql to sql combined with "COALESCE(board_phase::text,'-') AS board_phase, COALESCE(task_state::text,'-') AS task_state, ".
+    Set sql to sql combined with "CASE WHEN octet_length(title)>4096 THEN '' ELSE encode(convert_to(title,'UTF8'),'hex') END AS title_hex ".
+    Set sql to sql combined with "FROM macsad.case_board_v WHERE workspace_id=$1::uuid ORDER BY research_case_id LIMIT 201".
+    Inspect pgQueryParams(connection, sql, [workspace]):
+        When Ok (boardResult):
+            Return boardDatabaseWire(boardResult, workspace).
+        When Err (boardError):
+            Return "error".

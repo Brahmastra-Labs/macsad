@@ -1,0 +1,37 @@
+{
+  "seed": 7,
+  "outcomes": [
+    {
+      "name": "Lean certificate assembly binds proof and claim without repair",
+      "verdict": "failed",
+      "failures": [
+        "Unknown function: leanCertificateJson"
+      ],
+      "skip_reason": null,
+      "ops": 59
+    },
+    {
+      "name": "Lean certificate assembly bounds combined payload bytes",
+      "verdict": "failed",
+      "failures": [
+        "Unknown function: leanCertificateJson"
+      ],
+      "skip_reason": null,
+      "ops": 130879
+    },
+    {
+      "name": "Lean certificate assembly refuses absent mapped terms",
+      "verdict": "failed",
+      "failures": [
+        "Unknown function: leanCertificateJson"
+      ],
+      "skip_reason": null,
+      "ops": 56
+    }
+  ],
+  "passed": 0,
+  "failed": 3,
+  "skipped": 0,
+  "properties": 1,
+  "proven": 0
+}

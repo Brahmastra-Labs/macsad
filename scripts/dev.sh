@@ -18,6 +18,11 @@ MaCSad developer and Firebat operator harness
 Usage: scripts/dev.sh COMMAND [ARGS]
 
 Development:
+  connect-logos      Connect an explicit private development directory.
+                     --workspace PATH [--binary target/debug/largo]
+  logos-status       Inspect its source observations and executable identity.
+  logos [ARGS]       Run the connected development executable.
+  test-lean-worker   Run mechanical and explicit Lean receipt policy controls.
   doctor             Inspect prerequisites and exact local toolchain state.
   test               Run the complete LOGOS/host/Compose gate; DB when configured.
   test-foundation    Run credential-free source, host, and Compose guardrails.
@@ -172,6 +177,8 @@ test_foundation() {
   python3 -c 'compile(open("scripts/ci/static_server.py", encoding="utf-8").read(), "scripts/ci/static_server.py", "exec")'
   node --test \
     tests/scripts/logos-project.test.mjs \
+    tests/scripts/logos-pages.test.mjs \
+    tests/scripts/logos-test-runner.test.mjs \
     tests/scripts/logos-source-lint.test.mjs \
     tests/scripts/compose-guardrails.test.mjs \
     tests/scripts/artifact-manifest.test.mjs \
@@ -212,6 +219,10 @@ main() {
   }
   shift
   case "${command}" in
+    connect-logos) exec python3 "${REPOSITORY_ROOT}/host_adapters/logos_directory.py" connect "$@" ;;
+    logos-status) (($# == 0)) || die 'logos-status accepts no arguments'; exec python3 "${REPOSITORY_ROOT}/host_adapters/logos_directory.py" inspect ;;
+    logos) exec python3 "${REPOSITORY_ROOT}/host_adapters/logos_directory.py" run -- "$@" ;;
+    test-lean-worker) (($# == 0)) || die 'test-lean-worker accepts no arguments'; cd -- "${REPOSITORY_ROOT}"; exec python3 -m unittest host_adapters.tests.test_logos_directory host_adapters.tests.test_lean_result host_adapters.tests.lean_worker_contract -v ;;
     doctor) (($# == 0)) || die 'doctor accepts no arguments'; doctor ;;
     test) (($# == 0)) || die 'test accepts no arguments'; test_all ;;
     test-foundation) (($# == 0)) || die 'test-foundation accepts no arguments'; test_foundation ;;

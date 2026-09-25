@@ -1,0 +1,285 @@
+{
+  "schema": "macsad-lean-bridge-evaluation-inventory/1",
+  "status": "inert-proposal-not-active-test-discovery",
+  "base_macsad_commit": "84e2afdbcf7ed3df68edb989f312109cc5aeeef6",
+  "translator_toolchain": {
+    "commit": "132dc5346728e2d204df798dd7544e6405306a2c",
+    "binary_sha256": "8c75eeb6180a7f4692ad5abba32b562d4a1cbc08792da95ae58770d4a3cc77f1",
+    "admission_changed": false
+  },
+  "project": {
+    "evaluated_relative_path": "logos/proof-worker/target/lean-bridge-app",
+    "entry": "src/main.lg",
+    "logical_root": "src/lean_bridge_driver.lg",
+    "entry_imports_full_physical_closure": true
+  },
+  "totals": {
+    "modules": 10,
+    "registered_leaf_proposal_count": 6,
+    "tests": 23,
+    "finite_properties": 6,
+    "passed": 23,
+    "failed": 0,
+    "skipped": 0,
+    "proven": 6
+  },
+  "evidence_scope": {
+    "runner": "unchanged admitted wrapper; exact source hardlink harnesses",
+    "test_arguments": [
+      "test",
+      "--quiet",
+      "--seed",
+      "7",
+      "--format",
+      "json",
+      "--prove",
+      "--tiers",
+      "all",
+      "--color",
+      "never"
+    ],
+    "observed_tiers": "admitted CLI/interpreter and finite proof mode",
+    "aot_or_vm_agreement_claimed": false,
+    "full_canonical_quality_gate_run": false,
+    "active_manifest_changed": false
+  },
+  "observed_warnings": {
+    "leaf_final_stderr": "empty",
+    "hand_fixture_entry_stderr_bytes": 0,
+    "synthetic_checker_facts_entry_stderr_bytes": 0,
+    "warning_scope": "Only the final test/run invocations; not a separate final full-app check or source-quality gate."
+  },
+  "modules": [
+    {
+      "path": "src/lean_bridge_driver.lg",
+      "sha256": "122880e9601abfe2951c4b3190f06b3e77d8518076595b5792f6eb1bcf95af95",
+      "physical_lines": 58,
+      "imports": [
+        {
+          "alias": "LeanCoreTerms",
+          "path": "src/lean_core_terms.lg"
+        },
+        {
+          "alias": "LeanCoreBudget",
+          "path": "src/lean_core_budget.lg"
+        },
+        {
+          "alias": "LeanCoreCertificate",
+          "path": "src/lean_core_certificate.lg"
+        },
+        {
+          "alias": "LeanExportStatus",
+          "path": "src/lean_export_status.lg"
+        },
+        {
+          "alias": "LeanCheckStatus",
+          "path": "src/lean_check_status.lg"
+        },
+        {
+          "alias": "LeanWire",
+          "path": "src/lean_wire.lg"
+        },
+        {
+          "alias": "LeanBridgeInput",
+          "path": "src/lean_bridge_input.lg"
+        },
+        {
+          "alias": "LeanCheckDriver",
+          "path": "src/lean_check_driver.lg"
+        }
+      ],
+      "role": "logical-root",
+      "test_names": [],
+      "expected_tests": 0,
+      "expected_properties": 0,
+      "expected_proven": 0
+    },
+    {
+      "path": "src/lean_bridge_input.lg",
+      "sha256": "2537511b3b72c3f7d531aec72169ecbb7fed133af51d1348f96e667ef5cc2c59",
+      "physical_lines": 29,
+      "imports": [
+        {
+          "alias": "LeanCoreBudget",
+          "path": "src/lean_core_budget.lg"
+        },
+        {
+          "alias": "LeanExportStatus",
+          "path": "src/lean_export_status.lg"
+        },
+        {
+          "alias": "LeanWire",
+          "path": "src/lean_wire.lg"
+        }
+      ],
+      "role": "application-module",
+      "test_names": [],
+      "expected_tests": 0,
+      "expected_properties": 0,
+      "expected_proven": 0
+    },
+    {
+      "path": "src/lean_check_driver.lg",
+      "sha256": "5240ed146f0ac1b5eb36286a187d1446faa37d046a29f04f36fbc825dd9806db",
+      "physical_lines": 29,
+      "imports": [
+        {
+          "alias": "LeanCheckStatus",
+          "path": "src/lean_check_status.lg"
+        },
+        {
+          "alias": "LeanWire",
+          "path": "src/lean_wire.lg"
+        }
+      ],
+      "role": "application-module",
+      "test_names": [],
+      "expected_tests": 0,
+      "expected_properties": 0,
+      "expected_proven": 0
+    },
+    {
+      "path": "src/lean_check_status.lg",
+      "sha256": "e8008c855281fb2f2830bed716a6122dc1df98e7ad7df483851d0226c5d5fdb9",
+      "physical_lines": 32,
+      "imports": [],
+      "role": "proposed-import-free-test-leaf",
+      "test_names": [
+        "Lean bridge checker requires exact successful process output",
+        "Lean bridge checker rejects mismatched evidence identities",
+        "Lean bridge checker never upgrades failure or resource exhaustion"
+      ],
+      "expected_tests": 3,
+      "expected_properties": 1,
+      "expected_proven": 1
+    },
+    {
+      "path": "src/lean_core_budget.lg",
+      "sha256": "a24ae7f7007f498f7330b72005deefe5b1f9f258dc8fc073e18149a440cd6440",
+      "physical_lines": 114,
+      "imports": [],
+      "role": "proposed-import-free-test-leaf",
+      "test_names": [
+        "Lean core preflight saturates a doubling DAG",
+        "Lean core preflight accounts for both roots at the quota boundary",
+        "Lean core preflight rejects malformed references before indexing",
+        "Lean core preflight preserves unsupported status",
+        "Lean core scalar fields preserve exact indices and level support",
+        "Lean core scalar fields reject hidden unused payload"
+      ],
+      "expected_tests": 6,
+      "expected_properties": 1,
+      "expected_proven": 1
+    },
+    {
+      "path": "src/lean_core_certificate.lg",
+      "sha256": "9b09a0d54d361c09200c2e20e1894ea5e62b3699d8746246ed6af173a64f9801",
+      "physical_lines": 35,
+      "imports": [],
+      "role": "proposed-import-free-test-leaf",
+      "test_names": [
+        "Lean certificate assembly binds proof and claim without repair",
+        "Lean certificate assembly refuses absent mapped terms",
+        "Lean certificate assembly bounds combined payload bytes"
+      ],
+      "expected_tests": 3,
+      "expected_properties": 1,
+      "expected_proven": 1
+    },
+    {
+      "path": "src/lean_core_terms.lg",
+      "sha256": "d9453d2f696fdad0c6cae9e20479676322dfbd32d144f2b9c6d98247c953cb58",
+      "physical_lines": 120,
+      "imports": [],
+      "role": "proposed-import-free-test-leaf",
+      "test_names": [
+        "Lean core emits the proposition identity statement and proof",
+        "Lean core preserves binder order and distant references",
+        "Lean core keeps application operand order",
+        "Lean core rejects malformed graph references and open variables",
+        "Lean core never replaces unsupported assumptions or terms"
+      ],
+      "expected_tests": 5,
+      "expected_properties": 1,
+      "expected_proven": 1
+    },
+    {
+      "path": "src/lean_export_status.lg",
+      "sha256": "9ecfb103d35b1c151fae8acb3ba6c2afa857d1fc51e884b99c0edee511ab97a6",
+      "physical_lines": 33,
+      "imports": [],
+      "role": "proposed-import-free-test-leaf",
+      "test_names": [
+        "Lean bridge admits a complete checked closed theorem export",
+        "Lean bridge rejects untrusted or incomplete transport facts",
+        "Lean bridge does not silently drop assumptions or universe parameters"
+      ],
+      "expected_tests": 3,
+      "expected_properties": 1,
+      "expected_proven": 1
+    },
+    {
+      "path": "src/lean_wire.lg",
+      "sha256": "1067d3692d3dfcff6ec93b6b9a9d76e90e60ab41020b4e04f85035ef5f44e28a",
+      "physical_lines": 70,
+      "imports": [],
+      "role": "proposed-import-free-test-leaf",
+      "test_names": [
+        "Lean wire retains only exact bounded decimal scalars",
+        "Lean wire preserves reference order and rejects empty fields",
+        "Lean wire constructor correspondence is explicit and ordered"
+      ],
+      "expected_tests": 3,
+      "expected_properties": 1,
+      "expected_proven": 1
+    },
+    {
+      "path": "src/main.lg",
+      "sha256": "5c69ea231a37b723bb8f6cba1e965467422c346ef36889d036bcc56d6cb35ade",
+      "physical_lines": 17,
+      "imports": [
+        {
+          "alias": "LeanCoreTerms",
+          "path": "src/lean_core_terms.lg"
+        },
+        {
+          "alias": "LeanCoreBudget",
+          "path": "src/lean_core_budget.lg"
+        },
+        {
+          "alias": "LeanCoreCertificate",
+          "path": "src/lean_core_certificate.lg"
+        },
+        {
+          "alias": "LeanExportStatus",
+          "path": "src/lean_export_status.lg"
+        },
+        {
+          "alias": "LeanCheckStatus",
+          "path": "src/lean_check_status.lg"
+        },
+        {
+          "alias": "LeanWire",
+          "path": "src/lean_wire.lg"
+        },
+        {
+          "alias": "LeanBridgeInput",
+          "path": "src/lean_bridge_input.lg"
+        },
+        {
+          "alias": "LeanCheckDriver",
+          "path": "src/lean_check_driver.lg"
+        },
+        {
+          "alias": "LeanBridgeDriver",
+          "path": "src/lean_bridge_driver.lg"
+        }
+      ],
+      "role": "physical-entry",
+      "test_names": [],
+      "expected_tests": 0,
+      "expected_properties": 0,
+      "expected_proven": 0
+    }
+  ]
+}

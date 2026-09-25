@@ -1,0 +1,21 @@
+# Fixed domain mapping for macsad.problem_revision
+
+Import AlejandroRevision from "./alejandro_revision.lg".
+
+## To alejandroRevisionColumns (draft: AlejandroRevisionDraft) -> Json:
+    Let columns be a new Seq of JEntry.
+    Push a new JEntry with key "research_kind" and val (a new JStr with s "computer_science") to columns.
+    Push a new JEntry with key "title" and val (a new JStr with s (draft's title)) to columns.
+    Push a new JEntry with key "original_question" and val (a new JStr with s (draft's originalQuestion)) to columns.
+    Push a new JEntry with key "definitions" and val (a new JStr with s "Original Lean source and manifest in kind_body.") to columns.
+    Push a new JEntry with key "assumptions" and val (a new JStr with s "Recorded Lean assumptions are historical; independently audit every proof attempt.") to columns.
+    Push a new JEntry with key "domain_bounds" and val (a new JStr with s "Original Alejandro Lean 4.14 conformance case; complete declaration obligations.") to columns.
+    Push a new JEntry with key "success_criteria" and val (a new JStr with s "Meaning preservation established by an independently replayed LOGOS proof package.") to columns.
+    Push a new JEntry with key "refutation_criteria" and val (a new JStr with s "A checked semantic counterexample. Dependency-policy refusals retain their separate classification.") to columns.
+    Push a new JEntry with key "inconclusive_criteria" and val (a new JStr with s "Missing coverage, resources, proof, exporter support, or replay evidence.") to columns.
+    Push a new JEntry with key "revision_reason" and val (a new JStr with s "Import pinned original problem and recorded evidence; proof verification not performed.") to columns.
+    Push a new JEntry with key "kind_schema_id" and val (a new JStr with s "macsad.alejandro-original-problem") to columns.
+    Push a new JEntry with key "kind_schema_version" and val (a new JNum with n 1) to columns.
+    Push a new JEntry with key "kind_body" and val (draft's kindBody) to columns.
+    Push a new JEntry with key "content_digest_hex" and val (a new JStr with s (draft's contentDigest)) to columns.
+    Return a new JObj with entries columns.

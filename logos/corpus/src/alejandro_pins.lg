@@ -1,0 +1,52 @@
+# Trusted corpus pin-index decoder
+
+Import AlejandroIdentity from "./alejandro_identity.lg".
+Import AlejandroJsonFields from "./alejandro_json_fields.lg".
+Import AlejandroProvenance from "./alejandro_provenance.lg".
+
+## To decodeAlejandroPins (raw: Text, caseId: Text) -> Result of AlejandroPins and Text:
+    If alejandroCaseIdAccepted(caseId) is equal to false:
+        Return a new Err with error "invalid requested original case id".
+    If length of text_bytes(raw) is greater than 16777216:
+        Return a new Err with error "pin index exceeds admission limit".
+    Let approved be "22b26a3fc2da87d04c8863767896beb3f18780e42a304863c5718cb270d1cf32".
+    If alejandroRawMatches(raw, approved) is equal to false:
+        Return a new Err with error "unapproved corpus pin index".
+    Inspect alejandroStrictObject(raw):
+        When Err (failure):
+            Return a new Err with error failure.
+        When Ok (index):
+            Inspect jsonNoExtraKeys(index, ["schema", "sourceHost", "sourceRoot", "pins"]):
+                When Err (failure):
+                    Return a new Err with error failure.
+            Inspect alejandroArrayField(index, "pins"):
+                When Err (failure):
+                    Return a new Err with error failure.
+                When Ok (rows):
+                    If length of rows is not equal to 248:
+                        Return a new Err with error "original pin inventory is incomplete".
+                    Repeat for row in rows:
+                        Inspect decodeAlejandroPinRow(row):
+                            When Err (failure):
+                                Return a new Err with error failure.
+                            When Ok (pins):
+                                If pins's caseId is equal to caseId:
+                                    Return a new Ok with value pins.
+    Return a new Err with error "requested case is absent from approved pins".
+## To decodeAlejandroPinRow (row: Json) -> Result of AlejandroPins and Text:
+    Let keys be ["caseId", "sourcePath", "archiveDigest", "manifestDigest", "sourceDigest", "ledgerDigest"].
+    Inspect alejandroTextFields(row, keys, [], []):
+        When Ok (values):
+            Let caseId be item 1 of values.
+            Let path be item 2 of values.
+            Let archive be item 3 of values.
+            Let sourceEnvelope be item 4 of values.
+            Let source be item 5 of values.
+            Let ledger be item 6 of values.
+            Let pins be a new AlejandroPins with caseId caseId and sourcePath path and archiveDigest archive and manifestDigest sourceEnvelope and sourceDigest source and ledgerDigest ledger.
+            If alejandroOriginalPinsAccepted(pins) is equal to false or alejandroSourcePathAccepted(path, caseId) is equal to false:
+                Return a new Err with error "invalid original pin row".
+            Return a new Ok with value pins.
+        When Err (failure):
+            Return a new Err with error failure.
+    Return a new Err with error "invalid source pin record".

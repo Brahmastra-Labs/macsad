@@ -1,0 +1,56 @@
+# Original ledger observation decoder
+
+Import AlejandroJsonFields from "./alejandro_json_fields.lg".
+Import AlejandroProvenance from "./alejandro_provenance.lg".
+Import AlejandroLedgerRow from "./alejandro_ledger_row.lg".
+
+## An AlejandroLedger has:
+    a caseId, which is Text.
+    a declarationCount, which is Int.
+    a rawDigest, which is Text.
+    a recorded, which is Json.
+## To decodeAlejandroLedgerObject (object: Json, expectedCase: Text, digest: Text) -> Result of AlejandroLedger and Text:
+    Inspect jsonNoExtraKeys(object, ["case", "lean", "lean_compiles", "declarations"]):
+        When Err (failure):
+            Return a new Err with error failure.
+    Repeat for key in ["case", "lean"]:
+        Inspect alejandroStringField(object, key):
+            When Err (failure):
+                Return a new Err with error failure.
+            When Ok (value):
+                If key is equal to "case" and value is not equal to expectedCase:
+                    Return a new Err with error "ledger belongs to another case".
+                If key is equal to "lean" and value is not equal to "4.14.0":
+                    Return a new Err with error "ledger reports another Lean release".
+    Inspect jsonField(object, "lean_compiles"):
+        When Err (failure):
+            Return a new Err with error failure.
+        When Ok (field):
+            Inspect jsonBool(field):
+                When Err (failure):
+                    Return a new Err with error failure.
+    Let mutable rows be a new Seq of Json.
+    Inspect alejandroArrayField(object, "declarations"):
+        When Ok (items):
+            Set rows to items.
+        When Err (failure):
+            Return a new Err with error failure.
+    Let seen be a new Seq of Text.
+    Repeat for row in rows:
+        Inspect validateAlejandroDeclaration(row):
+            When Err (failure):
+                Return a new Err with error failure.
+            When Ok (name):
+                Repeat for previous in seen:
+                    If previous is equal to name:
+                        Return a new Err with error "duplicate recorded declaration".
+                Push name to seen.
+    Let observation be a new AlejandroLedger with caseId expectedCase and declarationCount (length of rows) and rawDigest digest and recorded object.
+    Return a new Ok with value observation.
+## To decodeAlejandroLedger (raw: Text, expectedCase: Text) -> Result of AlejandroLedger and Text:
+    Inspect alejandroStrictObject(raw):
+        When Err (failure):
+            Return a new Err with error failure.
+        When Ok (object):
+            Return decodeAlejandroLedgerObject(object, expectedCase, alejandroRawDigest(raw)).
+    Return a new Err with error "invalid recorded ledger".

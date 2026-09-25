@@ -1,0 +1,29 @@
+# Authenticated LGX command preparation boundary
+
+Import AlejandroCatalog from "./alejandro_catalog.lg".
+Import AlejandroRevision from "./alejandro_revision.lg".
+Import AlejandroRevisionColumns from "./alejandro_revision_columns.lg".
+Import AlejandroProvenance from "./alejandro_provenance.lg".
+
+## To prepareAlejandroProblem (manifestRaw: Text, sourceRaw: Text, ledgerRaw: Text, pins: AlejandroPins) -> Result of AlejandroRevisionDraft and Text:
+    If length of text_bytes(manifestRaw) is greater than 16777216:
+        Return a new Err with error "manifest exceeds admission limit".
+    If alejandroOriginalPinsAccepted(pins) is equal to false:
+        Return a new Err with error "original pins rejected".
+    If alejandroRawMatches(manifestRaw, pins's manifestDigest) is equal to false:
+        Return a new Err with error "raw manifest hash mismatch".
+    Inspect decodeAlejandroCatalog(manifestRaw):
+        When Err (failure):
+            Return a new Err with error failure.
+        When Ok (catalog):
+            Repeat for original in catalog's cases:
+                If original's caseId is equal to pins's caseId:
+                    Return assembleAlejandroRevision(original, sourceRaw, ledgerRaw, pins).
+    Return a new Err with error "case absent from original catalog".
+## To prepareAlejandroRevisionColumns (manifestRaw: Text, sourceRaw: Text, ledgerRaw: Text, pins: AlejandroPins) -> Result of Json and Text:
+    Inspect prepareAlejandroProblem(manifestRaw, sourceRaw, ledgerRaw, pins):
+        When Ok (draft):
+            Return a new Ok with value alejandroRevisionColumns(draft).
+        When Err (failure):
+            Return a new Err with error failure.
+    Return a new Err with error "problem preparation failed".

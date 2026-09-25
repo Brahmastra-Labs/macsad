@@ -1,0 +1,17 @@
+# Recorded evidence field choices
+## To alejandroRecordedChoice (value: Text, allowed: Seq of Text) -> Bool:
+    Repeat for choice in allowed:
+        If value is equal to choice:
+            Return true.
+    Return false.
+## Test: Recorded choices require whole exact values
+    Let allowed be ["bridged", "open", "refused"].
+    Expect that alejandroRecordedChoice("bridged", allowed) is equal to true.
+    Repeat for invalid in ["bridged|open", "verified", "", "BRIDGED"]:
+        Expect that alejandroRecordedChoice(invalid, allowed) is equal to false.
+## Test: Current ledger statuses cannot introduce verified state
+    For all booleans recorded:
+        Let mutable status be "verified".
+        If recorded:
+            Set status to "bridged".
+        Expect that alejandroRecordedChoice(status, ["bridged", "open", "refused"]) is equal to recorded.

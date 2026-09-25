@@ -1,0 +1,23 @@
+# MaCSad Lean bridge checker-result RED fixture
+
+Only native LOGOS may classify the supplied mechanical process and identity facts.
+Kernel checked never means independently checked or universally translated.
+
+## Test: Lean bridge checker requires exact successful process output
+    Expect that leanBridgeCheckStatus(true, true, true, true, 0, "VERIFIED\n", "") is equal to "kernel-checked".
+    Expect that leanBridgeCheckStatus(true, true, true, true, 0, "VERIFIED", "") is equal to "rejected".
+    Expect that leanBridgeCheckStatus(true, true, true, true, 0, "VERIFIED\nextra", "") is equal to "rejected".
+    Expect that leanBridgeCheckStatus(true, true, true, true, 0, "VERIFIED\n", "warning") is equal to "rejected".
+
+## Test: Lean bridge checker rejects mismatched evidence identities
+    Expect that leanBridgeCheckStatus(false, true, true, true, 0, "VERIFIED\n", "") is equal to "rejected".
+    Expect that leanBridgeCheckStatus(true, false, true, true, 0, "VERIFIED\n", "") is equal to "rejected".
+    Expect that leanBridgeCheckStatus(true, true, false, true, 0, "VERIFIED\n", "") is equal to "rejected".
+    Expect that leanBridgeCheckStatus(true, true, true, false, 0, "VERIFIED\n", "") is equal to "rejected".
+
+## Test: Lean bridge checker never upgrades failure or resource exhaustion
+    Expect that leanBridgeCheckStatus(true, true, true, true, 1, "", "REJECTED: wrong target\n") is equal to "not-kernel-checked".
+    Expect that leanBridgeCheckStatus(true, true, true, true, 124, "", "timeout") is equal to "rejected".
+    Expect that leanBridgeCheckStatus(true, true, true, true, 1, "VERIFIED\n", "") is equal to "rejected".
+    For all booleans identity:
+        Expect that leanBridgeCheckStatus(true, identity, true, true, 124, "VERIFIED\n", "") is equal to "rejected".

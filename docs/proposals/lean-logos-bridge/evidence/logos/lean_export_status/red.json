@@ -1,0 +1,37 @@
+{
+  "seed": 7,
+  "outcomes": [
+    {
+      "name": "Lean bridge admits a complete checked closed theorem export",
+      "verdict": "failed",
+      "failures": [
+        "Unknown function: leanExportStatus"
+      ],
+      "skip_reason": null,
+      "ops": 1
+    },
+    {
+      "name": "Lean bridge does not silently drop assumptions or universe parameters",
+      "verdict": "failed",
+      "failures": [
+        "Unknown function: leanExportStatus"
+      ],
+      "skip_reason": null,
+      "ops": 1
+    },
+    {
+      "name": "Lean bridge rejects untrusted or incomplete transport facts",
+      "verdict": "failed",
+      "failures": [
+        "Unknown function: leanExportStatus"
+      ],
+      "skip_reason": null,
+      "ops": 1
+    }
+  ],
+  "passed": 0,
+  "failed": 3,
+  "skipped": 0,
+  "properties": 1,
+  "proven": 0
+}

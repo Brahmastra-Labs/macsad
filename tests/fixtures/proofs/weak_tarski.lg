@@ -1,0 +1,5 @@
+## Theory Weak
+
+Axiom pseudo_reflexivity: for all a b, Cong(a, b, b, a).
+
+Theorem reflexivity: prove for all a b, Cong(a, b, a, b).

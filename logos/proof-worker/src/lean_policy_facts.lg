@@ -1,0 +1,76 @@
+# Shared Lean receipt facts and named-assumption policy
+
+## To leanStagePassed (stages: Seq of Text, first: Int) -> Bool:
+    Let mutable index be first.
+    While index is at most 7:
+        If item index of stages is not equal to "passed":
+            Return false.
+        Set index to index + 1.
+    Return true.
+
+## To leanAssumptionsUnique (value: Text) -> Bool:
+    If value is equal to "":
+        Return true.
+    Let names be split(value, ",").
+    If length of names is greater than 64:
+        Return false.
+    Let seen be a new Seq of Text.
+    Repeat for name in names:
+        If name is equal to "":
+            Return false.
+        Repeat for previous in seen:
+            If name is equal to previous:
+                Return false.
+        Push name to seen.
+    Return true.
+
+## To leanAssumptionsAllowed (value: Text) -> Bool:
+    If value is equal to "":
+        Return true.
+    Let names be split(value, ",").
+    If length of names is greater than 3:
+        Return false.
+    Repeat for name in names:
+        Let mutable allowed be name is equal to "70726f70657874".
+        If name is equal to "51756f742e736f756e64":
+            Set allowed to true.
+        If name is equal to "436c6173736963616c2e63686f696365":
+            Set allowed to true.
+        If allowed is equal to false:
+            Return false.
+    Return true.
+
+## To leanDigestAccepted (value: Text) -> Bool:
+    If length of text_bytes(value) is not equal to 64:
+        Return false.
+    Repeat for byte in text_bytes(value):
+        Let mutable valid be false.
+        If byte is at least 48:
+            If byte is at most 57:
+                Set valid to true.
+        If byte is at least 97:
+            If byte is at most 102:
+                Set valid to true.
+        If valid is equal to false:
+            Return false.
+    Return true.
+
+
+## Test: Lean named assumptions are unique and policy allowed
+    Expect that leanAssumptionsAllowed("") is equal to true.
+    Let canonical be "70726f70657874,51756f742e736f756e64,436c6173736963616c2e63686f696365".
+    Expect that leanAssumptionsAllowed(canonical) is equal to true.
+    Expect that leanAssumptionsAllowed("736f7272794178") is equal to false.
+    Expect that leanAssumptionsUnique("70726f70657874,70726f70657874") is equal to false.
+    Expect that leanAssumptionsUnique(canonical) is equal to true.
+    Expect that leanDigestAccepted(repeatText("a", 64)) is equal to true.
+    Expect that leanDigestAccepted(repeatText("A", 64)) is equal to false.
+
+## Test: Lean stages preserve seven original versus six replay checks
+    For all booleans observedLean:
+        Let mutable first be "not_run".
+        If observedLean:
+            Set first to "passed".
+        Let stages be [first, "passed", "passed", "passed", "passed", "passed", "passed"].
+        Expect that leanStagePassed(stages, 2) is equal to true.
+        Expect that leanStagePassed(stages, 1) is equal to observedLean.

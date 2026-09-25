@@ -1,0 +1,31 @@
+{
+  "seed": 7,
+  "outcomes": [
+    {
+      "name": "Lean bridge checker never upgrades failure or resource exhaustion",
+      "verdict": "passed",
+      "failures": [],
+      "skip_reason": null,
+      "ops": 25
+    },
+    {
+      "name": "Lean bridge checker rejects mismatched evidence identities",
+      "verdict": "passed",
+      "failures": [],
+      "skip_reason": null,
+      "ops": 13
+    },
+    {
+      "name": "Lean bridge checker requires exact successful process output",
+      "verdict": "passed",
+      "failures": [],
+      "skip_reason": null,
+      "ops": 20
+    }
+  ],
+  "passed": 3,
+  "failed": 0,
+  "skipped": 0,
+  "properties": 1,
+  "proven": 1
+}

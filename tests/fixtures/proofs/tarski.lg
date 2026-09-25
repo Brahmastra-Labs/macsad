@@ -1,0 +1,8 @@
+## Theory Tarski
+
+Axiom pseudo_reflexivity: for all a b, Cong(a, b, b, a).
+Axiom inner_transitivity: for all a b c d e f, if Cong(a, b, c, d) and Cong(a, b, e, f) then Cong(c, d, e, f).
+
+Theorem reflexivity: prove for all a b, Cong(a, b, a, b).
+Theorem symmetry cites reflexivity: prove for all a b c d, if Cong(a, b, c, d) then Cong(c, d, a, b).
+Theorem transitivity cites symmetry: prove for all a b c d e f, if Cong(a, b, c, d) and Cong(c, d, e, f) then Cong(a, b, e, f).

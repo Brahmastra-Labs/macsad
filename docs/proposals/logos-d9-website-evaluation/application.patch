@@ -1,0 +1,645 @@
+diff --git a/logos/gateway/target/board-read-contract/Largo.toml b/logos/gateway/target/board-read-contract/Largo.toml
+new file mode 100644
+--- /dev/null
++++ b/logos/gateway/target/board-read-contract/Largo.toml
+@@ -0,0 +1,8 @@
++[package]
++name = "macsad_board_read_evaluation"
++version = "0.1.0"
++authors = []
++entry = "src/main.lg"
++
++[test]
++skip_budget = 0
+diff --git a/logos/gateway/target/board-read-contract/src/board_database.lg b/logos/gateway/target/board-read-contract/src/board_database.lg
+new file mode 100644
+--- /dev/null
++++ b/logos/gateway/target/board-read-contract/src/board_database.lg
+@@ -0,0 +1,87 @@
++# MaCSad isolated PostgreSQL board query
++
++Import BoardResultShape from "./board_result_shape.lg".
++Import SchemaProbePolicy from "./schema_probe_policy.lg".
++
++The database owns case invariants and canonical UUID/enum/integer values. This
++adapter checks exact metadata, bounded text and the actual read-only connection.
++The caller closes the connection on every returned outcome. The supervisor owns
++the absolute process deadline; TCP limits alone are not an operation deadline.
++
++## To boardDatabaseSchemaAccepted (result: QueryResult) -> Bool:
++    Let columns be result's columns.
++    Let oids be result's typeOids.
++    Let rows be result's rows.
++    Let masks be result's nullMask.
++    If (length of columns is equal to 4) is equal to false or (length of oids is equal to 4) is equal to false:
++        Return false.
++    If (length of rows is equal to 1) is equal to false or (length of masks is equal to 1) is equal to false:
++        Return false.
++    If (result's cmdTag is equal to "SELECT 1") is equal to false:
++        Return false.
++    Let row be item 1 of rows.
++    Let mask be item 1 of masks.
++    If (length of row is equal to 4) is equal to false or (length of mask is equal to 4) is equal to false:
++        Return false.
++    Let names be ["schema_version", "server_version", "role_name", "read_only"].
++    Repeat for position from 1 to 4:
++        If (item position of columns is equal to item position of names) is equal to false or (item position of oids is equal to 25) is equal to false:
++            Return false.
++        If item position of mask:
++            Return false.
++    Let version be item 1 of row.
++    Let serverVersion be item 2 of row.
++    If (length of text_bytes(version) is equal to 1) is equal to false or allDigits(version) is equal to false:
++        Return false.
++    If (length of text_bytes(serverVersion) is equal to 6) is equal to false or allDigits(serverVersion) is equal to false:
++        Return false.
++    If schemaVersionAccepted(parseInt(version)) is equal to false or postgresVersionAccepted(parseInt(serverVersion)) is equal to false:
++        Return false.
++    Return item 3 of row is equal to "macsad_viewer" and item 4 of row is equal to "on".
++
++## To boardDatabaseWire (result: QueryResult, workspace: Text) -> Text:
++    Let rows be result's rows.
++    If boardResultShapeAccepted(result's columns, result's typeOids, rows, result's nullMask, result's cmdTag) is equal to false:
++        Return "error".
++    Let outputLines be ["macsad-board/1|1|{workspace}"].
++    Repeat for row in rows:
++        Let titleBytes be length of text_bytes(item 9 of row).
++        If titleBytes is equal to 0 or titleBytes is greater than 8192:
++            Return "error".
++        Push "case|" combined with join(row, "|") to outputLines.
++    Let wire be join(outputLines, "\n").
++    If length of text_bytes(wire) is greater than 1048575:
++        Return "error".
++    Return wire.
++
++## To boardDatabaseRead (connection: PgConn, workspace: Text) -> Text:
++    Inspect tcpSetTimeout(connection's conn, 3000):
++        When Ok (armed):
++            Let timeoutReady be true.
++        When Err (timeoutError):
++            Return "error".
++    Inspect pgSetStatementTimeout(connection, 2000):
++        When Ok (configured):
++            Let statementReady be true.
++        When Err (statementError):
++            Return "error".
++    Let mutable schemaSql be "SELECT current_version::text AS schema_version, current_setting('server_version_num') AS server_version, ".
++    Set schemaSql to schemaSql combined with "current_user::text AS role_name, current_setting('transaction_read_only') AS read_only FROM macsad.schema_version_v".
++    Inspect pgQuery(connection, schemaSql):
++        When Ok (schemaResult):
++            If boardDatabaseSchemaAccepted(schemaResult) is equal to false:
++                Return "error".
++        When Err (schemaError):
++            Return "error".
++    Let mutable sql be "SELECT research_case_id::text AS case_id, research_kind::text AS research_kind, case_state::text AS case_state, ".
++    Set sql to sql combined with "control_state::text AS control_state, priority::text AS priority, COALESCE(live_task_id::text,'-') AS live_task_id, ".
++    Set sql to sql combined with "COALESCE(board_phase::text,'-') AS board_phase, COALESCE(task_state::text,'-') AS task_state, ".
++    Set sql to sql combined with "CASE WHEN octet_length(title)>4096 THEN '' ELSE encode(convert_to(title,'UTF8'),'hex') END AS title_hex ".
++    Set sql to sql combined with "FROM macsad.case_board_v WHERE workspace_id=$1::uuid ORDER BY research_case_id LIMIT 201".
++    Let parameters be ["{workspace}"].
++    Let queryResult be pgQueryParams(connection, sql, parameters).
++    Inspect queryResult:
++        When Ok (boardResult):
++            Return boardDatabaseWire(boardResult, workspace).
++        When Err (boardError):
++            Return "error".
+diff --git a/logos/gateway/target/board-read-contract/src/board_read_driver.lg b/logos/gateway/target/board-read-contract/src/board_read_driver.lg
+new file mode 100644
+--- /dev/null
++++ b/logos/gateway/target/board-read-contract/src/board_read_driver.lg
+@@ -0,0 +1,44 @@
++# MaCSad isolated board read lifecycle
++
++Import BoardDatabase from "./board_database.lg".
++
++This evaluation accepts only the synthetic fixture workspace and exact loopback
++viewer URL. It is not an authenticated application route or a general DSN parser.
++One supervised native process owns one connection; no connection pooling exists.
++
++## To boardEvaluationUrlAccepted (url: Text) -> Bool:
++    If length of text_bytes(url) is greater than 128:
++        Return false.
++    Let prefix be "postgresql://macsad_viewer@127.0.0.1:".
++    If startsWith(url, prefix) is equal to false:
++        Return false.
++    Let parts be split(removePrefix(url, prefix), "/").
++    If (length of parts is equal to 2) is equal to false:
++        Return false.
++    If (item 2 of parts is equal to "macsad") is equal to false:
++        Return false.
++    Let portText be item 1 of parts.
++    If length of text_bytes(portText) is greater than 5:
++        Return false.
++    If allDigits(portText) is equal to false:
++        Return false.
++    Let port be parseInt(portText).
++    If port is less than 1024 or port is greater than 65535:
++        Return false.
++    Return numText(port) is equal to portText.
++
++## To boardEvaluationRead (url: Text, workspace: Text) -> Text:
++    If (workspace is equal to "10000000-0000-4000-8000-000000000001") is equal to false:
++        Return "error".
++    If boardEvaluationUrlAccepted(url) is equal to false:
++        Return "error".
++    Inspect pgConnect(url):
++        When Ok (connection):
++            Let wire be boardDatabaseRead(connection, workspace).
++            Inspect pgClose(connection):
++                When Ok (closed):
++                    Return wire.
++                When Err (closeError):
++                    Return "error".
++        When Err (connectError):
++            Return "error".
+diff --git a/logos/gateway/target/board-read-contract/src/main.lg b/logos/gateway/target/board-read-contract/src/main.lg
+new file mode 100644
+--- /dev/null
++++ b/logos/gateway/target/board-read-contract/src/main.lg
+@@ -0,0 +1,15 @@
++# MaCSad isolated database board read evaluation
++
++Import BoardDatabase from "./board_database.lg".
++Import BoardReadDriver from "./board_read_driver.lg".
++Import BoardResultShape from "./board_result_shape.lg".
++Import SchemaProbePolicy from "./schema_probe_policy.lg".
++
++## To native args () -> Seq of Text
++
++## Main
++Let arguments be args().
++If length of arguments is equal to 3:
++    Show boardEvaluationRead(item 2 of arguments, item 3 of arguments).
++Otherwise:
++    Show "error".
+diff --git a/logos/gateway/target/board-read-contract/src/board_result_shape.lg b/logos/gateway/target/board-read-contract/src/board_result_shape.lg
+new file mode 100644
+--- /dev/null
++++ b/logos/gateway/target/board-read-contract/src/board_result_shape.lg
+@@ -0,0 +1,102 @@
++# MaCSad board PostgreSQL result shape
++
++This import-free leaf validates a bounded nine-text-column PostgreSQL result.
++It owns result shape, not field semantics, authentication, or database effects.
++
++## To boardResultShapeAccepted (columns: Seq of Text, typeOids: Seq of Int, rows: Seq of Seq of Text, nullMask: Seq of Seq of Bool, cmdTag: Text) -> Bool:
++    If (length of columns is equal to 9) is equal to false or (length of typeOids is equal to 9) is equal to false:
++        Return false.
++    Let rowCount be length of rows.
++    If rowCount is greater than 200 or (length of nullMask is equal to rowCount) is equal to false:
++        Return false.
++    If (cmdTag is equal to "SELECT {rowCount}") is equal to false:
++        Return false.
++    Let expectedColumns be ["case_id", "research_kind", "case_state", "control_state", "priority", "live_task_id", "board_phase", "task_state", "title_hex"].
++    Repeat for position from 1 to 9:
++        If (item position of columns is equal to item position of expectedColumns) is equal to false or (item position of typeOids is equal to 25) is equal to false:
++            Return false.
++    Repeat for position from 1 to rowCount:
++        Let row be item position of rows.
++        Let mask be item position of nullMask.
++        If (length of row is equal to 9) is equal to false or (length of mask is equal to 9) is equal to false:
++            Return false.
++        Repeat for isNull in mask:
++            If isNull:
++                Return false.
++    Return true.
++
++## To boardShapeTestColumns () -> Seq of Text:
++    Return ["case_id", "research_kind", "case_state", "control_state", "priority", "live_task_id", "board_phase", "task_state", "title_hex"].
++## To boardShapeTestOids () -> Seq of Int:
++    Return [25, 25, 25, 25, 25, 25, 25, 25, 25].
++## To boardShapeTestRows (count: Int) -> Seq of Seq of Text:
++    Let rows be a new Seq of Seq of Text.
++    Repeat for position from 1 to count:
++        Push ["cell", "cell", "cell", "cell", "cell", "cell", "cell", "cell", "cell"] to rows.
++    Return rows.
++## To boardShapeTestMasks (count: Int) -> Seq of Seq of Bool:
++    Let masks be a new Seq of Seq of Bool.
++    Repeat for position from 1 to count:
++        Push [false, false, false, false, false, false, false, false, false] to masks.
++    Return masks.
++## To boardShapeTestAccepted (rows: Seq of Seq of Text, masks: Seq of Seq of Bool, tag: Text) -> Bool:
++    Return boardResultShapeAccepted(boardShapeTestColumns(), boardShapeTestOids(), rows, masks, tag).
++
++## Test: Board result accepts exact empty and populated shapes
++    Repeat for count in [0, 1, 3, 200]:
++        Expect that boardShapeTestAccepted(boardShapeTestRows(count), boardShapeTestMasks(count), "SELECT {count}") is equal to true.
++
++## Test: Board result requires exact column names and text OIDs
++    Let rows be boardShapeTestRows(1).
++    Let masks be boardShapeTestMasks(1).
++    Repeat for position from 1 to 9:
++        Let mutable columns be boardShapeTestColumns().
++        Set item position of columns to "unexpected".
++        Expect that boardResultShapeAccepted(columns, boardShapeTestOids(), rows, masks, "SELECT 1") is equal to false.
++        Let mutable oids be boardShapeTestOids().
++        Set item position of oids to 23.
++        Expect that boardResultShapeAccepted(boardShapeTestColumns(), oids, rows, masks, "SELECT 1") is equal to false.
++    Let mutable extraColumns be boardShapeTestColumns().
++    Push "extra" to extraColumns.
++    Let mutable extraOids be boardShapeTestOids().
++    Push 25 to extraOids.
++    Expect that boardResultShapeAccepted(extraColumns, boardShapeTestOids(), rows, masks, "SELECT 1") is equal to false.
++    Expect that boardResultShapeAccepted(boardShapeTestColumns(), extraOids, rows, masks, "SELECT 1") is equal to false.
++    Expect that boardResultShapeAccepted(["case_id"], boardShapeTestOids(), rows, masks, "SELECT 1") is equal to false.
++    Expect that boardResultShapeAccepted(boardShapeTestColumns(), [25], rows, masks, "SELECT 1") is equal to false.
++
++## Test: Board result rejects ragged rows and null masks
++    Repeat for width in [0, 8, 10]:
++        Let row be a new Seq of Text.
++        Let mask be a new Seq of Bool.
++        Repeat for position from 1 to width:
++            Push "cell" to row.
++            Push false to mask.
++        Let mutable rows be boardShapeTestRows(1).
++        Set item 1 of rows to row.
++        Expect that boardShapeTestAccepted(rows, boardShapeTestMasks(1), "SELECT 1") is equal to false.
++        Let mutable masks be boardShapeTestMasks(1).
++        Set item 1 of masks to mask.
++        Expect that boardShapeTestAccepted(boardShapeTestRows(1), masks, "SELECT 1") is equal to false.
++    Expect that boardShapeTestAccepted(boardShapeTestRows(1), boardShapeTestMasks(0), "SELECT 1") is equal to false.
++    Expect that boardShapeTestAccepted(boardShapeTestRows(1), boardShapeTestMasks(2), "SELECT 1") is equal to false.
++    Expect that boardShapeTestAccepted(boardShapeTestRows(0), boardShapeTestMasks(1), "SELECT 0") is equal to false.
++
++## Test: Board result rejects every SQL NULL
++    Repeat for position from 1 to 9:
++        Let mutable masks be boardShapeTestMasks(1).
++        Let mutable mask be item 1 of masks.
++        Set item position of mask to true.
++        Set item 1 of masks to mask.
++        Expect that boardShapeTestAccepted(boardShapeTestRows(1), masks, "SELECT 1") is equal to false.
++    For all booleans hasNull:
++        Let mutable masks be boardShapeTestMasks(1).
++        Let mutable mask be item 1 of masks.
++        Set item 9 of mask to hasNull.
++        Set item 1 of masks to mask.
++        Expect that boardShapeTestAccepted(boardShapeTestRows(1), masks, "SELECT 1") is equal to (hasNull is equal to false).
++
++## Test: Board result requires bounded rows and exact command tag
++    Expect that boardShapeTestAccepted(boardShapeTestRows(201), boardShapeTestMasks(201), "SELECT 201") is equal to false.
++    Repeat for tag in ["", "SELECT 0", "SELECT 01", "select 1", "INSERT 0 1", "SELECT 2", "SELECT 1 ", "SELECT +1"]:
++        Expect that boardShapeTestAccepted(boardShapeTestRows(1), boardShapeTestMasks(1), tag) is equal to false.
+diff --git a/logos/gateway/target/board-read-contract/src/schema_probe_policy.lg b/logos/gateway/target/board-read-contract/src/schema_probe_policy.lg
+new file mode 100644
+--- /dev/null
++++ b/logos/gateway/target/board-read-contract/src/schema_probe_policy.lg
+@@ -0,0 +1,52 @@
++# MaCSad schema probe policy
++
++This import-free leaf owns the exact dependency probe result shape. A caller
++may become ready only after one typed row reports two columns: schema version
++and PostgreSQL server_version_num. MaCSad schema 1 and PostgreSQL 16 are the
++only versions admitted by this slice.
++
++## To schemaProbeRowCountAccepted (rowCount: Int) -> Bool:
++    Return rowCount is equal to 1.
++
++## To schemaProbeColumnCountAccepted (columnCount: Int) -> Bool:
++    Return columnCount is equal to 2.
++
++## To schemaVersionAccepted (schemaVersion: Int) -> Bool:
++    Return schemaVersion is equal to 1.
++
++## To postgresVersionAccepted (serverVersionNum: Int) -> Bool:
++    If serverVersionNum is less than 160000:
++        Return false.
++    Return serverVersionNum is less than 170000.
++
++## To schemaProbeAccepted (rowCount: Int, columnCount: Int, schemaVersion: Int, serverVersionNum: Int) -> Bool:
++    If schemaProbeRowCountAccepted(rowCount) is equal to false:
++        Return false.
++    If schemaProbeColumnCountAccepted(columnCount) is equal to false:
++        Return false.
++    If schemaVersionAccepted(schemaVersion) is equal to false:
++        Return false.
++    Return postgresVersionAccepted(serverVersionNum).
++
++## Test: Schema probe shape is exact
++    For all booleans exactShape:
++        Let mutable rowCount be 0.
++        Let mutable columnCount be 1.
++        If exactShape:
++            Set rowCount to 1.
++            Set columnCount to 2.
++        Let accepted be schemaProbeAccepted(rowCount, columnCount, 1, 160015).
++        Expect that accepted is equal to exactShape.
++    Expect that schemaProbeAccepted(2, 2, 1, 160015) is equal to false.
++    Expect that schemaProbeAccepted(1, 3, 1, 160015) is equal to false.
++
++## Test: Schema version one is required
++    Expect that schemaProbeAccepted(1, 2, 1, 160015) is equal to true.
++    Expect that schemaProbeAccepted(1, 2, 0, 160015) is equal to false.
++    Expect that schemaProbeAccepted(1, 2, 2, 160015) is equal to false.
++
++## Test: PostgreSQL sixteen is required
++    Expect that schemaProbeAccepted(1, 2, 1, 160000) is equal to true.
++    Expect that schemaProbeAccepted(1, 2, 1, 169999) is equal to true.
++    Expect that schemaProbeAccepted(1, 2, 1, 159999) is equal to false.
++    Expect that schemaProbeAccepted(1, 2, 1, 170000) is equal to false.
+diff --git a/host_adapters/tests/board_pg_contract.py b/host_adapters/tests/board_pg_contract.py
+new file mode 100644
+--- /dev/null
++++ b/host_adapters/tests/board_pg_contract.py
+@@ -0,0 +1,226 @@
++"""Isolated, explicit native-board/real-PG16 contract; never ordinary discovery.
++
++Run only through run_board_pg_contract.sh after the root grants the test slot.
++Python supplies fixtures and compares observations; it implements no board policy.
++"""
++
++from __future__ import annotations
++
++import os
++import select
++import socket
++from pathlib import Path
++from unittest import TestCase
++
++from host_adapters.proof_process import run_bounded
++
++
++EVALUATION_ROOT = Path("/tmp/macsad-website-d9-eval.PMwbZo5u")
++WORKSPACE = "10000000-0000-4000-8000-000000000001"
++OTHER_WORKSPACE = "10000000-0000-4000-8000-000000000002"
++CASES = (
++    ("18000000-0000-4000-8000-000000000001", "mathematics", "blocked", "10", "Prior finite sum question"),
++    ("18000000-0000-4000-8000-000000000002", "mathematics", "normal", "80", "Finite sum identity"),
++    ("18000000-0000-4000-8000-000000000003", "computer_science", "paused", "60", "Bounded sort replay"),
++)
++EXPECTED_WIRE = (
++    "macsad-board/1|1|" + WORKSPACE + "\n"
++    + "\n".join(
++        "|".join(("case", case_id, kind, "closed", control, priority, "-", "-", "-", title.encode("utf-8").hex()))
++        for case_id, kind, control, priority, title in CASES
++    ) + "\n"
++).encode("utf-8")
++
++class NativePostgreSQLBoardContract(TestCase):
++    @classmethod
++    def setUpClass(cls):
++        cls.root = Path(__file__).resolve().parents[2]
++        if cls.root != EVALUATION_ROOT:
++            raise RuntimeError("board contract must run in the exact isolated evaluation checkout")
++        cls.owned = Path(os.environ["MACSAD_BOARD_TEST_ROOT"])
++        if cls.owned.parent != Path("/tmp") or not cls.owned.name.startswith("macsad-board-pg16."):
++            raise RuntimeError("unapproved disposable PostgreSQL root")
++        if cls.owned.is_symlink() or cls.owned.resolve(strict=True) != cls.owned:
++            raise RuntimeError("disposable PostgreSQL root must be canonical")
++        if cls.owned.stat().st_uid != os.getuid() or cls.owned.stat().st_mode & 0o077:
++            raise RuntimeError("disposable PostgreSQL root must be privately owned")
++        cls.port = int(os.environ["MACSAD_BOARD_TEST_PORT"])
++        if not 1024 <= cls.port <= 65535:
++            raise RuntimeError("test port is outside the ephemeral service contract")
++        cls.executable = Path(os.environ["MACSAD_BOARD_EXECUTABLE"])
++        # Keep a missing executable as an explicit RED, never an unavailable skip.
++        if cls.executable.is_symlink() or not cls.executable.is_file():
++            raise RuntimeError("RED: exact compiled native board executable is missing")
++        cls.executable = cls.executable.resolve(strict=True)
++        if not cls.executable.is_relative_to(cls.root):
++            raise RuntimeError("board executable must belong to the isolated MaCSad checkout")
++        if not os.access(cls.executable, os.X_OK):
++            raise RuntimeError("board executable is not executable")
++        cls.pg_bin = Path(os.environ["MACSAD_TEST_PG_BIN"])
++        cls.pg_environment = {
++            "PATH": str(cls.pg_bin) + ":" + os.defpath,
++            "LD_LIBRARY_PATH": os.environ["MACSAD_TEST_PG_LIB"],
++            "PGCONNECT_TIMEOUT": "3", "PGPASSFILE": "/dev/null",
++            "PGOPTIONS": "-c default_transaction_read_only=on -c statement_timeout=10000 -c lock_timeout=1000",
++            "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8",
++        }
++        cls.native_environment = {"PATH": os.defpath, "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"}
++        cls.url = f"postgresql://macsad_viewer@127.0.0.1:{cls.port}/macsad"
++
++    def sql(self, statement, *, role="macsad_deployer", database="macsad", tcp=False):
++        environment = dict(self.pg_environment)
++        if role == "macsad_viewer":
++            # Observe the real login defaults; do not manufacture read-only
++            # evidence by overriding the viewer's configuration in the test.
++            environment.pop("PGOPTIONS")
++        observation = run_bounded(
++            [str(self.pg_bin / "psql"), "-X", "-w", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1",
++             "-h", "127.0.0.1" if tcp else str(self.owned / "socket"), "-p", str(self.port),
++             "-U", role, "-d", database, "-c", statement],
++            cwd=self.root, environment=environment, timeout_seconds=15,
++        )
++        self.assertEqual(observation.termination, "exited")
++        self.assertEqual(observation.exit_code, 0, observation.stderr.decode("utf-8", errors="replace"))
++        return observation.stdout
++
++    def snapshot(self):
++        # psql -c does not mix SQL and backslash commands. Feed the reviewed
++        # static SQL fixture copied byte-for-byte into this owned root.
++        observation = run_bounded(
++            [str(self.pg_bin / "psql"), "-X", "-w", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1",
++             "-h", str(self.owned / "socket"), "-p", str(self.port), "-U", "macsad_deployer",
++             "-d", "macsad", "-f", str(self.owned / "snapshot.sql")],
++            cwd=self.root, environment=self.pg_environment, timeout_seconds=15,
++        )
++        self.assertEqual(observation.termination, "exited")
++        self.assertEqual(observation.exit_code, 0, observation.stderr.decode("utf-8", errors="replace"))
++        self.assertEqual(len(observation.stdout.splitlines()), 47)
++        return observation.stdout
++
++    def setUp(self):
++        actual_data = self.sql("SHOW data_directory", role="postgres", database="postgres")
++        self.assertEqual(actual_data, (str(self.owned / "pgdata") + "\n").encode())
++        self.before = self.snapshot()
++
++    def tearDown(self):
++        self.assertEqual(self.snapshot(), self.before, "native read changed database counts, rows, versions or audit state")
++
++    def invoke(self, *arguments):
++        return run_bounded(
++            [str(self.executable), *arguments], cwd=self.root,
++            environment=self.native_environment, timeout_seconds=15,
++        )
++
++    def assert_completed(self, observation, expected):
++        self.assertEqual(observation.termination, "exited")
++        self.assertEqual(observation.exit_code, 0)
++        self.assertEqual(observation.stderr, b"")
++        self.assertEqual(observation.stdout, expected)
++
++    def test_pg16_schema_one_and_restricted_viewer_are_real(self):
++        observed = self.sql(
++            "SELECT current_setting('server_version_num')::integer / 10000, current_user, "
++            "current_setting('transaction_read_only'), (SELECT current_version FROM macsad.schema_version_v), "
++            "rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls, "
++            "has_table_privilege(current_user, 'macsad.workspace', 'UPDATE'), "
++            "has_table_privilege(current_user, 'macsad.case_board_v', 'SELECT') "
++            "FROM pg_roles WHERE rolname = current_user;",
++            role="macsad_viewer", tcp=True,
++        )
++        self.assertEqual(observed, b"16|macsad_viewer|on|1|f|f|f|f|f|f|t\n")
++
++    def test_native_read_returns_exact_three_closed_cases_and_is_deterministic(self):
++        first = self.invoke(self.url, WORKSPACE)
++        second = self.invoke(self.url, WORKSPACE)
++        self.assert_completed(first, EXPECTED_WIRE)
++        self.assert_completed(second, EXPECTED_WIRE)
++        self.assertEqual(first.stdout, second.stdout)
++
++    def test_alternate_workspace_is_rejected_before_any_tcp_connection(self):
++        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as witness:
++            witness.bind(("127.0.0.1", 0))
++            witness.listen(1)
++            rejected_url = f"postgresql://macsad_viewer@127.0.0.1:{witness.getsockname()[1]}/macsad"
++            observed = self.invoke(rejected_url, OTHER_WORKSPACE)
++            self.assert_completed(observed, b"error\n")
++            self.assertEqual(select.select([witness], [], [], 0.1)[0], [], "rejected workspace attempted a TCP connection")
++
++    def test_valid_workspace_connects_but_silent_database_peer_returns_error(self):
++        # Own the listener without accepting or sending a PostgreSQL response.
++        # The native five-second pgConnect limit must fail inside invoke's
++        # fifteen-second process bound, not return a hardcoded fixture board.
++        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as witness:
++            witness.bind(("127.0.0.1", 0))
++            witness.listen(1)
++            unavailable_url = f"postgresql://macsad_viewer@127.0.0.1:{witness.getsockname()[1]}/macsad"
++            observed = self.invoke(unavailable_url, WORKSPACE)
++            self.assert_completed(observed, b"error\n")
++            self.assertEqual(
++                select.select([witness], [], [], 0.1)[0], [witness],
++                "valid workspace never attempted the required PostgreSQL connection",
++            )
++
++    def test_url_query_options_are_rejected_before_any_tcp_connection(self):
++        # Never silently downgrade requested TLS by ignoring a URL option.
++        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as witness:
++            witness.bind(("127.0.0.1", 0))
++            witness.listen(1)
++            rejected_url = f"postgresql://macsad_viewer@127.0.0.1:{witness.getsockname()[1]}/macsad?sslmode=require"
++            observed = self.invoke(rejected_url, WORKSPACE)
++            self.assert_completed(observed, b"error\n")
++            self.assertEqual(select.select([witness], [], [], 0.1)[0], [], "rejected URL options attempted a TCP connection")
++
++    def test_disallowed_database_urls_return_error(self):
++        # The third column identifies variants whose endpoint is this owned
++        # IPv4 listener. Other loopback host representations only provide
++        # error-protocol evidence here, not proof of no networking elsewhere.
++        # Nonloopback/DNS-external targets and port values that could direct a
++        # defective parser to an unrelated listener belong in pure-policy tests.
++        cases = (
++            ("wrong-role", "postgresql://macsad_deployer@127.0.0.1:{port}/macsad", True),
++            ("password", "postgresql://macsad_viewer:synthetic-test-only@127.0.0.1:{port}/macsad", True),
++            ("leading-zero-port", "postgresql://macsad_viewer@127.0.0.1:0{port}/macsad", True),
++            ("plus-port", "postgresql://macsad_viewer@127.0.0.1:+{port}/macsad", True),
++            ("too-long-leading-zero-port", "postgresql://macsad_viewer@127.0.0.1:" + "0" * 64 + "{port}/macsad", True),
++            ("wrong-database", "postgresql://macsad_viewer@127.0.0.1:{port}/postgres", True),
++            ("trailing-slash", "postgresql://macsad_viewer@127.0.0.1:{port}/macsad/", True),
++            ("empty-query", "postgresql://macsad_viewer@127.0.0.1:{port}/macsad?", True),
++            ("fragment", "postgresql://macsad_viewer@127.0.0.1:{port}/macsad#board", True),
++            ("empty-fragment", "postgresql://macsad_viewer@127.0.0.1:{port}/macsad#", True),
++            ("localhost-dns-host", "postgresql://macsad_viewer@localhost:{port}/macsad", False),
++            ("alternate-loopback-host", "postgresql://macsad_viewer@127.0.0.2:{port}/macsad", False),
++            ("scheme-alias", "postgres://macsad_viewer@127.0.0.1:{port}/macsad", True),
++        )
++        for name, template, observes_endpoint in cases:
++            with self.subTest(case=name):
++                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as witness:
++                    witness.bind(("127.0.0.1", 0))
++                    witness.listen(1)
++                    rejected_url = template.format(port=witness.getsockname()[1])
++                    observed = self.invoke(rejected_url, WORKSPACE)
++                    self.assert_completed(observed, b"error\n")
++                    if observes_endpoint:
++                        self.assertEqual(
++                            select.select([witness], [], [], 0.1)[0], [],
++                            "rejected database URL attempted a TCP connection to the owned endpoint",
++                        )
++
++    def test_missing_or_extra_arguments_are_rejected_before_tcp_connection(self):
++        for name in ("no-arguments", "url-only", "workspace-only", "extra-argument"):
++            with self.subTest(case=name):
++                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as witness:
++                    witness.bind(("127.0.0.1", 0))
++                    witness.listen(1)
++                    url = f"postgresql://macsad_viewer@127.0.0.1:{witness.getsockname()[1]}/macsad"
++                    arguments = {
++                        "no-arguments": (),
++                        "url-only": (url,),
++                        "workspace-only": (WORKSPACE,),
++                        "extra-argument": (url, WORKSPACE, "unexpected"),
++                    }[name]
++                    observed = self.invoke(*arguments)
++                    self.assert_completed(observed, b"error\n")
++                    self.assertEqual(
++                        select.select([witness], [], [], 0.1)[0], [],
++                        "invalid argument count attempted a TCP connection to the owned endpoint",
++                    )
+diff --git a/host_adapters/tests/fixtures/native_board_pg_hba.conf b/host_adapters/tests/fixtures/native_board_pg_hba.conf
+new file mode 100644
+--- /dev/null
++++ b/host_adapters/tests/fixtures/native_board_pg_hba.conf
+@@ -0,0 +1,5 @@
++# Test-only: private Unix-socket setup, restricted viewer over IPv4 loopback.
++local all all trust
++host macsad macsad_viewer 127.0.0.1/32 trust
++host all all 0.0.0.0/0 reject
++host all all ::0/0 reject
+diff --git a/host_adapters/tests/fixtures/native_board_snapshot.sql b/host_adapters/tests/fixtures/native_board_snapshot.sql
+new file mode 100644
+--- /dev/null
++++ b/host_adapters/tests/fixtures/native_board_snapshot.sql
+@@ -0,0 +1,19 @@
++-- Read-only fingerprint for the bounded synthetic representative fixture.
++-- Includes every base-table row, count, version, event and audit-stream head.
++\set ON_ERROR_STOP on
++BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
++SET LOCAL ROLE macsad_owner;
++SET LOCAL search_path = pg_catalog;
++SET LOCAL timezone = 'UTC';
++SELECT format(
++  'SELECT %L, count(*), encode(sha256(convert_to(COALESCE(string_agg(to_jsonb(t)::text, E''\n'' ORDER BY to_jsonb(t)::text), ''''), ''UTF8'')), ''hex'') FROM %I.%I AS t;',
++  namespace.nspname || '.' || relation.relname,
++  namespace.nspname, relation.relname
++)
++FROM pg_class AS relation
++JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
++WHERE namespace.nspname IN ('macsad', 'macsad_meta')
++  AND relation.relkind IN ('r', 'p')
++ORDER BY namespace.nspname, relation.relname
++\gexec
++COMMIT;
+diff --git a/.macsad/toolchains/logos.lock.toml b/.macsad/toolchains/logos.lock.toml
+--- a/.macsad/toolchains/logos.lock.toml
++++ b/.macsad/toolchains/logos.lock.toml
+@@ -1,19 +1,19 @@
+-schema = "macsad-logos-toolchain-lock/1"
+-
+-[source]
+-repository = "Brahmastra-Labs/logicaffeine-private"
+-version = "0.10.1"
+-commit = "132dc5346728e2d204df798dd7544e6405306a2c"
+-tree = "9f251ad38ed49834d8224bbf6b928cb5ba1aa1c5"
+-cargo_lock_sha256 = "e92ad213de9cb29e8956baf82701d27a244a8cfb6a23d08380532bdbe2ed3148"
+-
+-[runtime]
+-workspace_environment = "LOGOS_WORKSPACE"
+-binary_relative_path = "target/debug/largo"
+-observed_binary_sha256 = "8c75eeb6180a7f4692ad5abba32b562d4a1cbc08792da95ae58770d4a3cc77f1"
+-
+-[requirements]
+-skip_budget = 0
+-deterministic_seed = 7
+-test_tiers = "all"
+-prove_finite_properties = true
++schema = "macsad-logos-toolchain-lock/1"
++
++[source]
++repository = "Brahmastra-Labs/logicaffeine-private"
++version = "0.10.1"
++commit = "d9baaff5b6749c961a13cd2eca427434c5959b17"
++tree = "34f712714619bc9049a4dc9c1d22962dd67d63c4"
++cargo_lock_sha256 = "341398289909e4b5c85520e1554308bb285f081cae3935147efb282ab4bf23c2"
++
++[runtime]
++workspace_environment = "LOGOS_WORKSPACE"
++binary_relative_path = "target/debug/largo"
++observed_binary_sha256 = "b937f4ea8e8d3f6067bf119add89c3476066924422794da61440cc83d246ad5b"
++
++[requirements]
++skip_budget = 0
++deterministic_seed = 7
++test_tiers = "all"
++prove_finite_properties = true

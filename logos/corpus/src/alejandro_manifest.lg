@@ -1,0 +1,80 @@
+# Alejandro manifest envelope
+
+Import AlejandroJsonFields from "./alejandro_json_fields.lg".
+Import AlejandroProvenance from "./alejandro_provenance.lg".
+
+## An AlejandroManifest has:
+    a toolchain, which is Text.
+    a historicalRevision, which is Text.
+    a cases, which is Seq of Json.
+    a rawDigest, which is Text.
+## To alejandroManifestCounts (object: Json, rows: Seq of Json) -> Result of Bool and Text:
+    Inspect jsonNoExtraKeys(object, ["translate", "degrade", "reject"]):
+        When Err (failure):
+            Return a new Err with error failure.
+    Repeat for expectation in ["translate", "degrade", "reject"]:
+        Let mutable declared be -1.
+        Inspect alejandroIntField(object, expectation):
+            When Ok (number):
+                Set declared to number.
+            When Err (failure):
+                Return a new Err with error failure.
+        Let mutable actual be 0.
+        Repeat for row in rows:
+            Inspect alejandroStringField(row, "expect"):
+                When Err (failure):
+                    Return a new Err with error failure.
+                When Ok (value):
+                    If value is equal to expectation:
+                        Set actual to actual + 1.
+        If declared is not equal to actual:
+            Return a new Err with error "historical verdict counts disagree".
+    Return a new Ok with value true.
+## To alejandroManifestObject (object: Json, rawDigest: Text) -> Result of AlejandroManifest and Text:
+    Let keys be ["corpus", "lean_toolchain", "logos_revision", "case_count", "verdict_counts", "cases"].
+    Inspect jsonNoExtraKeys(object, keys):
+        When Err (failure):
+            Return a new Err with error failure.
+    Let values be a new Seq of Text.
+    Repeat for key in ["corpus", "lean_toolchain", "logos_revision"]:
+        Inspect alejandroStringField(object, key):
+            When Err (failure):
+                Return a new Err with error failure.
+            When Ok (value):
+                Push value to values.
+    If item 1 of values is not equal to "lean-to-logos-conformance":
+        Return a new Err with error "unsupported corpus".
+    If item 2 of values is not equal to "leanprover/lean4:v4.14.0":
+        Return a new Err with error "unsupported original Lean toolchain".
+    Let mutable count be 0.
+    Inspect alejandroIntField(object, "case_count"):
+        When Err (problem):
+            Return a new Err with error problem.
+        When Ok (number):
+            Set count to number.
+    Let mutable rows be a new Seq of Json.
+    Inspect alejandroArrayField(object, "cases"):
+        When Ok (caseRows):
+            Set rows to caseRows.
+        When Err (problem):
+            Return a new Err with error problem.
+    If count is not equal to 248:
+        Return a new Err with error "the original corpus has 248 cases".
+    If count is not equal to length of rows:
+        Return a new Err with error "case count disagrees".
+    Inspect jsonField(object, "verdict_counts"):
+        When Err (failure):
+            Return a new Err with error failure.
+        When Ok (counts):
+            Inspect alejandroManifestCounts(counts, rows):
+                When Err (failure):
+                    Return a new Err with error failure.
+    Let decoded be a new AlejandroManifest with toolchain (item 2 of values) and historicalRevision (item 3 of values) and cases rows and rawDigest rawDigest.
+    Return a new Ok with value decoded.
+## To decodeAlejandroManifest (raw: Text) -> Result of AlejandroManifest and Text:
+    Inspect alejandroStrictObject(raw):
+        When Ok (object):
+            Return alejandroManifestObject(object, alejandroRawDigest(raw)).
+        When Err (failure):
+            Return a new Err with error failure.
+    Return a new Err with error "invalid manifest".

@@ -6,7 +6,247 @@ tree `9f251ad38ed49834d8224bbf6b928cb5ba1aa1c5`. The build wrapper rejects
 another commit, tree, Cargo lock, `largo` binary, dirty tracked source, or
 unrelated origin. MaCSad does not install or resolve LOGOS from crates.io.
 
-## Snapshot status
+## September 8, 2026 integration update
+
+The admitted toolchain is still `132dc5346728e2d204df798dd7544e6405306a2c`.
+Its matching local checkout is `logicaffeine-macsad-admitted`; using that copy
+does not promote the newer LOGOS checkout. No upstream edits or pushes are
+part of this MaCSad workstream.
+
+The later source-only readiness audit inspected upstream
+`d9baaff5b6749c961a13cd2eca427434c5959b17`. See
+[the shared readiness report](docs/ELECTRON_READINESS.md), especially its
+version-scoped inventory and T01 proof-context trust finding. Newer source
+availability is not completed runtime, security or promotion evidence.
+The candidate snapshot below is retained as historical evidence, not as a
+claim that it is the latest upstream commit.
+
+MaCSad now has a native LOGOS proof-report policy and a bounded argument port
+under `logos/proof-worker`. The baseline can run `largo prove --json`, validate
+the exact requested targets through LOGOS, preserve the source and observations,
+and repeat the same-source check. This narrows G13 for a local demonstration;
+it does not close the complete mathematical trust/publication contract.
+
+The completed MaCSad gate at this admitted baseline passed 33 native LOGOS
+tests, 10 finite application properties and nine real-LOGOS integration methods
+(eight demonstration runs and 42 adversarial wire/report cases), alongside the
+existing Node/Python, deterministic-bundle and fresh PostgreSQL 16 tiers.
+Exact snapshot/log identities and the retained demonstration bundles are in
+section 18.6 of the readiness report. These are not newest-upstream gate results.
+
+Baseline limitations directly relevant to this integration:
+
+- `prove` JSON's `axioms` field counts theory axioms, not English `Given`
+  premises. Zero there is not an assumption-free result. Preserve `input.lg`.
+- Running `prove` again is source replay, not replay of a retained proof-term
+  certificate. The baseline CLI does not provide the required portable
+  certificate export/replay interface. Do not claim independent checker
+  agreement from its `all_verified` field.
+- For the retained theory examples, `prove --trace` emits a short checked-result
+  summary, not an exported proof term or detailed derivation. Save it honestly
+  as CLI diagnostics; it does not substitute for certificate evidence.
+- The supported theorem blocks are checked; whole-program definitions and
+  import-closure coverage are not established by this entry point.
+- Baseline interpreter console input and strict JSON object decoding cannot
+  supply this worker's complete typed input boundary. The narrow workaround
+  uses bounded host-side structural JSON decoding and canonical data arguments;
+  mathematical report classification remains LOGOS code.
+- `fromHex` can throw on invalid UTF-8 rather than returning a typed decoding
+  failure. The MaCSad argument boundary now validates canonical UTF-8 before
+  calling it; adversarial tests cover overlong encodings, surrogates and invalid
+  continuation bytes. This workaround is not a general upstream parser fix.
+
+The local process-cleanup incident is a MaCSad implementation/test defect,
+not a LOGOS bug. Its recovery and residual verification limits are recorded in
+[the incident report](docs/INCIDENT_2026-09-08_PROCESS_CLEANUP.md).
+
+## Exact d9 website-integration evaluation
+
+Alejandro authorized evaluating `d9baaff5b6749c961a13cd2eca427434c5959b17`
+in a separate copy. The admitted `132dc534` toolchain is unchanged. The isolated
+offline, locked, two-job CLI build succeeded in 179 seconds. Candidate tree:
+`34f712714619bc9049a4dc9c1d22962dd67d63c4`; Cargo.lock SHA256:
+`341398289909e4b5c85520e1554308bb285f081cae3935147efb282ab4bf23c2`;
+CLI SHA256:
+`b937f4ea8e8d3f6067bf119add89c3476066924422794da61440cc83d246ad5b`.
+This is build evidence, not promotion, byte-reproducibility, full upstream test
+success or completed website/database integration.
+
+The selected upstream invocation subsequently passed **113 tests, zero failed,
+zero ignored and zero filtered**: `json_typed_decode_lock` 17,
+`postgres_aot_lock` 2, `postgres_protocol` 27 and `postgres_wire` 67. It ran
+September 8, 23:09:25–23:29:59 UTC (20 minutes 34 seconds including compilation),
+offline with two build jobs and serialized tests. Retained log SHA256:
+`0202c0f5fc8121641bffbe2de4edcc427c34472d43578d948616e21e776767a1`.
+The candidate Cargo.lock stayed unchanged and tracked source remained clean.
+The AOT cases test native frame/parser behavior; the protocol exchanges use
+owned loopback mock peers. These results are **not** a native MaCSad/real-PG16
+round trip, full upstream-suite acceptance or evidence that the source findings
+below have been fixed.
+
+Focused evaluation uses an isolated temporary/cache directory and explicitly
+binds `LOGOS_WORKSPACE` to the exact candidate. Otherwise a CLI binary outside
+its source checkout can discover published runtime crates with the same version
+string. MaCSad must retain the exact source/runtime closure, not only a binary.
+
+F10 and F11 below are additional source findings; neither is a runtime
+reproduction or closure of the historical G1–G17 contracts. F12 and F13 are later
+observed native compilation failures. Existing timeout, socket-cleanup, TLS and
+JSON-number-token issues are not counted again.
+
+The subsequent MaCSad candidate-only read experiment passed all seven methods
+against a newly owned PostgreSQL 16.15 fixture cluster, using an actually native
+LOGOS executable and the existing schema. It returned three closed cases twice
+identically and preserved all 47 table fingerprints. This narrows the G3/G15
+application-read uncertainty; it does not promote d9 or connect the live website.
+The full TDD sequence and exact evidence are in readiness section 19.5 and the
+[inert evaluation proposal](docs/proposals/LOGOS_D9_WEBSITE_EVALUATION.md).
+
+### F10 — native TCP registry serializes blocking I/O — P1
+
+Owner: LOGOS upstream; MaCSad documents only. In exact d9
+`crates/logicaffeine_system/src/tcp.rs`, `send`, `recv` and `recv_exact` hold the
+process-global registry mutex while performing blocking socket I/O (lines
+140–185). Connection registration and close need the same lock (100–109,
+189–193). Therefore separate native database connections can block one another;
+even establishing a cancellation connection can wait behind the target read.
+This is distinct from the HTTP handler-lifetime finding F03.
+
+Required runtime RED: one owned loopback peer stalls while a different native
+connection performs a bounded exchange or close; the second operation must not
+wait for the first socket's read deadline. Exercise the AOT/native tier, not
+only interpreter mocks or pure PostgreSQL frame parsers. Confirm all owned
+connections and processes are cleaned up. Until then, an isolated sequential
+board-read test is not evidence for concurrent multi-user database service.
+
+### F11 — MaCSad board title decoder can throw on invalid UTF-8 — P1
+
+Owner: MaCSad application. `logos/admin/src/board_row_decoder.lg` validates
+lowercase hex shape, then calls `fromHex` without UTF-8 prevalidation. Inputs
+such as `ff`, `c0af`, `eda080`, `f4908080` and truncated `e282` can reach the
+trapping decoder instead of returning a rejected row. Source finding only at
+this record; the malformed-wire runtime regression remains to execute.
+
+Required RED: each invalid input returns false without a thrown runtime error;
+valid ASCII, Greek and four-byte Unicode remain accepted at the existing
+4096-byte title bound. Reuse candidate `validUtf8` only in an explicitly tested
+candidate; that function is absent from the admitted baseline. The proof-worker
+prevalidation already implemented does not automatically protect this separate
+admin call site. Do not copy policy across projects or weaken the module-closure
+guard to conceal the missing reuse boundary.
+
+### F12 — native ownership emission loses reused values — P1
+
+Owner: LOGOS upstream; MaCSad documents only. The exact d9 native MaCSad board
+build failed with two Rust `E0382` errors after accepting the LOGOS source:
+
+- Passing `result's rows` to the shape validator emitted a move of the record
+  field, then attempted to iterate that same field again.
+- Passing `[workspace]` to `pgQueryParams` emitted `vec![workspace]`, then
+  attempted to reuse the moved string when serializing the result.
+
+Count this as one ownership-code-generation finding with two observed cases,
+not two failures of PostgreSQL itself. The CLI explicitly classified the
+generated-Rust failure as a compiler bug. The failed build's retained log
+SHA256 is
+`9aaa5ccedbb02fd03fe561d1e91e586de2427f4b7cb6392048814e9e44a36ff1`.
+The existing stable executable was not accepted or run as a successful build.
+
+The candidate-only MaCSad workaround binds rows to a named local before
+validation/reuse and constructs a fresh interpolated parameter string. Native
+rebuild and real-PG contract results must be recorded separately; merely
+rewriting the application source does not close F12. Upstream should add
+native regression cases for reused record fields and sequence-literal elements
+and compare behavior with interpreter/VM tiers. No upstream patch was made.
+
+### F13 — terminal Inspect retains a temporary sequence borrow — P1
+
+Owner: LOGOS upstream; MaCSad documents only. After the two F12 move sites were
+rewritten, the next exact d9 native build failed with Rust `E0597`: a named
+parameter sequence did not live long enough. The generated terminal `match`
+for `Inspect pgQueryParams(connection, sql, parameters)` kept the temporary
+`parameters.borrow()` guard alive past the local's destruction. Both LOGOS
+branches returned; the generated Rust still failed lifetime checking.
+
+This is a separately observed borrow-lifetime failure, not a database error or
+a repeated count of the earlier moves. Retained build-log SHA256:
+`0d35a7c7944a849ac1cbfad077985993d31419419862dc39ee1df3ba4c797e39`.
+The candidate-only workaround evaluates the query into a named result before
+`Inspect`, ending the argument borrow at the preceding statement. Record the
+subsequent native build and real-PG evidence before claiming the workaround
+works. Upstream needs a focused terminal-inspection/native borrow regression;
+MaCSad made no upstream edit.
+
+F12/F13 workaround outcome: the final native artifact passed its explicit
+locked-offline rebuild and all seven real-PG methods. Executable SHA256:
+`a766b4393255e3b48daf4280d857ba0ce9e9bed1b9e74adb4ce980a30c4dd860`.
+That accepts the bounded application workaround in this isolated evaluation,
+not the unfixed original source forms or general upstream ownership/lifetime
+correctness. Both upstream findings remain open.
+
+## Lean-bridge audit and Tristan handoff — September 8–9, 2026
+
+The full compatibility target is any valid finite Lean theorem/project under a
+declared compatible toolchain, including long proofs and dependency libraries.
+Small regression fixtures are implementation milestones, not the final product
+boundary. A large proof exhausting a declared quota is resource-limited, not
+automatically mathematically unsupported. Actual core/proof translation,
+faithful statement mapping and kernel checking must remain distinct claims.
+
+Two sendable handoff documents consolidate the existing audit without treating
+all capability gaps as separately reproduced bugs:
+
+- [Plain-language explanation](docs/LOGOS_READINESS_PLAIN_LANGUAGE.md).
+- [Technical findings, source identities and acceptance tests](docs/LOGOS_BLOCKERS_TECHNICAL.md).
+
+The retained core/runtime/interface register now has 11 open findings: two
+exact-d9 reproduced compiler findings (F12/F13) and nine other source-established
+mechanisms/interface gaps, including F14 below. Two example-only findings, T01
+certificate-environment trust, L03 static-file containment, historical failures
+and MaCSad-owned findings are separately classified. This is not an exhaustive
+count of all LOGOS defects, a proof of unsoundness, or a claim of Lean parity.
+
+### F14 — kernel term parsing does not require complete input consumption — P1 for bridge acceptance
+
+Owner: LOGOS upstream; MaCSad documents only. In exact d9,
+`crates/logicaffeine_kernel/src/interface/term_parser.rs:38–47`,
+`parse_with_implicits` parses a term, skips trailing whitespace, and returns
+without requiring end of input. Source finding only: no forged proof or runtime
+trailing-input exploit was executed in this audit. Caller-level validation must
+be evaluated separately; do not infer that every parser caller accepts garbage.
+
+A bridge must not treat that parser's success alone as evidence that all emitted
+or submitted mathematical code was checked. Required regression: a valid term
+with harmless trailing whitespace succeeds, while the same term followed by a
+second term, unsupported syntax or trailing garbage fails at the correct byte
+position. Test the public parser and actual certificate/bridge caller. Compare
+the exact parsed structure with the emitted proof/type constructors, not just a
+pretty-printed prefix. No upstream source was edited or pushed.
+
+### Evaluated closed-term Lean bridge — not full G13 closure
+
+The MaCSad-only prototype now checks real Lean4.31 fixture source, exports actual
+core terms, translates supported binders/constructors in LOGOS, and rechecks the
+resulting existing-format certificates with an identified exact-d9 kernel.
+Three distinct closed propositional proofs passed; an altered target failed
+the real kernel. The final selected evidence is 23 LOGOS tests/six finite
+properties, eight Lean fixture cases, and 48 Python tests including nine real
+bridge methods. No skipped or failed cases are counted as passing.
+
+This is an isolated prototype, not a full-Lean/Mathlib bridge, an admitted
+checker, or website integration. The valid 530-node Lean example hits the current
+128-node translator job quota and is explicitly resource-limited. T01 and F14
+remain open; the prototype uses the closed-term Certificate path without an
+incoming declaration context. New exporter/adapter bugs were found and repaired
+within MaCSad and are not added to the LOGOS upstream count.
+
+The [delivery record](docs/LEAN_LOGOS_BRIDGE.md) and
+[inert source/evidence handoff](docs/proposals/LEAN_LOGOS_BRIDGE_EVALUATION.md)
+retain exact identities, RED/GREEN evidence, portable sample certificates and
+the remaining compatibility/security/admission work. No toolchain lock, active
+test inventory, upstream source or deployed service was changed by this archive.
+
+## Historical candidate snapshot status
 
 The commit above remains the **admitted baseline** in the MaCSad toolchain
 lock. A newer LOGOS `0.10.1` snapshot is under evaluation, not promoted:
@@ -361,6 +601,22 @@ local `target/debug/largo` through `scripts/logos.sh`. Required upstream work:
 
 No MaCSad change may add `## Requires`, a registry LOGOS crate, `cargo install
 largo`, or a floating local checkout as a workaround.
+
+Exact d9 source review adds two generated-native-build requirements, without
+claiming that the older dependency-linking findings still describe every newer
+API. `apps/logicaffeine_cli/src/project/build.rs` stages local runtime sources
+when `LOGOS_WORKSPACE` is bound, but emits semver dependencies such as `tokio =
+"1"` and invokes Cargo without `--locked` (lines 431–549). An offline locked
+compiler build is therefore not proof of a locked generated application.
+Retain the generated Cargo.lock and source/runtime manifest, then require an
+explicit locked-offline rebuild and unchanged identities for application
+evaluation. Do not infer deployment reproducibility from a successful compile.
+
+The same file's stable-artifact copy is best-effort (678–712), while its returned
+binary path does not follow `CARGO_TARGET_DIR`. With a nondefault target directory,
+verify the actual built binary and any copied artifact byte-for-byte; do not trust
+an old stable file or infer that `largo run` will execute the new output. This
+remains a source-scoped G10 handoff, not an upstream patch or a promoted workaround.
 
 ## G11 — typed structured data
 

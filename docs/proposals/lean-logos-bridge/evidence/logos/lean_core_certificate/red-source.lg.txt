@@ -1,0 +1,27 @@
+# MaCSad mapped-term certificate assembly RED fixture
+
+This formatter receives only mapped target terms from the private LOGOS caller.
+It neither parses arbitrary JSON nor decides whether the terms prove a theorem.
+
+## Test: Lean certificate assembly binds proof and claim without repair
+    Let proof be "{{\"Var\":\"b0\"}}".
+    Let claim be "{{\"Sort\":\"Prop\"}}".
+    Let expected be "{{\"proof_term\":{proof},\"claimed_type\":{claim},\"prelude_version\":\"logos-coc-1\"}}".
+    Expect that leanCertificateJson(proof, claim) is equal to expected.
+    Let reversed be "{{\"proof_term\":{claim},\"claimed_type\":{proof},\"prelude_version\":\"logos-coc-1\"}}".
+    Expect that leanCertificateJson(claim, proof) is equal to reversed.
+
+## Test: Lean certificate assembly refuses absent mapped terms
+    Expect that leanCertificateJson("", "{{\"Sort\":\"Prop\"}}") is equal to "".
+    Expect that leanCertificateJson("{{\"Sort\":\"Prop\"}}", "") is equal to "".
+    For all booleans missingProof:
+        Let mutable proof be "{{\"Sort\":\"Prop\"}}".
+        Let mutable claim be "".
+        If missingProof:
+            Set proof to "".
+            Set claim to "{{\"Sort\":\"Prop\"}}".
+        Expect that leanCertificateJson(proof, claim) is equal to "".
+
+## Test: Lean certificate assembly bounds combined payload bytes
+    Let huge be repeatText("x", 65409).
+    Expect that leanCertificateJson(huge, "x") is equal to "".

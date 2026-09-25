@@ -1,0 +1,50 @@
+# Existing problem revision content mapping
+
+Import AlejandroCase from "./alejandro_case.lg".
+Import AlejandroLedger from "./alejandro_ledger.lg".
+Import AlejandroProvenance from "./alejandro_provenance.lg".
+
+## An AlejandroRevisionDraft has:
+    a stableKey, which is Text.
+    a title, which is Text.
+    an originalQuestion, which is Text.
+    a kindBody, which is Json.
+    a contentDigest, which is Text.
+## To alejandroRevisionBody (original: AlejandroCase, source: Text, ledger: AlejandroLedger, pins: AlejandroPins) -> Json:
+    Let entries be a new Seq of JEntry.
+    Push a new JEntry with key "schema" and val (a new JStr with s "macsad.alejandro-original-problem/1") to entries.
+    Push a new JEntry with key "stable_key" and val (a new JStr with s "alejandro/lean414/{original's caseId}") to entries.
+    Push a new JEntry with key "original_case" and val (original's historical) to entries.
+    Push a new JEntry with key "raw_lean_source" and val (a new JStr with s source) to entries.
+    Push a new JEntry with key "provenance" and val alejandroProvenanceBody(pins) to entries.
+    Push a new JEntry with key "recorded_bridge_ledger" and val (ledger's recorded) to entries.
+    Push a new JEntry with key "evidence_scope" and val (a new JStr with s "recorded_ledger_only") to entries.
+    Push a new JEntry with key "proof_package_verification" and val (a new JStr with s "not_performed") to entries.
+    Push a new JEntry with key "expectation_scope" and val (a new JStr with s "historical_original_expectation") to entries.
+    Return a new JObj with entries entries.
+## To assembleAlejandroRevision (original: AlejandroCase, source: Text, ledgerRaw: Text, pins: AlejandroPins) -> Result of AlejandroRevisionDraft and Text:
+    If alejandroOriginalPinsAccepted(pins) is equal to false:
+        Return a new Err with error "original provenance pins rejected".
+    If original's caseId is not equal to pins's caseId or original's sourcePath is not equal to pins's sourcePath:
+        Return a new Err with error "source pins belong to another original case".
+    If length of text_bytes(source) is less than 1 or length of text_bytes(source) is greater than 16777216:
+        Return a new Err with error "original source exceeds admission limit".
+    If indexOf(source, text_from_bytes([0])) is greater than 0:
+        Return a new Err with error "original source contains NUL".
+    If length of text_bytes(ledgerRaw) is greater than 16777216:
+        Return a new Err with error "recorded ledger exceeds admission limit".
+    If alejandroRawMatches(source, pins's sourceDigest) is equal to false:
+        Return a new Err with error "raw source hash mismatch".
+    If alejandroRawMatches(ledgerRaw, pins's ledgerDigest) is equal to false:
+        Return a new Err with error "raw ledger hash mismatch".
+    Inspect decodeAlejandroLedger(ledgerRaw, original's caseId):
+        When Err (failure):
+            Return a new Err with error failure.
+        When Ok (ledger):
+            Let body be alejandroRevisionBody(original, source, ledger, pins).
+            Let stableKey be "alejandro/lean414/{original's caseId}".
+            Let question be "Preserve the meaning and declaration obligations of Alejandro case {original's caseId}: {original's title}".
+            Let preimage be "macsad.alejandro-original-problem/1" combined with text_from_bytes([0]) combined with jsonSerialize(body).
+            Let draft be a new AlejandroRevisionDraft with stableKey stableKey and title (original's title) and originalQuestion question and kindBody body and contentDigest alejandroRawDigest(preimage).
+            Return a new Ok with value draft.
+    Return a new Err with error "invalid original evidence".

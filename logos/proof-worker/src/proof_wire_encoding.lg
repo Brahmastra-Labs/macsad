@@ -1,0 +1,106 @@
+# MaCSad proof wire encoding boundary
+
+## To proofHexNibble (value: Int) -> Int:
+    If value is at least 48:
+        If value is at most 57:
+            Return value - 48.
+    If value is at least 97:
+        If value is at most 102:
+            Return value - 87.
+    Return -1.
+
+## To proofUtf8BytesAccepted (bytes: Seq of Int) -> Bool:
+    Let mutable remaining be 0.
+    Let mutable low be 128.
+    Let mutable high be 191.
+    Repeat for value in bytes:
+        If remaining is greater than 0:
+            If value is less than low:
+                Return false.
+            If value is greater than high:
+                Return false.
+            Set remaining to remaining - 1.
+            Set low to 128.
+            Set high to 191.
+        Otherwise:
+            If value is less than 0:
+                Return false.
+            If value is greater than 127:
+                If value is less than 194:
+                    Return false.
+                If value is less than 224:
+                    Set remaining to 1.
+                Otherwise:
+                    If value is less than 240:
+                        Set remaining to 2.
+                        If value is equal to 224:
+                            Set low to 160.
+                        If value is equal to 237:
+                            Set high to 159.
+                    Otherwise:
+                        If value is greater than 244:
+                            Return false.
+                        Set remaining to 3.
+                        If value is equal to 240:
+                            Set low to 144.
+                        If value is equal to 244:
+                            Set high to 143.
+    Return remaining is equal to 0.
+
+## To proofWireHexBounded (value: Text, maximum: Int) -> Bool:
+    Let bytes be text_bytes(value).
+    Let count be length of bytes.
+    If count is less than 2:
+        Return false.
+    If count is greater than maximum:
+        Return false.
+    If count % 2 is equal to 1:
+        Return false.
+    Let decoded be a new Seq of Int.
+    Let mutable index be 1.
+    While index is less than count:
+        Let high be proofHexNibble(item index of bytes).
+        Let low be proofHexNibble(item (index + 1) of bytes).
+        If high is less than 0:
+            Return false.
+        If low is less than 0:
+            Return false.
+        Push high * 16 + low to decoded.
+        Set index to index + 2.
+    Return proofUtf8BytesAccepted(decoded).
+
+## To proofWireHexAccepted (value: Text) -> Bool:
+    Return proofWireHexBounded(value, 512).
+
+## Test: Proof wire accepts canonical UTF8 boundaries
+    Let samples be ["00", "7f", "c280", "dfbf", "e0a080", "ed9fbf", "ee8080", "efbfbf", "f0908080", "f48fbfbf"].
+    Repeat for value in samples:
+        Expect that proofWireHexAccepted(value) is equal to true.
+## Test: Proof wire rejects malformed hex and UTF8
+    Let invalidFirst be ["", "0", "GG", "c3A9", "80", "c0af", "c180", "c2", "c220", "dfc0", "e08080"].
+    Let invalidSecond be ["eda080", "f0808080", "f4908080", "f5808080", "ff", "efbf", "e228a1", "f090808080"].
+    Repeat for value in invalidFirst:
+        Expect that proofWireHexAccepted(value) is equal to false.
+    Repeat for value in invalidSecond:
+        Expect that proofWireHexAccepted(value) is equal to false.
+## Test: Proof wire bounds individual encoded names
+    Expect that proofWireHexAccepted(repeatText("61", 256)) is equal to true.
+    Expect that proofWireHexAccepted(repeatText("61", 257)) is equal to false.
+## Test: Proof wire requires lowercase hex
+    For all booleans uppercase:
+        Let mutable value be "c3a9".
+        If uppercase:
+            Set value to "C3A9".
+        Let accepted be proofWireHexAccepted(value).
+        If uppercase:
+            Expect that accepted is equal to false.
+        Otherwise:
+            Expect that accepted is equal to true.
+
+## Test: Lean wire extends only the admitted field bound
+    Let field be repeatText("61", 257).
+    Expect that proofWireHexAccepted(field) is equal to false.
+    Expect that proofWireHexBounded(field, 65536) is equal to true.
+    Expect that proofWireHexBounded(repeatText("61", 32769), 65536) is equal to false.
+    Repeat for malformed in ["ff", "c080", "C3A9"]:
+        Expect that proofWireHexBounded(malformed, 65536) is equal to false.

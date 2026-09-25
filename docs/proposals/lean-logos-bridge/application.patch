@@ -1,0 +1,1865 @@
+diff --git a/host_adapters/lean_bridge_evaluation.py b/host_adapters/lean_bridge_evaluation.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..34a03f5d5959e34c0edf8b2d8664e7e2457087e8
+--- /dev/null
++++ b/host_adapters/lean_bridge_evaluation.py
+@@ -0,0 +1,237 @@
++"""Trusted-fixture evaluation ports, not an uploaded-Lean execution service.
++
++Lean source checking occurs in the separately recorded Windows fixture job.
++This port consumes its exact retained exports, projects facts losslessly to LOGOS,
++and executes a separately identified existing kernel checker. LOGOS owns every
++mathematical mapping and checker-result classification. No database is modified.
++"""
++
++from __future__ import annotations
++
++import hashlib
++import json
++import os
++import re
++import stat
++from pathlib import Path
++
++from host_adapters.lean_bridge_transport import (
++    core_arguments, decode_emission, export_fact_argument, _unique_object, _nonfinite,
++)
++from host_adapters.proof_process import run_bounded
++from host_adapters.proof_demo import write_new
++
++
++EXPORT_LIMIT = 262144
++LEAN_COMMIT = "68218e876d2a38b1985b8590fff244a83c321783"
++KERNEL_SHA256 = "56a4bc1fbb6b4a4495c67616c5f66d55929b0e78532145bbfb00ca5421353914"
++
++
++def _sha(payload):
++    return hashlib.sha256(payload).hexdigest()
++
++
++def _json(payload):
++    return json.loads(payload.decode("utf-8", errors="strict"),
++                      object_pairs_hook=_unique_object, parse_constant=_nonfinite)
++
++
++def _read(path, limit=EXPORT_LIMIT):
++    with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb") as stream:
++        before = os.fstat(stream.fileno())
++        if not stat.S_ISREG(before.st_mode) or not 1 <= before.st_size <= limit:
++            raise ValueError("evidence is not a bounded nonempty regular file")
++        payload = stream.read(limit + 1)
++        after = os.fstat(stream.fileno())
++    if len(payload) > limit or (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
++        raise ValueError("evidence changed or exceeded its byte quota")
++    return payload
++
++
++def _binary_identity(path):
++    with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb") as stream:
++        before = os.fstat(stream.fileno())
++        if not stat.S_ISREG(before.st_mode) or before.st_size > 256 * 1024 * 1024:
++            raise ValueError("checker is not a regular file")
++        digest = hashlib.sha256()
++        for block in iter(lambda: stream.read(65536), b""):
++            digest.update(block)
++        after = os.fstat(stream.fileno())
++    if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
++        raise ValueError("checker changed while its identity was read")
++    return digest.hexdigest()
++
++
++def _observation(record):
++    return {"exit_code": record.exit_code, "termination": record.termination,
++            "stdout_hex": record.stdout.hex(), "stderr_hex": record.stderr.hex()}
++
++
++def _save_json(path, data):
++    write_new(path, (json.dumps(data, sort_keys=True, indent=2) + "\n").encode())
++
++
++def _environment(config):
++    return {"PATH": os.defpath, "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8",
++            "LOGOS_WORKSPACE": config["logos_workspace"]}
++
++
++def _logos(config, arguments):
++    wrapper = Path(config["repository"]) / "scripts/logos.sh"
++    return run_bounded(["/bin/bash", str(wrapper), "run", "--interpret", "--seed", "7",
++                        "--max-steps", "1000000", "--timeout", "5s", "--", *arguments],
++                       cwd=Path(config["project"]), environment=_environment(config),
++                       timeout_seconds=15, output_limit=32768)
++
++
++def _projection(record):
++    """Raw Lean object-field projection; no target constructor choices."""
++    tags, left, right, indices, levels = [], [], [], [], []
++    for number, node in enumerate(record["nodes"], 1):
++        if type(node) is not dict or type(node.get("id")) is not int or node["id"] != number:
++            raise ValueError("core rows must retain exact consecutive source node IDs")
++        tag = node["tag"]
++        tags.append(tag)
++        first, second, index, level = 0, 0, "", ""
++        if tag in ("forallE", "lam"):
++            first, second = node["domain"], node["body"]
++        elif tag == "app":
++            first, second = node["function"], node["argument"]
++        elif tag == "bvar":
++            index = node["index"]
++        elif tag == "sort":
++            level = node["level"]["tag"]
++        left.append(first)
++        right.append(second)
++        indices.append(index)
++        levels.append(level)
++    return tags, left, right, indices, levels
++
++
++def _fixture(fixture, config):
++    expected = config["fixtures"][fixture]
++    name = expected["file"]
++    if type(name) is not str or re.fullmatch(r"[A-Za-z0-9_-]+\.json", name) is None:
++        raise ValueError("export file must be one contained fixture basename")
++    exports = Path(config["exports"])
++    if not exports.is_absolute() or exports.is_symlink() or exports.resolve(strict=True) != exports:
++        raise ValueError("fixture root must be an exact real directory without symlink ancestors")
++    payload = _read(exports / name)
++    if _sha(payload) != expected["export_sha256"]:
++        raise ValueError("export identity does not match the trusted fixture job")
++    record = _json(payload)
++    fields = {"schema", "exporterVersion", "compiler", "source", "status", "diagnostics", "targetName",
++              "imports", "declarations", "nodes", "axiomDependencies", "closureComplete"}
++    if type(record) is not dict or set(record) != fields:
++        raise ValueError("unexpected export envelope")
++    if record["schema"] != "macsad-lean-core/1" or record["exporterVersion"] != "1":
++        raise ValueError("unsupported export transport version")
++    if record["compiler"] != {"version": "4.31.0", "gitCommit": LEAN_COMMIT}:
++        raise ValueError("export compiler differs from the recorded Lean job")
++    for key in ["nodes", "declarations", "axiomDependencies", "diagnostics", "imports"]:
++        if type(record[key]) is not list:
++            raise ValueError("export array primitive type mismatch")
++    if type(record["closureComplete"]) is not bool:
++        raise ValueError("export closure fact must be Boolean")
++    source = record["source"]
++    if type(source) is not dict or source.get("fixtureId") != fixture or type(source.get("utf8Hex")) is not str:
++        raise ValueError("trusted source identity is missing")
++    raw_source = bytes.fromhex(source["utf8Hex"])
++    if raw_source.hex() != source["utf8Hex"] or len(raw_source) != source["byteLength"]:
++        raise ValueError("source bytes are not exact canonical transport")
++    raw_source.decode("utf-8", errors="strict")
++    if _sha(raw_source) != expected["source_sha256"] or record["targetName"] != expected["targetName"]:
++        raise ValueError("source or requested target differs from trusted fixture job")
++    declarations = record["declarations"]
++    target = {"kind": "absent", "typeRoot": 0, "valueRoot": None, "levelParams": []}
++    if declarations:
++        target = declarations[0]
++        required = {"name", "displayName", "kind", "levelParams", "typeRoot", "valueRoot", "details"}
++        if type(target) is not dict or set(target) != required or target["name"] != record["targetName"]:
++            raise ValueError("exact target declaration object is missing or mismatched")
++        if type(target["levelParams"]) is not list:
++            raise ValueError("universe parameter facts are not a list")
++    if record["status"] == "exported" and (not declarations or expected["lean_exit_code"] != 0):
++        raise ValueError("exported facts contradict recorded Lean execution")
++    proof = 0 if target["valueRoot"] is None else target["valueRoot"]
++    arguments = core_arguments(*_projection(record), proof, target["typeRoot"])
++    arguments.append(export_fact_argument(True, True, record["closureComplete"], record["status"], target["kind"],
++                                         len(record["axiomDependencies"]), len(target["levelParams"]), 10000))
++    return payload, raw_source, record, arguments
++
++
++def _kernel(config, certificate_path, destination, *, expected_certificate_sha256, target_matches):
++    checker = Path(config["checker"])
++    expected = config["checker_sha256"]
++    if expected != KERNEL_SHA256 or _binary_identity(checker) != expected:
++        raise ValueError("kernel executable is not the exact evaluated artifact")
++    before = _read(certificate_path, 32768)
++    result = run_bounded([str(checker), str(certificate_path)], cwd=destination,
++                         environment={"PATH": os.defpath, "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"},
++                         timeout_seconds=15, output_limit=32768)
++    _save_json(destination / "kernel-observation.json", _observation(result))
++    flags = [result.termination == "exited", _binary_identity(checker) == expected,
++             _sha(before) == expected_certificate_sha256 and _read(certificate_path, 32768) == before,
++             target_matches]
++    arguments = ["macsad-lean-check-wire/1", ",".join("1" if v else "0" for v in flags),
++                 str(result.exit_code if result.exit_code is not None else 127),
++                 result.stdout.decode("utf-8", errors="strict"), result.stderr.decode("utf-8", errors="strict")]
++    classification = _logos(config, arguments)
++    _save_json(destination / "classification-observation.json", _observation(classification))
++    if classification.termination != "exited" or classification.exit_code != 0:
++        raise RuntimeError("LOGOS checker-report policy did not return normally")
++    report = _json(classification.stdout)
++    if set(report) != {"schema", "status"} or report["schema"] != "macsad-lean-check-result/1":
++        raise ValueError("LOGOS checker-report transport is malformed")
++    return {"status": report["status"], "kernel_exit_code": result.exit_code}
++
++
++def evaluate_fixture(fixture, config, destination):
++    """Run only a named, hash-bound export from our separately checked fixture job."""
++    payload, raw_source, record, arguments = _fixture(fixture, config)
++    # All fixture identity/shape validation precedes artifact creation or tools.
++    destination = Path(destination)
++    destination.mkdir(mode=0o700)
++    write_new(destination / "input.lean", raw_source)
++    write_new(destination / "lean-export.json", payload)
++    _save_json(destination / "raw-facts.json", arguments)
++    emitted = _logos(config, arguments)
++    _save_json(destination / "emission-observation.json", _observation(emitted))
++    if emitted.termination != "exited" or emitted.exit_code in (122, 124):
++        return {"status": "resource-limit", "checker_invoked": False}
++    if emitted.exit_code != 0:
++        raise RuntimeError("LOGOS translation invocation failed; no theorem verdict")
++    decoded = decode_emission(emitted.stdout)
++    summary = {"status": decoded["status"], "emission_status": decoded["status"], "checker_invoked": False,
++               "export_sha256": _sha(payload), "source_sha256": _sha(raw_source),
++               "source_target": record["targetName"], "axiom_dependencies": record["axiomDependencies"]}
++    if decoded["status"] == "emitted":
++        write_new(destination / "proof.term", decoded["proof"].encode())
++        write_new(destination / "type.term", decoded["type"].encode())
++        write_new(destination / "correspondence.txt", decoded["mapping"].encode())
++        write_new(destination / "certificate.json", decoded["certificate"])
++        # This is real kernel vernacular, not largo prove's English/Tarski syntax.
++        code = f"Definition translated_theorem : {decoded['type']} := {decoded['proof']}.\n"
++        write_new(destination / "translated.kernel.lg", code.encode())
++        summary.update(_kernel(config, destination / "certificate.json", destination,
++                               expected_certificate_sha256=_sha(decoded["certificate"]),
++                               target_matches=record["targetName"] == config["fixtures"][fixture]["targetName"]))
++        summary.update(checker_invoked=True, certificate_sha256=_sha(decoded["certificate"]),
++                       proof=decoded["proof"], type=decoded["type"])
++    _save_json(destination / "result.json", summary)
++    return summary
++
++
++def reject_altered_claim(config, original, destination):
++    """Deliberate negative control: preserve proof bytes but claim the type Prop."""
++    evaluate_fixture("identity", config, original)
++    original_bytes = _read(Path(original) / "certificate.json", 32768)
++    certificate = _json(original_bytes)
++    certificate["claimed_type"] = {"Sort": "Prop"}
++    destination = Path(destination)
++    destination.mkdir(mode=0o700)
++    _save_json(destination / "certificate.json", certificate)
++    result = _kernel(config, destination / "certificate.json", destination,
++                     expected_certificate_sha256=_sha(original_bytes), target_matches=False)
++    _save_json(destination / "result.json", result)
++    return result
+diff --git a/host_adapters/lean_bridge_transport.py b/host_adapters/lean_bridge_transport.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..f30971bf87b7a7dbe988bba9d00446239f2f5415
+--- /dev/null
++++ b/host_adapters/lean_bridge_transport.py
+@@ -0,0 +1,132 @@
++"""Bounded lossless fact framing. LOGOS, not this port, selects term mappings."""
++
++from __future__ import annotations
++
++import json
++import re
++
++
++MAX_WIRE_BYTES = 32768
++_TOKEN = re.compile(r"[A-Za-z][A-Za-z0-9_-]*\Z", re.ASCII)
++_NATURAL = re.compile(r"(?:0|[1-9][0-9]*)\Z", re.ASCII)
++_HEX = re.compile(r"(?:[0-9a-f]{2})*\Z", re.ASCII)
++
++
++class TransportLimit(ValueError):
++    """Explicit prototype transport quota, not mathematical invalidity."""
++
++
++def _sequence(value):
++    if type(value) is not list:
++        raise ValueError("fact sequences must be exact lists")
++    if len(value) > MAX_WIRE_BYTES:
++        raise TransportLimit("prototype fact sequence exceeds transport quota")
++    return value
++
++
++def _integer(value):
++    if type(value) is not int or not 0 <= value <= 2**63 - 1:
++        raise ValueError("node references must be exact nonnegative machine integers")
++    return str(value)
++
++
++def _text(value, pattern, *, empty=False):
++    if type(value) is not str:
++        raise ValueError("fact token must be exact text")
++    if len(value) > MAX_WIRE_BYTES:
++        raise TransportLimit("prototype fact token exceeds transport quota")
++    if not (empty and value == "") and pattern.fullmatch(value) is None:
++        raise ValueError("fact token is not canonical or contains a delimiter")
++    return value
++
++
++def _framed(values, encode):
++    tokens = []
++    size = 0
++    for value in _sequence(values):
++        token = encode(value)
++        size += len(token) + (1 if tokens else 0)
++        if size > MAX_WIRE_BYTES:
++            raise TransportLimit("prototype fact column exceeds transport quota")
++        tokens.append(token)
++    return ",".join(tokens)
++
++
++def core_arguments(tags, left, right, indices, levels, proof_root, claim_root):
++    """Project primitive facts only; preserve unsupported tags and exact Lean Nats.
++
++    No constructor is translated, no binder index is narrowed, and no term is
++    repaired here. LOGOS receives the original raw tags and selects the mapping.
++    Array-length, reference, scope and mathematical-support checks belong there.
++    """
++    result = [
++        "macsad-lean-core-wire/1",
++        _framed(tags, lambda v: _text(v, _TOKEN)),
++        _framed(left, _integer),
++        _framed(right, _integer),
++        _framed(indices, lambda v: _text(v, _NATURAL, empty=True)),
++        _framed(levels, lambda v: _text(v, _TOKEN, empty=True)),
++        _integer(proof_root), _integer(claim_root),
++    ]
++    if sum(len(v.encode("utf-8")) + 1 for v in result) > MAX_WIRE_BYTES:
++        raise TransportLimit("prototype argument wire exceeds transport quota")
++    return result
++
++
++def export_fact_argument(transport, source_identity, closure, status, kind, axioms, levels, quota):
++    flags = []
++    for flag in [transport, source_identity, closure]:
++        if type(flag) is not bool:
++            raise ValueError("source flags must be exact booleans")
++        flags.append("1" if flag else "0")
++    return ",".join(flags + [_text(status, _TOKEN), _text(kind, _TOKEN),
++                             _integer(axioms), _integer(levels), _integer(quota)])
++
++
++def _unique_object(pairs):
++    result = {}
++    for key, value in pairs:
++        if key in result:
++            raise ValueError("duplicate JSON key")
++        result[key] = value
++    return result
++
++
++def _nonfinite(_):
++    raise ValueError("nonfinite JSON value")
++
++
++def decode_emission(payload):
++    """Decode the exact output contract without deciding that a proof is valid."""
++    if type(payload) is not bytes or not payload:
++        raise ValueError("emission must be nonempty bytes")
++    if len(payload) > MAX_WIRE_BYTES:
++        raise TransportLimit("prototype output exceeds transport quota")
++    try:
++        record = json.loads(payload.decode("utf-8", errors="strict"),
++                            object_pairs_hook=_unique_object, parse_constant=_nonfinite)
++    except (ValueError, UnicodeError, RecursionError) as error:
++        raise ValueError("emission must be strict bounded JSON") from error
++    fields = {"schema", "status", "proof_hex", "type_hex", "certificate_hex", "mapping_hex"}
++    if type(record) is not dict or set(record) != fields:
++        raise ValueError("unexpected emission fields")
++    if record["schema"] != "macsad-lean-core-result/1":
++        raise ValueError("unexpected emission schema")
++    status = record["status"]
++    if type(status) is not str or status not in {"emitted", "invalid", "unsupported", "resource-limit"}:
++        raise ValueError("unexpected emission status")
++    decoded = {}
++    for source, destination in [("proof_hex", "proof"), ("type_hex", "type"),
++                                ("certificate_hex", "certificate"), ("mapping_hex", "mapping")]:
++        value = record[source]
++        if type(value) is not str or _HEX.fullmatch(value) is None:
++            raise ValueError("emission field must be canonical lowercase byte hex")
++        if (status == "emitted") != bool(value):
++            raise ValueError("emission field presence contradicts its status")
++        raw = bytes.fromhex(value)
++        try:
++            text = raw.decode("utf-8", errors="strict")
++        except UnicodeError as error:
++            raise ValueError("emission field is not UTF-8") from error
++        decoded[destination] = raw if destination == "certificate" else text
++    return {"status": status, **decoded}
+diff --git a/host_adapters/tests/test_lean_bridge_integration.py b/host_adapters/tests/test_lean_bridge_integration.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..26e31eb96ff899e84ea3b3c8ac50764b3498b3f7
+--- /dev/null
++++ b/host_adapters/tests/test_lean_bridge_integration.py
+@@ -0,0 +1,81 @@
++"""Required real-tool prototype integration; absent prerequisites fail, never skip."""
++
++import json
++import os
++import tempfile
++import unittest
++from pathlib import Path
++
++from host_adapters.lean_bridge_evaluation import evaluate_fixture, reject_altered_claim, _binary_identity
++
++
++class RealLeanLogosBridgeTests(unittest.TestCase):
++    @classmethod
++    def setUpClass(cls):
++        cls.root = Path(os.environ["MACSAD_LEAN_BRIDGE_EVIDENCE"])
++        cls.config = json.loads((cls.root / "evaluation-config.json").read_text())
++
++    def test_identity_transfers_actual_lean_proof_and_checks_target(self):
++        result = evaluate_fixture("identity", self.config, self.root / "identity")
++        self.assertEqual(result["status"], "kernel-checked")
++        self.assertEqual(result["emission_status"], "emitted")
++        self.assertIn("forall", result["type"])
++        self.assertIn("fun", result["proof"])
++        self.assertNotEqual(result["certificate_sha256"], result["export_sha256"])
++
++    def test_composition_and_repeated_binders_transfer_without_capture(self):
++        for fixture in ["composition", "repeated_binders"]:
++            with self.subTest(fixture=fixture):
++                result = evaluate_fixture(fixture, self.config, self.root / fixture)
++                self.assertEqual(result["status"], "kernel-checked")
++                self.assertEqual(result["emission_status"], "emitted")
++
++    def test_missing_proof_and_custom_axiom_are_not_repaired(self):
++        for fixture, expected in [("sorry", "resource-limit"), ("axiom_dependency", "unsupported")]:
++            with self.subTest(fixture=fixture):
++                result = evaluate_fixture(fixture, self.config, self.root / fixture)
++                self.assertEqual(result["status"], expected)
++                self.assertFalse(result["checker_invoked"])
++
++    def test_invalid_original_proof_never_reaches_target_checker(self):
++        result = evaluate_fixture("invalid_proof", self.config, self.root / "invalid_proof")
++        self.assertEqual(result["status"], "invalid")
++        self.assertFalse(result["checker_invoked"])
++
++    def test_kernel_rejects_changed_target_for_same_translated_proof(self):
++        result = reject_altered_claim(self.config, self.root / "wrong-claim-source", self.root / "altered-claim")
++        self.assertEqual(result["kernel_exit_code"], 1)
++        self.assertEqual(result["status"], "rejected")
++
++    def test_unmatched_export_identity_rejected_before_artifact_effects(self):
++        config = json.loads(json.dumps(self.config))
++        config["fixtures"]["identity"]["export_sha256"] = "0" * 64
++        destination = self.root / "tampered-export"
++        with self.assertRaises(ValueError):
++            evaluate_fixture("identity", config, destination)
++        self.assertFalse(destination.exists())
++
++    def test_valid_longer_lean_proof_reports_current_job_quota_honestly(self):
++        result = evaluate_fixture("long_composition", self.config, self.root / "long_composition")
++        self.assertEqual(result["status"], "resource-limit")
++        self.assertFalse(result["checker_invoked"])
++
++    def test_export_path_escape_is_rejected_before_reading_or_effects(self):
++        config = json.loads(json.dumps(self.config))
++        config["fixtures"]["identity"]["file"] = "../identity-04.json"
++        destination = self.root / "escaped-export"
++        with self.assertRaises(ValueError):
++            evaluate_fixture("identity", config, destination)
++        self.assertFalse(destination.exists())
++
++    def test_checker_fifo_is_rejected_without_blocking(self):
++        # The harness is POSIX-only and owns this temporary directory and FIFO.
++        with tempfile.TemporaryDirectory(prefix="checker-fifo-", dir=self.root) as temporary:
++            fifo = Path(temporary) / "not-a-checker"
++            os.mkfifo(fifo)
++            with self.assertRaises(ValueError):
++                _binary_identity(fifo)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/host_adapters/tests/test_lean_bridge_transport.py b/host_adapters/tests/test_lean_bridge_transport.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..0c0ffb7b1afe5ef3f37d25758f82e40bb4db22cf
+--- /dev/null
++++ b/host_adapters/tests/test_lean_bridge_transport.py
+@@ -0,0 +1,82 @@
++"""RED contracts for mechanical transport, not mathematical acceptance."""
++
++import json
++import unittest
++
++from host_adapters.lean_bridge_transport import core_arguments, decode_emission, export_fact_argument
++
++
++class LeanBridgeTransportTests(unittest.TestCase):
++    def test_exact_raw_core_fact_projection(self):
++        self.assertEqual(
++            core_arguments(["sort", "bvar"], [0, 0], [0, 0], ["", "0"], ["zero", ""], 2, 1),
++            ["macsad-lean-core-wire/1", "sort,bvar", "0,0", "0,0", ",0", "zero,", "2", "1"],
++        )
++
++    def test_preserves_large_lean_natural_and_unsupported_tag(self):
++        # Host does not truncate Lean indices or decide mathematical support.
++        huge = "1234567890123456789012345678901234567890"
++        result = core_arguments(["bvar", "const"], [0, 0], [0, 0], [huge, ""], ["", ""], 1, 2)
++        self.assertEqual(result[1], "bvar,const")
++        self.assertEqual(result[4], huge + ",")
++
++    def test_wire_rejects_inexact_primitive_types_and_delimiter_injection(self):
++        valid = [["sort"], [0], [0], [""], ["zero"], 1, 1]
++        for position, value in [(0, ["sort,app"]), (0, ["sort\0"]), (1, [False]),
++                                (1, [1.0]), (3, [0]), (3, ["+0"]), (3, ["00"]),
++                                (4, ["zero,zero"]), (5, True), (6, 1.0)]:
++            args = list(valid)
++            args[position] = value
++            with self.subTest(position=position, value=value), self.assertRaises(ValueError):
++                core_arguments(*args)
++
++    def test_emission_decodes_exact_utf8_bytes_without_rewriting_code(self):
++        record = {"schema": "macsad-lean-core-result/1", "status": "emitted",
++                  "proof_hex": "(fun α => α)".encode().hex(),
++                  "type_hex": "Prop".encode().hex(), "certificate_hex": "7b7d", "mapping_hex": "317c736f7274"}
++        result = decode_emission((json.dumps(record) + "\n").encode())
++        self.assertEqual(result["proof"], "(fun α => α)")
++        self.assertEqual(result["type"], "Prop")
++        self.assertEqual(result["certificate"], b"{}")
++        self.assertEqual(result["mapping"], "1|sort")
++        self.assertEqual(result["status"], "emitted")
++
++    def test_keeps_unsuccessful_statuses_distinct(self):
++        for status in ["invalid", "unsupported", "resource-limit"]:
++            record = {"schema": "macsad-lean-core-result/1", "status": status,
++                      "proof_hex": "", "type_hex": "", "certificate_hex": "", "mapping_hex": ""}
++            self.assertEqual(decode_emission(json.dumps(record).encode())["status"], status)
++
++    def test_rejects_malformed_native_output_and_overflow(self):
++        record = {"schema": "macsad-lean-core-result/1", "status": "emitted",
++                  "proof_hex": "61", "type_hex": "62", "certificate_hex": "7b7d", "mapping_hex": "31"}
++        malformed = [b"", b"null", b"{}", b"x" * 32769]
++        for key, value in [("proof_hex", "ff"), ("proof_hex", "C3A9"),
++                           ("proof_hex", "0"), ("proof_hex", ""),
++                           ("certificate_hex", 12), ("status", "verified"),
++                           ("schema", "other"), ("surprise", True)]:
++            bad = dict(record)
++            bad[key] = value
++            malformed.append(json.dumps(bad).encode())
++        malformed.append(json.dumps(record).replace('"emitted"', '"emitted", "status":"emitted"').encode())
++        for payload in malformed:
++            with self.subTest(payload=payload[:100]), self.assertRaises(ValueError):
++                decode_emission(payload)
++
++    def test_source_facts_remain_facts_not_host_acceptance(self):
++        self.assertEqual(export_fact_argument(True, True, True, "exported", "theorem", 0, 0, 1024),
++                         "1,1,1,exported,theorem,0,0,1024")
++        self.assertEqual(export_fact_argument(True, False, False, "export-error", "axiom", 4, 2, 0),
++                         "1,0,0,export-error,axiom,4,2,0")
++        with self.assertRaises(ValueError):
++            export_fact_argument(1, True, True, "exported", "theorem", 0, 0, 1024)
++        with self.assertRaises(ValueError):
++            export_fact_argument(True, True, True, "exported,theorem", "theorem", 0, 0, 1024)
++
++    def test_transport_quota_does_not_silently_truncate(self):
++        with self.assertRaises(ValueError):
++            core_arguments(["sort"], [0], [0], ["1" * 32768, "2"], ["zero"], 1, 1)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/logos/lean-bridge/Largo.toml b/logos/lean-bridge/Largo.toml
+new file mode 100644
+index 0000000000000000000000000000000000000000..ebda5a140a6d59099bb21426f413998d91c1571c
+--- /dev/null
++++ b/logos/lean-bridge/Largo.toml
+@@ -0,0 +1,8 @@
++[package]
++name = "macsad_lean_bridge_evaluation"
++version = "0.1.0"
++authors = []
++entry = "src/main.lg"
++
++[test]
++skip_budget = 0
+diff --git a/logos/lean-bridge/src/lean_bridge_driver.lg b/logos/lean-bridge/src/lean_bridge_driver.lg
+new file mode 100644
+index 0000000000000000000000000000000000000000..57a76d6bd0906b0a97e1af0a7e0dccf895851958
+--- /dev/null
++++ b/logos/lean-bridge/src/lean_bridge_driver.lg
+@@ -0,0 +1,58 @@
++# MaCSad Lean bridge stateless driver
++
++Import LeanCoreTerms from "./lean_core_terms.lg".
++Import LeanCoreBudget from "./lean_core_budget.lg".
++Import LeanCoreCertificate from "./lean_core_certificate.lg".
++Import LeanExportStatus from "./lean_export_status.lg".
++Import LeanCheckStatus from "./lean_check_status.lg".
++Import LeanWire from "./lean_wire.lg".
++Import LeanBridgeInput from "./lean_bridge_input.lg".
++Import LeanCheckDriver from "./lean_check_driver.lg".
++
++## To leanCoreResult (status: Text, proof: Text, claim: Text, certificate: Text, mapping: Text) -> Text:
++    Let proofHex be toHex(proof).
++    Let claimHex be toHex(claim).
++    Let certificateHex be toHex(certificate).
++    Let mappingHex be toHex(mapping).
++    Let prefix be "{{\"schema\":\"macsad-lean-core-result/1\",\"status\":\"{status}\",".
++    Let fields be "\"proof_hex\":\"{proofHex}\",\"type_hex\":\"{claimHex}\",\"certificate_hex\":\"{certificateHex}\",\"mapping_hex\":\"{mappingHex}\"}}".
++    Return "{prefix}{fields}".
++
++## To leanBridgeMain (arguments: Seq of Text) -> Text:
++    If length of arguments is greater than 1:
++        If item 2 of arguments is equal to "macsad-lean-check-wire/1":
++            Return leanCheckWire(arguments).
++    If (length of arguments is equal to 10) is equal to false:
++        Return leanCoreResult("invalid", "", "", "", "").
++    Let mutable bytes be 0.
++    Repeat for position from 2 to 10:
++        Set bytes to bytes + length of text_bytes(item position of arguments).
++    If bytes is greater than 32768:
++        Return leanCoreResult("resource-limit", "", "", "", "").
++    If (item 2 of arguments is equal to "macsad-lean-core-wire/1") is equal to false:
++        Return leanCoreResult("invalid", "", "", "", "").
++    Let tags be split(item 3 of arguments, ",").
++    Let left be leanWireRefs(item 4 of arguments).
++    Let right be leanWireRefs(item 5 of arguments).
++    Let indices be split(item 6 of arguments, ",").
++    Let levels be split(item 7 of arguments, ",").
++    Let proofRoot be leanWireDecimal(item 8 of arguments).
++    Let claimRoot be leanWireDecimal(item 9 of arguments).
++    Let facts be split(item 10 of arguments, ",").
++    Let status be leanInputStatus(tags, left, right, indices, levels, proofRoot, claimRoot, facts).
++    If (status is equal to "eligible") is equal to false:
++        Return leanCoreResult(status, "", "", "", "").
++    Let proofJson be leanCoreTermJson(tags, left, right, indices, levels, proofRoot).
++    Let claimJson be leanCoreTermJson(tags, left, right, indices, levels, claimRoot).
++    If proofJson is equal to "" or claimJson is equal to "":
++        Return leanCoreResult("invalid", "", "", "", "").
++    Let certificate be leanCertificateJson(proofJson, claimJson).
++    Let proofText be leanCoreText(tags, left, right, indices, levels, proofRoot).
++    Let claimText be leanCoreText(tags, left, right, indices, levels, claimRoot).
++    Let mapping be leanCoreCorrespondence(tags).
++    If certificate is equal to "" or proofText is equal to "" or claimText is equal to "" or mapping is equal to "":
++        Return leanCoreResult("invalid", "", "", "", "").
++    Let result be leanCoreResult("emitted", proofText, claimText, certificate, mapping).
++    If length of text_bytes(result) is greater than 32768:
++        Return leanCoreResult("resource-limit", "", "", "", "").
++    Return result.
+diff --git a/logos/lean-bridge/src/lean_bridge_input.lg b/logos/lean-bridge/src/lean_bridge_input.lg
+new file mode 100644
+index 0000000000000000000000000000000000000000..ff08a6d2a8d14e95ca1bb73dd448c1871497c4b8
+--- /dev/null
++++ b/logos/lean-bridge/src/lean_bridge_input.lg
+@@ -0,0 +1,29 @@
++# MaCSad Lean bridge input admission
++
++Import LeanCoreBudget from "./lean_core_budget.lg".
++Import LeanExportStatus from "./lean_export_status.lg".
++Import LeanWire from "./lean_wire.lg".
++
++## To leanInputStatus (tags: Seq of Text, left: Seq of Int, right: Seq of Int, indices: Seq of Text, levels: Seq of Text, proof: Int, claim: Int, facts: Seq of Text) -> Text:
++    If (length of facts is equal to 8) is equal to false:
++        Return "invalid".
++    Repeat for position from 1 to 3:
++        Let bit be item position of facts.
++        If (bit is equal to "0" or bit is equal to "1") is equal to false:
++            Return "invalid".
++    Let transport be item 1 of facts is equal to "1".
++    Let source be item 2 of facts is equal to "1".
++    Let complete be item 3 of facts is equal to "1".
++    Let axioms be leanWireDecimal(item 6 of facts).
++    Let parameters be leanWireDecimal(item 7 of facts).
++    Let status be leanExportStatus(transport, source, complete, item 4 of facts, item 5 of facts, axioms, parameters).
++    If (status is equal to "eligible") is equal to false:
++        Return status.
++    Let quota be leanWireDecimal(item 8 of facts).
++    Let budget be leanCoreBudgetStatus(tags, left, right, proof, claim, quota).
++    If (budget is equal to "within-budget") is equal to false:
++        Return budget.
++    Let fields be leanCoreFieldStatus(tags, indices, levels).
++    If (fields is equal to "fields-valid") is equal to false:
++        Return fields.
++    Return "eligible".
+diff --git a/logos/lean-bridge/src/lean_check_driver.lg b/logos/lean-bridge/src/lean_check_driver.lg
+new file mode 100644
+index 0000000000000000000000000000000000000000..d4ad612839f7e7ef63c15e936454258fedf6ccf6
+--- /dev/null
++++ b/logos/lean-bridge/src/lean_check_driver.lg
+@@ -0,0 +1,29 @@
++# MaCSad checker-facts wire driver
++
++Import LeanCheckStatus from "./lean_check_status.lg".
++Import LeanWire from "./lean_wire.lg".
++
++## To leanCheckResult (status: Text) -> Text:
++    Return "{{\"schema\":\"macsad-lean-check-result/1\",\"status\":\"{status}\"}}".
++
++## To leanCheckWire (arguments: Seq of Text) -> Text:
++    If (length of arguments is equal to 6) is equal to false:
++        Return leanCheckResult("rejected").
++    Let mutable bytes be 0.
++    Repeat for position from 2 to 6:
++        Set bytes to bytes + length of text_bytes(item position of arguments).
++    If bytes is greater than 32768:
++        Return leanCheckResult("rejected").
++    Let flags be split(item 3 of arguments, ",").
++    If (length of flags is equal to 4) is equal to false:
++        Return leanCheckResult("rejected").
++    Repeat for bit in flags:
++        If (bit is equal to "0" or bit is equal to "1") is equal to false:
++            Return leanCheckResult("rejected").
++    Let transport be item 1 of flags is equal to "1".
++    Let checker be item 2 of flags is equal to "1".
++    Let certificate be item 3 of flags is equal to "1".
++    Let target be item 4 of flags is equal to "1".
++    Let code be leanWireDecimal(item 4 of arguments).
++    Let status be leanBridgeCheckStatus(transport, checker, certificate, target, code, item 5 of arguments, item 6 of arguments).
++    Return leanCheckResult(status).
+diff --git a/logos/lean-bridge/src/lean_check_status.lg b/logos/lean-bridge/src/lean_check_status.lg
+new file mode 100644
+index 0000000000000000000000000000000000000000..5aa5ee11c8b91083c005ae151fd959513668a0bb
+--- /dev/null
++++ b/logos/lean-bridge/src/lean_check_status.lg
+@@ -0,0 +1,32 @@
++# MaCSad Lean bridge checker-result policy
++
++Only native LOGOS may classify the supplied mechanical process and identity facts.
++Kernel checked never means independently checked or universally translated.
++
++## To leanBridgeCheckStatus (transport: Bool, checker: Bool, certificate: Bool, target: Bool, code: Int, output: Text, error: Text) -> Text:
++    If transport is equal to false or checker is equal to false or certificate is equal to false or target is equal to false:
++        Return "rejected".
++    If code is equal to 0 and output is equal to "VERIFIED\n" and error is equal to "":
++        Return "kernel-checked".
++    If code is equal to 1 and output is equal to "" and length of text_bytes(error) is greater than 0:
++        Return "not-kernel-checked".
++    Return "rejected".
++
++## Test: Lean bridge checker requires exact successful process output
++    Expect that leanBridgeCheckStatus(true, true, true, true, 0, "VERIFIED\n", "") is equal to "kernel-checked".
++    Expect that leanBridgeCheckStatus(true, true, true, true, 0, "VERIFIED", "") is equal to "rejected".
++    Expect that leanBridgeCheckStatus(true, true, true, true, 0, "VERIFIED\nextra", "") is equal to "rejected".
++    Expect that leanBridgeCheckStatus(true, true, true, true, 0, "VERIFIED\n", "warning") is equal to "rejected".
++
++## Test: Lean bridge checker rejects mismatched evidence identities
++    Expect that leanBridgeCheckStatus(false, true, true, true, 0, "VERIFIED\n", "") is equal to "rejected".
++    Expect that leanBridgeCheckStatus(true, false, true, true, 0, "VERIFIED\n", "") is equal to "rejected".
++    Expect that leanBridgeCheckStatus(true, true, false, true, 0, "VERIFIED\n", "") is equal to "rejected".
++    Expect that leanBridgeCheckStatus(true, true, true, false, 0, "VERIFIED\n", "") is equal to "rejected".
++
++## Test: Lean bridge checker never upgrades failure or resource exhaustion
++    Expect that leanBridgeCheckStatus(true, true, true, true, 1, "", "REJECTED: wrong target\n") is equal to "not-kernel-checked".
++    Expect that leanBridgeCheckStatus(true, true, true, true, 124, "", "timeout") is equal to "rejected".
++    Expect that leanBridgeCheckStatus(true, true, true, true, 1, "VERIFIED\n", "") is equal to "rejected".
++    For all booleans identity:
++        Expect that leanBridgeCheckStatus(true, identity, true, true, 124, "VERIFIED\n", "") is equal to "rejected".
+diff --git a/logos/lean-bridge/src/lean_core_budget.lg b/logos/lean-bridge/src/lean_core_budget.lg
+new file mode 100644
+index 0000000000000000000000000000000000000000..4faee68d83cf9b29976d11919b9847d1ecce1c1b
+--- /dev/null
++++ b/logos/lean-bridge/src/lean_core_budget.lg
+@@ -0,0 +1,114 @@
++# MaCSad Lean core expansion preflight
++
++Costs saturate before mathematical expansion. The driver calls this first.
++
++## To leanCoreBudgetStatus (tags: Seq of Text, left: Seq of Int, right: Seq of Int, proofRoot: Int, claimRoot: Int, quota: Int) -> Text:
++    Let count be length of tags.
++    If quota is less than 1 or quota is greater than 1000000:
++        Return "invalid".
++    If count is greater than 128:
++        Return "resource-limit".
++    If count is less than 1 or proofRoot is less than 1 or claimRoot is less than 1 or proofRoot is greater than count or claimRoot is greater than count:
++        Return "invalid".
++    If (length of left is equal to count) is equal to false or (length of right is equal to count) is equal to false:
++        Return "invalid".
++    Let costs be a new Seq of Int.
++    Let sizes be a new Seq of Int.
++    Repeat for position from 1 to count:
++        Let tag be item position of tags.
++        Let first be item position of left.
++        Let second be item position of right.
++        Let mutable cost be 1.
++        Let mutable size be 32.
++        If tag is equal to "sort" or tag is equal to "bvar":
++            If (first is equal to 0 and second is equal to 0) is equal to false:
++                Return "invalid".
++        Otherwise:
++            If (tag is equal to "forallE" or tag is equal to "lam" or tag is equal to "app") is equal to false:
++                Return "unsupported".
++            If first is less than 1 or second is less than 1 or first is at least position or second is at least position:
++                Return "invalid".
++            Set cost to 1 + item first of costs + item second of costs.
++            Set size to 128 + item first of sizes + item second of sizes.
++        If cost is greater than quota:
++            Set cost to quota + 1.
++        If size is greater than 65408:
++            Set size to 65409.
++        Push cost to costs.
++        Push size to sizes.
++    Let totalCost be item proofRoot of costs + item claimRoot of costs.
++    Let totalSize be item proofRoot of sizes + item claimRoot of sizes.
++    If totalCost is greater than quota or totalSize is greater than 65408:
++        Return "resource-limit".
++    Return "within-budget".
++
++## To leanCoreFieldStatus (tags: Seq of Text, indices: Seq of Text, levels: Seq of Text) -> Text:
++    Let count be length of tags.
++    If (length of indices is equal to count) is equal to false or (length of levels is equal to count) is equal to false:
++        Return "invalid".
++    Repeat for position from 1 to count:
++        Let tag be item position of tags.
++        Let index be item position of indices.
++        Let level be item position of levels.
++        If tag is equal to "sort":
++            If level is equal to "":
++                Return "invalid".
++            If (level is equal to "zero") is equal to false:
++                Return "unsupported".
++        Otherwise:
++            If (level is equal to "") is equal to false:
++                Return "invalid".
++        If tag is equal to "bvar":
++            If allDigits(index) is equal to false or length of text_bytes(index) is less than 1:
++                Return "invalid".
++            Let bytes be text_bytes(index).
++            If length of bytes is greater than 1:
++                If item 1 of bytes is equal to 48:
++                    Return "invalid".
++        Otherwise:
++            If (index is equal to "") is equal to false:
++                Return "invalid".
++    Return "fields-valid".
++
++## Test: Lean core preflight saturates a doubling DAG
++    Let tags be ["sort"].
++    Let left be [0].
++    Let right be [0].
++    Repeat for position from 2 to 128:
++        Push "app" to tags.
++        Let previous be position - 1.
++        Push previous to left.
++        Push previous to right.
++    Expect that leanCoreBudgetStatus(tags, left, right, 128, 128, 4096) is equal to "resource-limit".
++
++## Test: Lean core preflight accounts for both roots at the quota boundary
++    Expect that leanCoreBudgetStatus(["sort"], [0], [0], 1, 1, 2) is equal to "within-budget".
++    Expect that leanCoreBudgetStatus(["sort"], [0], [0], 1, 1, 1) is equal to "resource-limit".
++    Expect that leanCoreBudgetStatus(["sort"], [0], [0], 1, 1, 0) is equal to "invalid".
++    Expect that leanCoreBudgetStatus(["sort"], [0], [0], 1, 1, 1000001) is equal to "invalid".
++
++## Test: Lean core preflight rejects malformed references before indexing
++    Expect that leanCoreBudgetStatus(["app"], [1], [1], 1, 1, 4096) is equal to "invalid".
++    Expect that leanCoreBudgetStatus(["sort", "app"], [0, 3], [0, 1], 2, 2, 4096) is equal to "invalid".
++    Expect that leanCoreBudgetStatus(["sort"], [0, 0], [0], 1, 1, 4096) is equal to "invalid".
++    Expect that leanCoreBudgetStatus(["sort"], [0], [0], 0, 1, 4096) is equal to "invalid".
++
++## Test: Lean core preflight preserves unsupported status
++    Expect that leanCoreBudgetStatus(["const"], [0], [0], 1, 1, 4096) is equal to "unsupported".
++    For all booleans useMeta:
++        Let mutable tag be "const".
++        If useMeta:
++            Set tag to "mvar".
++        Expect that leanCoreBudgetStatus([tag], [0], [0], 1, 1, 4096) is equal to "unsupported".
++
++## Test: Lean core scalar fields preserve exact indices and level support
++    Expect that leanCoreFieldStatus(["sort", "bvar"], ["", "12345678901234567890"], ["zero", ""]) is equal to "fields-valid".
++    Expect that leanCoreFieldStatus(["bvar"], ["01"], [""]) is equal to "invalid".
++    Expect that leanCoreFieldStatus(["sort"], [""], ["succ"]) is equal to "unsupported".
++    Expect that leanCoreFieldStatus(["sort"], [""], [""]) is equal to "invalid".
++    Expect that leanCoreFieldStatus(["sort"], [""], ["zero", ""]) is equal to "invalid".
++
++## Test: Lean core scalar fields reject hidden unused payload
++    Expect that leanCoreFieldStatus(["sort"], ["0"], ["zero"]) is equal to "invalid".
++    Expect that leanCoreFieldStatus(["lam"], ["1"], [""]) is equal to "invalid".
++    Expect that leanCoreFieldStatus(["bvar"], ["0"], ["zero"]) is equal to "invalid".
+diff --git a/logos/lean-bridge/src/lean_core_certificate.lg b/logos/lean-bridge/src/lean_core_certificate.lg
+new file mode 100644
+index 0000000000000000000000000000000000000000..73c27ed9e18017d5e7f389e2b39c8bd1dc9862a8
+--- /dev/null
++++ b/logos/lean-bridge/src/lean_core_certificate.lg
+@@ -0,0 +1,35 @@
++# MaCSad mapped-term certificate assembly
++
++This formatter receives only mapped target terms from the private LOGOS caller.
++It neither parses arbitrary JSON nor decides whether the terms prove a theorem.
++
++## To leanCertificateJson (proof: Text, claim: Text) -> Text:
++    If proof is equal to "" or claim is equal to "":
++        Return "".
++    Let bytes be length of text_bytes(proof) + length of text_bytes(claim).
++    If bytes is greater than 65408:
++        Return "".
++    Return "{{\"proof_term\":{proof},\"claimed_type\":{claim},\"prelude_version\":\"logos-coc-1\"}}".
++
++## Test: Lean certificate assembly binds proof and claim without repair
++    Let proof be "{{\"Var\":\"b0\"}}".
++    Let claim be "{{\"Sort\":\"Prop\"}}".
++    Let expected be "{{\"proof_term\":{proof},\"claimed_type\":{claim},\"prelude_version\":\"logos-coc-1\"}}".
++    Expect that leanCertificateJson(proof, claim) is equal to expected.
++    Let reversed be "{{\"proof_term\":{claim},\"claimed_type\":{proof},\"prelude_version\":\"logos-coc-1\"}}".
++    Expect that leanCertificateJson(claim, proof) is equal to reversed.
++
++## Test: Lean certificate assembly refuses absent mapped terms
++    Expect that leanCertificateJson("", "{{\"Sort\":\"Prop\"}}") is equal to "".
++    Expect that leanCertificateJson("{{\"Sort\":\"Prop\"}}", "") is equal to "".
++    For all booleans missingProof:
++        Let mutable proof be "{{\"Sort\":\"Prop\"}}".
++        Let mutable claim be "".
++        If missingProof:
++            Set proof to "".
++            Set claim to "{{\"Sort\":\"Prop\"}}".
++        Expect that leanCertificateJson(proof, claim) is equal to "".
++
++## Test: Lean certificate assembly bounds combined payload bytes
++    Let huge be repeatText("x", 65409).
++    Expect that leanCertificateJson(huge, "x") is equal to "".
+diff --git a/logos/lean-bridge/src/lean_core_terms.lg b/logos/lean-bridge/src/lean_core_terms.lg
+new file mode 100644
+index 0000000000000000000000000000000000000000..14cc60c8fd1b993c08e189d82a3fa69cffcfcc2f
+--- /dev/null
++++ b/logos/lean-bridge/src/lean_core_terms.lg
+@@ -0,0 +1,120 @@
++# MaCSad Lean core-term mapping and canonical emission
++
++## To leanCoreText (tags: Seq of Text, left: Seq of Int, right: Seq of Int, indices: Seq of Text, levels: Seq of Text, root: Int) -> Text:
++    Return coreTermEmit(tags, left, right, indices, levels, root, 0, false).
++
++## To leanCoreTermJson (tags: Seq of Text, left: Seq of Int, right: Seq of Int, indices: Seq of Text, levels: Seq of Text, root: Int) -> Text:
++    Return coreTermEmit(tags, left, right, indices, levels, root, 0, true).
++
++## To coreTermEmit (tags: Seq of Text, left: Seq of Int, right: Seq of Int, indices: Seq of Text, levels: Seq of Text, root: Int, depth: Int, json: Bool) -> Text:
++    Let count be length of tags.
++    If count is less than 1 or count is greater than 128 or root is less than 1 or root is greater than count:
++        Return "".
++    If (length of left is equal to count) is equal to false or (length of right is equal to count) is equal to false:
++        Return "".
++    If (length of indices is equal to count) is equal to false or (length of levels is equal to count) is equal to false:
++        Return "".
++    Let tag be item root of tags.
++    Let first be item root of left.
++    Let second be item root of right.
++    Let index be item root of indices.
++    Let level be item root of levels.
++    If tag is equal to "sort":
++        If first is equal to 0 and second is equal to 0 and index is equal to "" and level is equal to "zero":
++            If json:
++                Return "{{\"Sort\":\"Prop\"}}".
++            Return "Prop".
++        Return "".
++    If tag is equal to "bvar":
++        If (first is equal to 0) is equal to false or (second is equal to 0) is equal to false or (level is equal to "") is equal to false or depth is less than 1:
++            Return "".
++        Let last be depth - 1.
++        Repeat for distance from 0 to last:
++            If index is equal to numText(distance):
++                Let position be depth - distance - 1.
++                If json:
++                    Return "{{\"Var\":\"b{position}\"}}".
++                Return "b{position}".
++        Return "".
++    If (tag is equal to "forallE" or tag is equal to "lam" or tag is equal to "app") is equal to false:
++        Return "".
++    If (index is equal to "" and level is equal to "") is equal to false or first is less than 1 or second is less than 1 or first is at least root or second is at least root:
++        Return "".
++    Let domain be coreTermEmit(tags, left, right, indices, levels, first, depth, json).
++    If domain is equal to "":
++        Return "".
++    Let mutable nested be depth.
++    If (tag is equal to "app") is equal to false:
++        Set nested to depth + 1.
++    Let body be coreTermEmit(tags, left, right, indices, levels, second, nested, json).
++    If domain is equal to "" or body is equal to "":
++        Return "".
++    If length of text_bytes(domain) + length of text_bytes(body) is greater than 65500:
++        Return "".
++    If json:
++        If tag is equal to "app":
++            Return "{{\"App\":[{domain},{body}]}}".
++        If tag is equal to "forallE":
++            Return "{{\"Pi\":{{\"param\":\"b{depth}\",\"param_type\":{domain},\"body_type\":{body}}}}}".
++        Return "{{\"Lambda\":{{\"param\":\"b{depth}\",\"param_type\":{domain},\"body\":{body}}}}}".
++    If tag is equal to "app":
++        Return "({domain} {body})".
++    If tag is equal to "forallE":
++        Return "(forall b{depth} : {domain}, {body})".
++    Return "(fun b{depth} : {domain} => {body})".
++
++## Test: Lean core emits the proposition identity statement and proof
++    Let tags be ["sort", "bvar", "bvar", "forallE", "forallE", "lam", "lam"].
++    Let left be [0, 0, 0, 2, 1, 2, 1].
++    Let right be [0, 0, 0, 3, 4, 2, 6].
++    Let indices be ["", "0", "1", "", "", "", ""].
++    Let levels be ["zero", "", "", "", "", "", ""].
++    Expect that leanCoreText(tags, left, right, indices, levels, 5) is equal to "(forall b0 : Prop, (forall b1 : b0, b0))".
++    Expect that leanCoreText(tags, left, right, indices, levels, 7) is equal to "(fun b0 : Prop => (fun b1 : b0 => b1))".
++    Let innerClaim be "{{\"Pi\":{{\"param\":\"b1\",\"param_type\":{{\"Var\":\"b0\"}},\"body_type\":{{\"Var\":\"b0\"}}}}}}".
++    Let claim be "{{\"Pi\":{{\"param\":\"b0\",\"param_type\":{{\"Sort\":\"Prop\"}},\"body_type\":{innerClaim}}}}}".
++    Let innerProof be "{{\"Lambda\":{{\"param\":\"b1\",\"param_type\":{{\"Var\":\"b0\"}},\"body\":{{\"Var\":\"b1\"}}}}}}".
++    Let proof be "{{\"Lambda\":{{\"param\":\"b0\",\"param_type\":{{\"Sort\":\"Prop\"}},\"body\":{innerProof}}}}}".
++    Expect that leanCoreTermJson(tags, left, right, indices, levels, 5) is equal to claim.
++    Expect that leanCoreTermJson(tags, left, right, indices, levels, 7) is equal to proof.
++
++## Test: Lean core preserves binder order and distant references
++    Let tags be ["sort", "bvar", "bvar", "bvar", "forallE", "forallE", "forallE", "lam", "lam", "lam"].
++    Let left be [0, 0, 0, 0, 3, 1, 1, 3, 1, 1].
++    Let right be [0, 0, 0, 0, 4, 5, 6, 2, 8, 9].
++    Let indices be ["", "0", "1", "2", "", "", "", "", "", ""].
++    Let levels be ["zero", "", "", "", "", "", "", "", "", ""].
++    Let statement be "(forall b0 : Prop, (forall b1 : Prop, (forall b2 : b0, b0)))".
++    Let proof be "(fun b0 : Prop => (fun b1 : Prop => (fun b2 : b0 => b2)))".
++    Expect that leanCoreText(tags, left, right, indices, levels, 7) is equal to statement.
++    Expect that leanCoreText(tags, left, right, indices, levels, 10) is equal to proof.
++
++## Test: Lean core keeps application operand order
++    Let tags be ["sort", "bvar", "bvar", "forallE", "app", "lam", "lam", "lam"].
++    Let left be [0, 0, 0, 2, 3, 3, 4, 1].
++    Let right be [0, 0, 0, 3, 2, 5, 6, 7].
++    Let indices be ["", "0", "1", "", "", "", "", ""].
++    Let levels be ["zero", "", "", "", "", "", "", ""].
++    Let proof be "(fun b0 : Prop => (fun b1 : (forall b1 : b0, b0) => (fun b2 : b0 => (b1 b2))))".
++    Expect that leanCoreText(tags, left, right, indices, levels, 8) is equal to proof.
++
++## Test: Lean core rejects malformed graph references and open variables
++    Expect that leanCoreText(["bvar"], [0], [0], ["0"], [""], 1) is equal to "".
++    Expect that leanCoreText(["bvar"], [0], [0], ["-1"], [""], 1) is equal to "".
++    Expect that leanCoreText(["sort"], [0], [0], [""], ["zero"], 0) is equal to "".
++    Expect that leanCoreText(["sort"], [0], [0], [""], ["zero"], 2) is equal to "".
++    Expect that leanCoreText(["sort"], [0, 0], [0], [""], ["zero"], 1) is equal to "".
++    Expect that leanCoreText(["sort", "forallE"], [0, 1], [0, 2], ["", ""], ["zero", ""], 2) is equal to "".
++    Expect that leanCoreText(["sort", "forallE"], [0, 3], [0, 1], ["", ""], ["zero", ""], 2) is equal to "".
++    Expect that leanCoreText(["sort"], [1], [0], [""], ["zero"], 1) is equal to "".
++
++## Test: Lean core never replaces unsupported assumptions or terms
++    Let unsupported be ["sorryAx", "axiom", "const", "lit", "mvar", "fvar", "letE", "proj", "mdata", "unknown"].
++    Repeat for tag in unsupported:
++        Expect that leanCoreText([tag], [0], [0], [""], [""], 1) is equal to "".
++    Expect that leanCoreText(["sort"], [0], [0], [""], ["succ"], 1) is equal to "".
++    For all booleans useHole:
++        Let mutable tag be "sorryAx".
++        If useHole:
++            Set tag to "mvar".
++        Expect that leanCoreText([tag], [0], [0], [""], [""], 1) is equal to "".
+diff --git a/logos/lean-bridge/src/lean_export_status.lg b/logos/lean-bridge/src/lean_export_status.lg
+new file mode 100644
+index 0000000000000000000000000000000000000000..587fc90752c9d2f704d473d84a116fed609f592a
+--- /dev/null
++++ b/logos/lean-bridge/src/lean_export_status.lg
+@@ -0,0 +1,33 @@
++# MaCSad Lean export acceptance
++
++The host reports strict primitive facts without selecting a supported logic.
++Only this LOGOS gate owns the first profile's source and assumption admission.
++
++## To leanExportStatus (transport: Bool, source: Bool, complete: Bool, status: Text, kind: Text, axioms: Int, levels: Int) -> Text:
++    If transport is equal to false or source is equal to false:
++        Return "invalid".
++    If status is equal to "resource-limit":
++        Return "resource-limit".
++    If complete is equal to false or (status is equal to "exported") is equal to false or axioms is less than 0 or levels is less than 0:
++        Return "invalid".
++    If (kind is equal to "theorem") is equal to false or axioms is greater than 0 or levels is greater than 0:
++        Return "unsupported".
++    Return "eligible".
++
++## Test: Lean bridge admits a complete checked closed theorem export
++    Expect that leanExportStatus(true, true, true, "exported", "theorem", 0, 0) is equal to "eligible".
++
++## Test: Lean bridge rejects untrusted or incomplete transport facts
++    Expect that leanExportStatus(false, true, true, "exported", "theorem", 0, 0) is equal to "invalid".
++    Expect that leanExportStatus(true, false, true, "exported", "theorem", 0, 0) is equal to "invalid".
++    Expect that leanExportStatus(true, true, false, "exported", "theorem", 0, 0) is equal to "invalid".
++    Expect that leanExportStatus(true, true, true, "elaboration-error", "theorem", 0, 0) is equal to "invalid".
++    Expect that leanExportStatus(true, true, true, "resource-limit", "theorem", 0, 0) is equal to "resource-limit".
++
++## Test: Lean bridge does not silently drop assumptions or universe parameters
++    Expect that leanExportStatus(true, true, true, "exported", "axiom", 0, 0) is equal to "unsupported".
++    Expect that leanExportStatus(true, true, true, "exported", "theorem", 1, 0) is equal to "unsupported".
++    Expect that leanExportStatus(true, true, true, "exported", "theorem", 0, 1) is equal to "unsupported".
++    Expect that leanExportStatus(true, true, true, "exported", "theorem", -1, 0) is equal to "invalid".
++    For all booleans complete:
++        Expect that leanExportStatus(false, true, complete, "exported", "theorem", 0, 0) is equal to "invalid".
+diff --git a/logos/lean-bridge/src/lean_wire.lg b/logos/lean-bridge/src/lean_wire.lg
+new file mode 100644
+index 0000000000000000000000000000000000000000..5d7656788e2d5329f72a0492a738d4a33715b26a
+--- /dev/null
++++ b/logos/lean-bridge/src/lean_wire.lg
+@@ -0,0 +1,70 @@
++# MaCSad Lean bridge scalar wire and local correspondence
++
++## To leanWireDecimal (value: Text) -> Int:
++    If length of text_bytes(value) is greater than 7 or allDigits(value) is equal to false:
++        Return -1.
++    Let number be parseInt(value).
++    If numText(number) is equal to value:
++        Return number.
++    Return -1.
++
++## To leanWireRefs (value: Text) -> Seq of Int:
++    Let absent be a new Seq of Int.
++    If length of text_bytes(value) is greater than 1024:
++        Return absent.
++    Let fields be split(value, ",").
++    If length of fields is greater than 128:
++        Return absent.
++    Let result be a new Seq of Int.
++    Repeat for field in fields:
++        Let number be leanWireDecimal(field).
++        If number is less than 0:
++            Return absent.
++        Push number to result.
++    Return result.
++
++## To leanCoreCorrespondence (tags: Seq of Text) -> Text:
++    Let mutable result be "".
++    Let mutable position be 1.
++    Repeat for tag in tags:
++        Let mutable target be "".
++        If tag is equal to "sort":
++            Set target to "Sort".
++        If tag is equal to "bvar":
++            Set target to "Var".
++        If tag is equal to "forallE":
++            Set target to "Pi".
++        If tag is equal to "lam":
++            Set target to "Lambda".
++        If tag is equal to "app":
++            Set target to "App".
++        If target is equal to "":
++            Return "".
++        Set result to "{result}{position}|{tag}|{target}\n".
++        Set position to position + 1.
++    Return result.
++
++## Test: Lean wire retains only exact bounded decimal scalars
++    Expect that leanWireDecimal("0") is equal to 0.
++    Expect that leanWireDecimal("1000000") is equal to 1000000.
++    Let malformed be ["", "-1", "+1", "01", "1.0", "1e0", " 1", "10000000"].
++    Repeat for value in malformed:
++        Expect that leanWireDecimal(value) is equal to -1.
++
++## Test: Lean wire preserves reference order and rejects empty fields
++    Let values be leanWireRefs("0,1,2").
++    Expect that length of values is equal to 3.
++    Expect that item 1 of values is equal to 0.
++    Expect that item 3 of values is equal to 2.
++    Expect that length of leanWireRefs("0,,2") is equal to 0.
++    Expect that length of leanWireRefs("01,2") is equal to 0.
++    For all booleans valid:
++        Let mutable wire be "01".
++        If valid:
++            Set wire to "-1".
++        Expect that length of leanWireRefs(wire) is equal to 0.
++
++## Test: Lean wire constructor correspondence is explicit and ordered
++    Let expected be "1|sort|Sort\n2|bvar|Var\n3|forallE|Pi\n4|lam|Lambda\n5|app|App\n".
++    Expect that leanCoreCorrespondence(["sort", "bvar", "forallE", "lam", "app"]) is equal to expected.
++    Expect that leanCoreCorrespondence(["const"]) is equal to "".
+diff --git a/logos/lean-bridge/src/main.lg b/logos/lean-bridge/src/main.lg
+new file mode 100644
+index 0000000000000000000000000000000000000000..baa34bb814c6603848c76a3c5da24d0967868939
+--- /dev/null
++++ b/logos/lean-bridge/src/main.lg
+@@ -0,0 +1,17 @@
++# MaCSad isolated Lean bridge executable entry
++
++Import LeanCoreTerms from "./lean_core_terms.lg".
++Import LeanCoreBudget from "./lean_core_budget.lg".
++Import LeanCoreCertificate from "./lean_core_certificate.lg".
++Import LeanExportStatus from "./lean_export_status.lg".
++Import LeanCheckStatus from "./lean_check_status.lg".
++Import LeanWire from "./lean_wire.lg".
++Import LeanBridgeInput from "./lean_bridge_input.lg".
++Import LeanCheckDriver from "./lean_check_driver.lg".
++Import LeanBridgeDriver from "./lean_bridge_driver.lg".
++
++## To native args () -> Seq of Text
++
++## Main
++Let arguments be args().
++Show leanBridgeMain(arguments).
+diff --git a/tools/lean-bridge/CoreExport.lean b/tools/lean-bridge/CoreExport.lean
+new file mode 100644
+index 0000000000000000000000000000000000000000..1e50f268b5fd30790f54a65e686ace2f6019d4fd
+--- /dev/null
++++ b/tools/lean-bridge/CoreExport.lean
+@@ -0,0 +1,313 @@
++import Lean
++import Lean.Elab.Frontend
++import Lean.Util.CollectAxioms
++
++/-
++Trusted-fixture transport only. The generic walker exports the actual kernel
++environment; it neither translates Lean nor decides mathematical acceptance.
++No uploaded source, path, project, plugin, or dependency argument is accepted.
++-/
++namespace MaCSad.LeanExport
++open Lean
++
++def maxNodes : Nat := 4096
++def maxDeclarations : Nat := 32
++def maxDepth : Nat := 512
++def maxSourceBytes : Nat := 32768
++def maxOutputBytes : Nat := 262144
++
++def str (s : String) : Json := .str s
++def num (n : Nat) : Json := toJson n
++def decimal (n : Nat) : Json := str (toString n)
++def obj (fields : List (String × Json)) : Json := Json.mkObj fields
++
++def nameJson : Name → Json
++  | .anonymous => obj [("tag", str "anonymous")]
++  | .str parentName value => obj [("tag", str "str"), ("prefix", nameJson parentName), ("value", str value)]
++  | .num parentName value => obj [("tag", str "num"), ("prefix", nameJson parentName), ("value", decimal value)]
++
++def namesJson (names : List Name) : Json := .arr (names.toArray.map nameJson)
++
++def levelJson : Nat → Nat → Level → Except String (Json × Nat)
++  | 0, _, _ => .error "resource-limit: universe depth"
++  | _, 0, _ => .error "resource-limit: expanded universe nodes"
++  | fuel + 1, budget + 1, level => do
++    match level with
++    | .zero => return (obj [("tag", str "zero")], budget)
++    | .succ child =>
++      let (child, rest) ← levelJson fuel budget child
++      return (obj [("tag", str "succ"), ("child", child)], rest)
++    | .max left right =>
++      let (left, rest) ← levelJson fuel budget left
++      let (right, rest) ← levelJson fuel rest right
++      return (obj [("tag", str "max"), ("left", left), ("right", right)], rest)
++    | .imax left right =>
++      let (left, rest) ← levelJson fuel budget left
++      let (right, rest) ← levelJson fuel rest right
++      return (obj [("tag", str "imax"), ("left", left), ("right", right)], rest)
++    | .param name => return (obj [("tag", str "param"), ("name", nameJson name)], budget)
++    | .mvar id => return (obj [("tag", str "mvar"), ("name", nameJson id.name)], budget)
++
++def binderJson : BinderInfo → Json
++  | .default => str "default"
++  | .implicit => str "implicit"
++  | .strictImplicit => str "strictImplicit"
++  | .instImplicit => str "instImplicit"
++
++def metadataValueJson : DataValue → Json
++  | .ofString value => obj [("tag", str "string"), ("value", str value)]
++  | .ofBool value => obj [("tag", str "bool"), ("value", toJson value)]
++  | .ofName value => obj [("tag", str "name"), ("value", nameJson value)]
++  | .ofNat value => obj [("tag", str "nat"), ("value", decimal value)]
++  | .ofInt value => obj [("tag", str "int"), ("value", str (toString value))]
++  | .ofSyntax value => obj [("tag", str "syntaxRepr"), ("value", str (reprStr value))]
++
++structure ExportState where
++  nodes : Array Json := #[]
++  references : Array Name := #[]
++  levelBudget : Nat := 4096
++  deriving Inhabited
++
++abbrev ExportM := StateT ExportState (Except String)
++
++def reference (name : Name) : ExportM Unit := do
++  unless (← get).references.contains name do
++    modify fun state => { state with references := state.references.push name }
++
++def pushNode (fields : List (String × Json)) : ExportM Nat := do
++  let state ← get
++  if state.nodes.size ≥ maxNodes then throw "resource-limit: core node count"
++  let id := state.nodes.size + 1
++  set { state with nodes := state.nodes.push (obj (("id", num id) :: fields)) }
++  return id
++
++def liftResult (result : Except String α) : ExportM α :=
++  match result with
++  | .ok value => pure value
++  | .error reason => throw reason
++
++def exportLevel (level : Level) : ExportM Json := do
++  let (result, remaining) ← liftResult (levelJson maxDepth (← get).levelBudget level)
++  modify fun state => { state with levelBudget := remaining }
++  return result
++
++def exprJson : Nat → Expr → ExportM Nat
++  | 0, _ => throw "resource-limit: expression depth"
++  | fuel + 1, expression => do
++    let fields ← match expression with
++      | .bvar index => pure [("tag", str "bvar"), ("index", decimal index)]
++      | .fvar id => pure [("tag", str "fvar"), ("name", nameJson id.name)]
++      | .mvar id => pure [("tag", str "mvar"), ("name", nameJson id.name)]
++      | .sort level => pure [("tag", str "sort"), ("level", ← exportLevel level)]
++      | .const name levels => do
++        reference name
++        let levels ← levels.mapM exportLevel
++        pure [("tag", str "const"), ("name", nameJson name), ("levels", .arr levels.toArray)]
++      | .app function argument => do
++        let functionId ← exprJson fuel function
++        let argumentId ← exprJson fuel argument
++        pure [("tag", str "app"), ("function", num functionId), ("argument", num argumentId)]
++      | .lam name domain body info => do
++        let domainId ← exprJson fuel domain
++        let bodyId ← exprJson fuel body
++        pure [("tag", str "lam"), ("binderName", nameJson name), ("binderInfo", binderJson info),
++          ("domain", num domainId), ("body", num bodyId)]
++      | .forallE name domain body info => do
++        let domainId ← exprJson fuel domain
++        let bodyId ← exprJson fuel body
++        pure [("tag", str "forallE"), ("binderName", nameJson name), ("binderInfo", binderJson info),
++          ("domain", num domainId), ("body", num bodyId)]
++      | .letE name type value body nondep => do
++        let typeId ← exprJson fuel type
++        let valueId ← exprJson fuel value
++        let bodyId ← exprJson fuel body
++        pure [("tag", str "letE"), ("binderName", nameJson name), ("type", num typeId),
++          ("value", num valueId), ("body", num bodyId), ("nondep", toJson nondep)]
++      | .lit (.natVal value) => pure [("tag", str "lit"), ("kind", str "nat"), ("value", decimal value)]
++      | .lit (.strVal value) => pure [("tag", str "lit"), ("kind", str "string"), ("value", str value)]
++      | .mdata data child => do
++        let childId ← exprJson fuel child
++        let entries := data.entries.toArray.map fun (key, value) =>
++          obj [("key", nameJson key), ("value", metadataValueJson value)]
++        pure [("tag", str "mdata"), ("child", num childId), ("entries", .arr entries)]
++      | .proj typeName index structureExpr => do
++        reference typeName
++        let structureId ← exprJson fuel structureExpr
++        pure [("tag", str "proj"), ("typeName", nameJson typeName),
++          ("index", decimal index), ("structure", num structureId)]
++    pushNode fields
++
++def hintsJson : ReducibilityHints → Json
++  | .opaque => obj [("tag", str "opaque")]
++  | .abbrev => obj [("tag", str "abbrev")]
++  | .regular height => obj [("tag", str "regular"), ("height", decimal height.toNat)]
++
++def safetyJson : DefinitionSafety → Json
++  | .safe => str "safe"
++  | .unsafe => str "unsafe"
++  | .partial => str "partial"
++
++def declarationJson (info : ConstantInfo) : ExportM Json := do
++  let typeRoot ← exprJson maxDepth info.type
++  let valueRoot ← match info.value? (allowOpaque := true) with
++    | some value => do
++      let valueId ← exprJson maxDepth value
++      pure (num valueId)
++    | none => pure Json.null
++  let (kind, details) ← match info with
++    | .axiomInfo value => pure ("axiom", obj [("isUnsafe", toJson value.isUnsafe)])
++    | .defnInfo value => do
++      value.all.forM reference
++      pure ("definition", obj [("hints", hintsJson value.hints), ("safety", safetyJson value.safety),
++        ("all", namesJson value.all)])
++    | .thmInfo value => do
++      value.all.forM reference
++      pure ("theorem", obj [("all", namesJson value.all)])
++    | .opaqueInfo value => do
++      value.all.forM reference
++      pure ("opaque", obj [("isUnsafe", toJson value.isUnsafe), ("all", namesJson value.all)])
++    | .quotInfo value =>
++      let kind := match value.kind with
++        | .type => "type" | .ctor => "ctor" | .lift => "lift" | .ind => "ind"
++      pure ("quotient", obj [("kind", str kind)])
++    | .inductInfo value => do
++      value.all.forM reference
++      value.ctors.forM reference
++      pure ("inductive", obj [("numParams", decimal value.numParams), ("numIndices", decimal value.numIndices),
++        ("all", namesJson value.all), ("ctors", namesJson value.ctors), ("numNested", decimal value.numNested),
++        ("isRec", toJson value.isRec), ("isUnsafe", toJson value.isUnsafe), ("isReflexive", toJson value.isReflexive)])
++    | .ctorInfo value => do
++      reference value.induct
++      pure ("constructor", obj [("induct", nameJson value.induct), ("index", decimal value.cidx),
++        ("numParams", decimal value.numParams), ("numFields", decimal value.numFields), ("isUnsafe", toJson value.isUnsafe)])
++    | .recInfo value => do
++      value.all.forM reference
++      let rules ← value.rules.mapM fun rule => do
++        reference rule.ctor
++        let rhsRoot ← exprJson maxDepth rule.rhs
++        pure (obj [("ctor", nameJson rule.ctor), ("numFields", decimal rule.nfields), ("rhsRoot", num rhsRoot)])
++      pure ("recursor", obj [("all", namesJson value.all), ("numParams", decimal value.numParams),
++        ("numIndices", decimal value.numIndices), ("numMotives", decimal value.numMotives),
++        ("numMinors", decimal value.numMinors), ("rules", .arr rules.toArray),
++        ("k", toJson value.k), ("isUnsafe", toJson value.isUnsafe)])
++  return obj [("name", nameJson info.name), ("displayName", str info.name.toString), ("kind", str kind),
++    ("levelParams", namesJson info.levelParams), ("typeRoot", num typeRoot), ("valueRoot", valueRoot),
++    ("details", details)]
++
++def closureJson (environment : Environment) (target : Name) : ExportM (Array Json) := do
++  let mut pending := #[target]
++  let mut declarations := #[]
++  let mut cursor := 0
++  while cursor < pending.size do
++    if cursor ≥ maxDeclarations then throw "resource-limit: declaration closure"
++    let name := pending[cursor]!
++    let some info := environment.checked.get.find? name
++      | throw s!"export-error: checked declaration missing: {name}"
++    declarations := declarations.push (← declarationJson info)
++    for dependency in (← get).references do
++      unless pending.contains dependency do pending := pending.push dependency
++    cursor := cursor + 1
++  return declarations
++
++structure Fixture where
++  id : String
++  fileName : String
++  target : Name
++  source : String
++
++def longCompositionSource : String := Id.run do
++  let mut source := "namespace MaCSadFixture\n\ntheorem long_composition (P : Prop) (step : P → P) (initial : P) : P := by\n"
++  for _ in [0:256] do source := source ++ "  apply step\n"
++  return source ++ "  exact initial\n\nend MaCSadFixture\n"
++
++def fixture? : String → Option Fixture
++  | "identity" => some ⟨"identity", "identity.lean", `MaCSadFixture.identity, include_str "fixtures/identity.lean"⟩
++  | "composition" => some ⟨"composition", "composition.lean", `MaCSadFixture.composition, include_str "fixtures/composition.lean"⟩
++  | "invalid_proof" => some ⟨"invalid_proof", "invalid_proof.lean", `MaCSadFixture.invalid_proof, include_str "fixtures/invalid_proof.lean"⟩
++  | "sorry" => some ⟨"sorry", "sorry.lean", `MaCSadFixture.contains_sorry, include_str "fixtures/sorry.lean"⟩
++  | "axiom_dependency" => some ⟨"axiom_dependency", "axiom_dependency.lean", `MaCSadFixture.assumes, include_str "fixtures/axiom_dependency.lean"⟩
++  | "repeated_binders" => some ⟨"repeated_binders", "repeated_binders.lean", `MaCSadFixture.repeated_binders, include_str "fixtures/repeated_binders.lean"⟩
++  | "long_composition" => some ⟨"long_composition", "long_composition.lean", `MaCSadFixture.long_composition, longCompositionSource⟩
++  | _ => none
++
++def hexBytes (bytes : ByteArray) : String := Id.run do
++  let digits := "0123456789abcdef".toList.toArray
++  let mut result := ""
++  for byte in bytes do
++    result := result.push digits[byte.toNat / 16]!
++    result := result.push digits[byte.toNat % 16]!
++  return result
++
++def severityJson : MessageSeverity → Json
++  | .information => str "information"
++  | .warning => str "warning"
++  | .error => str "error"
++
++def messagesJson (messages : MessageLog) : IO (Array Json) := do
++  let mut result := #[]
++  for message in messages.toList do
++    if result.size ≥ 32 then throw (IO.userError "resource-limit: diagnostic count")
++    let text ← message.data.toString
++    if text.toUTF8.size > 4096 then throw (IO.userError "resource-limit: diagnostic bytes")
++    result := result.push (obj [("severity", severityJson message.severity), ("message", str text)])
++  return result
++
++def envelope (fixture : Fixture) (status : String) (diagnostics : Array Json)
++    (imports : Array Name := #[]) (declarations : Array Json := #[]) (nodes : Array Json := #[])
++    (axioms : Array Name := #[]) (complete := false) : Json :=
++  obj [("schema", str "macsad-lean-core/1"), ("exporterVersion", str "1"),
++    ("compiler", obj [("version", str Lean.versionString), ("gitCommit", str Lean.githash)]),
++    ("source", obj [("fixtureId", str fixture.id), ("fileName", str fixture.fileName),
++      ("byteLength", num fixture.source.toUTF8.size),
++      ("utf8Hex", if fixture.source.toUTF8.size ≤ maxSourceBytes then str (hexBytes fixture.source.toUTF8) else Json.null)]),
++    ("status", str status), ("diagnostics", .arr diagnostics), ("targetName", nameJson fixture.target),
++    ("imports", .arr (imports.map nameJson)), ("declarations", .arr declarations), ("nodes", .arr nodes),
++    ("axiomDependencies", .arr (axioms.map nameJson)), ("closureComplete", toJson complete)]
++
++def errorEnvelope (fixture : Fixture) (status reason : String) : Json :=
++  envelope fixture status #[obj [("severity", str "error"), ("message", str reason)]]
++
++unsafe def exportSource (source fileName : String) (target : Name)
++    (fixtureId := "trusted-source") : IO (UInt32 × Json) := do
++  let fixture : Fixture := ⟨fixtureId, fileName, target, source⟩
++  if Lean.versionString != "4.31.0" || Lean.githash != "68218e876d2a38b1985b8590fff244a83c321783" then
++    return (1, errorEnvelope fixture "export-error" "compiler identity mismatch")
++  if fixture.source.toUTF8.size > maxSourceBytes then
++    return (1, errorEnvelope fixture "resource-limit" "source bytes")
++  -- This loads only the installed compiler's own builtin library. It is not a
++  -- filesystem sandbox; it merely prevents an inherited LEAN_PATH substituting
++  -- imports used when elaborating embedded, reviewed fixture sources.
++  Lean.searchPathRef.set (← Lean.getBuiltinSearchPath (← Lean.getBuildDir))
++  Lean.enableInitializersExecution
++  let options := ({} : Options).setBool `Elab.async false
++    |>.set `maxHeartbeats (200000 : Nat) |>.set `maxRecDepth (2048 : Nat)
++  let initial ← Lean.importModules #[{ module := `Init }] options 0 (loadExts := true)
++  let (environment, messages) ← Lean.Elab.process fixture.source initial options fixture.fileName
++  let diagnostics ← messagesJson messages
++  let imports := environment.imports.map (·.module)
++  if messages.hasErrors then
++    return (1, envelope fixture "elaboration-error" diagnostics imports)
++  let context : Core.Context := { fileName := fixture.fileName, fileMap := FileMap.ofString fixture.source, options }
++  let (axioms, _) ← (Lean.collectAxioms fixture.target : CoreM (Array Name)).toIO context { env := environment }
++  match (closureJson environment fixture.target).run {} with
++  | .error reason =>
++    let status := if reason.startsWith "resource-limit:" then "resource-limit" else "export-error"
++    let failures := diagnostics.push (obj [("severity", str "error"), ("message", str reason)])
++    return (1, envelope fixture status failures imports #[] #[] axioms false)
++  | .ok (declarations, state) =>
++    let result := envelope fixture "exported" diagnostics imports declarations state.nodes axioms true
++    if result.compress.toUTF8.size + 1 > maxOutputBytes then
++      let failures := diagnostics.push (obj [("severity", str "error"), ("message", str "serialized output bytes")])
++      return (1, envelope fixture "resource-limit" failures imports #[] #[] axioms false)
++    return (0, result)
++
++unsafe def runFixture (id : String) : IO (UInt32 × Json) := do
++  let some fixture := fixture? id
++    | return (64, obj [("schema", str "macsad-lean-command-error/1"), ("error", str "unknown trusted fixture")])
++  try exportSource fixture.source fixture.fileName fixture.target fixture.id catch error =>
++    let reason := toString error
++    let status := if reason.startsWith "resource-limit:" then "resource-limit" else "export-error"
++    let boundedReason := if reason.toUTF8.size ≤ 4096 then reason else "export failure detail exceeds byte budget"
++    return ((1 : UInt32), errorEnvelope fixture status boundedReason)
++
++end MaCSad.LeanExport
+diff --git a/tools/lean-bridge/Export.lean b/tools/lean-bridge/Export.lean
+new file mode 100644
+index 0000000000000000000000000000000000000000..6b4422dea8be80176021c8a281d2579452f48b2b
+--- /dev/null
++++ b/tools/lean-bridge/Export.lean
+@@ -0,0 +1,10 @@
++import CoreExport
++
++unsafe def main (arguments : List String) : IO UInt32 := do
++  let [fixtureId] := arguments
++    | do
++      IO.println "{\"schema\":\"macsad-lean-command-error/1\",\"error\":\"one trusted fixture ID required\"}"
++      return 64
++  let (code, result) ← MaCSad.LeanExport.runFixture fixtureId
++  IO.println result.compress
++  return code
+diff --git a/tools/lean-bridge/SCHEMA.md b/tools/lean-bridge/SCHEMA.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..2bd63967822797b4ffb509468d102bd5b25a631c
+--- /dev/null
++++ b/tools/lean-bridge/SCHEMA.md
+@@ -0,0 +1,189 @@
++# Trusted Lean core export, version 1
++
++This is a local evaluation artifact, not an admitted production importer. The
++command accepts only the seven authored fixture IDs. `exportSource` is a generic
++library API for **trusted** source strings; it must not be connected to uploads,
++contestant projects, an AI response, or arbitrary dependency files without a real
++untrusted-code sandbox. Elaboration can execute code. Neither `--trust=0`, resource
++limits, a changed working directory, nor this fixture allowlist is an OS sandbox.
++
++`CoreExport.lean` walks actual checked `ConstantInfo` values and `Expr` constructors.
++It does not parse mathematical meaning using source regexes, rename a theorem to
++an axiom, generate substitute proofs, or decide LOGOS acceptance. `sorry` and added
++axiom dependencies are preserved and must not become checked claims. The actual
++`sorry` fixture exceeds the 32-declaration closure budget: its resource-failure
++envelope retains `sorryAx`, marks the closure incomplete, and emits no partial graph.
++
++## Exact envelope
++
++Each command writes one compact JSON object and one terminal newline. Exported
++facts return process code 0; Lean elaboration errors and export/resource failures
++return 1. A wrong argument count or unknown fixture ID returns 64 with the separate
++`macsad-lean-command-error/1` object, never an apparent core export.
++
++The core object's exact keys are:
++
++| Key | Type and meaning |
++|---|---|
++| `schema` | Exact string `macsad-lean-core/1` |
++| `exporterVersion` | Exact string `1`; outer evidence also hashes the exporter source/module |
++| `compiler` | Object with `version` and `gitCommit`, both strings read from the running Lean runtime |
++| `source` | Object with `fixtureId`, `fileName`, `byteLength`, `utf8Hex` |
++| `status` | `exported`, `elaboration-error`, `resource-limit`, or `export-error` |
++| `diagnostics` | Array of objects with exactly `severity` and `message`; severity is `information`, `warning`, or `error` |
++| `targetName` | Structured Name described below |
++| `imports` | Array of structured direct-import Names from the actual environment |
++| `declarations` | Referenced declaration closure; the requested target is element zero |
++| `nodes` | Ordered core-node records described below |
++| `axiomDependencies` | Array of exact Names from Lean's own transitive `collectAxioms` |
++| `closureComplete` | Boolean; true only when the bounded closure walk finished |
++
++`source.fixtureId` and `source.fileName` are strings. `byteLength` is a nonnegative
++JSON integer. `utf8Hex` is lowercase hex of the exact UTF-8 source actually supplied
++to Lean, **not** a digest claimed by an input header. It is null only when source
++size exceeds the explicit budget; that failure is not admissible evidence. The
++outer mechanical harness must compare these bytes to its requested source and
++compute SHA-256 itself. Original source, exporter, compiler, imported `.olean`
++artifacts and JSON require separate retained hashes. This evaluation retains the
++fixture/exporter/compiler/JSON hashes, but not a complete imported-library closure
++manifest yet. Module names alone are not
++cryptographic import provenance.
++
++No status or process code means a theorem is accepted by LOGOS. Invalid
++elaboration returns no recovered declaration/body as usable evidence, even if
++Lean internally introduced a placeholder to continue reporting errors.
++
++## Structured Name and universe Level
++
++Name is one of:
++
++- `{"tag":"anonymous"}`
++- `{"tag":"str","prefix":<Name>,"value":<string>}`
++- `{"tag":"num","prefix":<Name>,"value":<canonical decimal Nat string>}`
++
++Universe Level is one of:
++
++- `{"tag":"zero"}`
++- `{"tag":"succ","child":<Level>}`
++- `{"tag":"max","left":<Level>,"right":<Level>}`
++- `{"tag":"imax","left":<Level>,"right":<Level>}`
++- `{"tag":"param","name":<Name>}`
++- `{"tag":"mvar","name":<Name>}`
++
++Natural-number values originating in Lean use canonical decimal strings, not
++floating JSON numbers or a machine-width cast. Node references and the bounded
++source byte count are JSON integers. No structural Name is reconstructed from
++`displayName`; display names are non-authoritative labels.
++
++## Core nodes
++
++Every node has `id`, a positive JSON integer equal to its one-based array position,
++and a raw Lean `tag`. Every child ID precedes its parent. The exporter currently
++emits a postorder tree without deduplication; this is a valid DAG ordering, not a
++claim to preserve Lean's internal pointer sharing. Type and value roots use the
++same node array. Constructor-specific keys are exact:
++
++| `tag` | Additional keys |
++|---|---|
++| `bvar` | `index`: canonical decimal Nat string, zero-based de Bruijn index |
++| `fvar`, `mvar` | `name`: structured identifier Name |
++| `sort` | `level`: complete Level |
++| `const` | `name`: Name; `levels`: array of Levels |
++| `app` | `function`, `argument`: child IDs |
++| `lam`, `forallE` | `binderName`: Name; `binderInfo`: `default`, `implicit`, `strictImplicit`, or `instImplicit`; `domain`, `body`: child IDs |
++| `letE` | `binderName`: Name; `type`, `value`, `body`: child IDs; `nondep`: Boolean |
++| `lit` | `kind`: `nat` or `string`; `value`: decimal Nat string or the literal string |
++| `mdata` | `child`: child ID; `entries`: ordered array of `{key:<Name>,value:<DataValue>}` |
++| `proj` | `typeName`: Name; `index`: decimal Nat string; `structure`: child ID |
++
++DataValue has `tag` and `value`: tags `string`, `bool`, `name`, `nat`, `int` retain
++their corresponding primitive or structured value. The `syntaxRepr` tag retains
++Lean4.31's opaque `reprStr Syntax` as a string. This is **not** a stable typed Syntax
++interchange, and no consumer may infer that such metadata was validated or can be
++dropped. The initial LOGOS slice rejects `mdata` and other unsupported constructors
++explicitly; a future Syntax/metadata mapping needs its own contract and tests.
++
++LOGOS chooses the semantic mapping: `sort` with Level `zero` becomes target Prop;
++`bvar` becomes a scoped variable; binder nodes manage lexical scope. A host may
++extract raw tags/primitive child slots but cannot perform those semantic mappings
++or narrow arbitrary Nat strings to machine integers without LOGOS validation.
++
++## Declaration closure
++
++Each declaration has exactly `name`, `displayName`, `kind`, `levelParams`,
++`typeRoot`, `valueRoot`, and `details`. `typeRoot` is a positive node ID; `valueRoot`
++is a positive node ID or null. The requested target's kind must be checked by
++LOGOS. The exporter also retains non-theorem declarations needed by the closure.
++
++| `kind` | Exact `details` keys |
++|---|---|
++| `axiom` | `isUnsafe` Boolean |
++| `definition` | `hints`, `safety`, `all` |
++| `theorem` | `all` |
++| `opaque` | `isUnsafe`, `all` |
++| `quotient` | `kind`: `type`, `ctor`, `lift`, or `ind` |
++| `inductive` | `numParams`, `numIndices`, `all`, `ctors`, `numNested`, `isRec`, `isUnsafe`, `isReflexive` |
++| `constructor` | `induct`, `index`, `numParams`, `numFields`, `isUnsafe` |
++| `recursor` | `all`, `numParams`, `numIndices`, `numMotives`, `numMinors`, `rules`, `k`, `isUnsafe` |
++
++`all` and `ctors` contain Names. `induct` is a Name. Counts/indices use decimal Nat
++strings. Recursor rules have `ctor` Name, `numFields` decimal string and `rhsRoot`
++node ID. Safety is `safe`, `unsafe`, or `partial`. Hints have `tag` of `opaque` or
++`abbrev`, or `tag=regular` with a decimal-string `height`. Booleans are actual JSON
++Booleans. Closure traversal follows constants/projection type names in all emitted
++expressions plus retained mutual-block/constructor/recursor references. Missing
++checked declarations fail, rather than disappearing from the export.
++
++These facts preserve evidence; they do not implement whole-project translation,
++inductive reconstruction, or a validated target-kernel environment importer.
++
++## Explicit trusted-evaluation budgets
++
++Current source constants bound source to 32768 UTF-8 bytes, expression depth to
++512, expanded core nodes to 4096, total expanded universe nodes to 4096 and
++declaration closure to 32 entries. Diagnostics are at most 32 messages of 4096
++bytes each. Final JSON plus newline is at most 262144 bytes. Resource exhaustion
++is failure, not an unsupported-mathematics verdict. The larger output allowance
++is needed for the long fixture; **the existing 32768-byte `proof_process` port is
++not changed or silently reused beyond its limit.** The outer runner must supply
++its separately explicit wall-time, memory, file and captured-output bounds.
++
++`long_composition` is generated by Lean itself from a fixed header, exactly 256
++`apply step` tactic lines, and `exact initial`. Its exact generated source bytes
++are included in the export. This tests an actual long elaborated application
++chain, not comments/padding or manually manufactured core nodes. It is a regression
++example, not a maximum product theorem size or evidence of complete Lean coverage.
++
++## Commands after the exclusive test slot is granted
++
++Use the exact installed Lean4.31 compiler identified in the task evidence, not
++an elan default, a PATH alias or a downloaded latest compiler. Compile the trusted
++library to an owned temporary module directory:
++
++```text
++lean -o <owned-module-directory>/CoreExport.olean <absolute-source-directory>/CoreExport.lean
++LEAN_PATH=<owned-module-directory> lean --run <absolute-source-directory>/Export.lean identity
++LEAN_PATH=<owned-module-directory> lean --run <absolute-source-directory>/Tests.lean identity
++```
++
++The `LEAN_PATH=...` spelling is schematic environment assignment, not a PowerShell
++command. Do not modify user/system environment variables. `Export.lean` accepts
++`identity`, `composition`, `repeated_binders`, `long_composition`, `invalid_proof`,
++`sorry`, or `axiom_dependency`. Actual process-level exit-code, byte-identity,
++determinism, malformed-JSON and LOGOS acceptance checks belong to the outer real
++adapter tier. The direct Lean tests are not a substitute for that tier.
++
++Run `Tests.lean` once per fixture ID above, plus `unknown_source`: eight owned,
++serial process invocations. Each of the four valid theorem checks performs two
++exports for determinism. One monolithic interpreter run accumulated imported
++environments beyond the explicit 4 GiB working-set ceiling; separating processes
++preserves the same tests and budgets. Current supervision is 120 seconds, 4 GiB
++sampled working set and 1 MiB captured stdout/stderr per owned process. This is
++cooperative bounded evaluation, not a kernel-enforced memory sandbox.
++
++Known remaining classification risk: a Lean elaborator heartbeat/depth quota
++reported through `MessageLog.hasErrors` currently follows `elaboration-error`.
++This has not been exercised or proven to preserve a distinct resource-limit
++status; it must be resolved before treating that status as mathematical invalidity
++for arbitrary source. Lean 4.31 is an exact installed evaluation pin, not a claim
++that it has received later compiler/kernel security fixes or production admission.
+diff --git a/tools/lean-bridge/Tests.lean b/tools/lean-bridge/Tests.lean
+new file mode 100644
+index 0000000000000000000000000000000000000000..38d3ee1f5d1be0e418127d641cd43ad02a7ee48e
+--- /dev/null
++++ b/tools/lean-bridge/Tests.lean
+@@ -0,0 +1,86 @@
++import CoreExport
++
++open Lean MaCSad.LeanExport
++
++private def check (condition : Bool) (message : String) : IO Unit :=
++  unless condition do throw (IO.userError message)
++
++private def field (json : Json) (key : String) : IO Json :=
++  match json.getObjVal? key with
++  | .ok value => pure value
++  | .error reason => throw (IO.userError reason)
++
++private def arrayField (json : Json) (key : String) : IO (Array Json) := do
++  match (← field json key).getArr? with
++  | .ok value => pure value
++  | .error reason => throw (IO.userError reason)
++
++private def natField (json : Json) (key : String) : IO Nat := do
++  match (← field json key).getNat? with
++  | .ok value => pure value
++  | .error reason => throw (IO.userError reason)
++
++private def checkTargetDeclaration (id : String) (result : Json) : IO Unit := do
++  let some fixture := fixture? id | throw (IO.userError s!"unknown fixture: {id}")
++  let declarations ← arrayField result "declarations"
++  check (declarations.size == 1) s!"{id}: unexpected declaration closure"
++  let declaration := declarations[0]!
++  check ((← field declaration "name") == nameJson fixture.target) s!"{id}: exact declaration name missing"
++  check ((← field result "targetName") == nameJson fixture.target) s!"{id}: target mismatch"
++  check ((← field declaration "displayName") == str fixture.target.toString) s!"{id}: display name mismatch"
++  check ((← field declaration "kind") == str "theorem") s!"{id}: declaration is not a theorem object"
++  check ((← arrayField declaration "levelParams").isEmpty) s!"{id}: unexpected universe parameters"
++  let details ← field declaration "details"
++  check ((← arrayField details "all").all (· == nameJson fixture.target)) s!"{id}: unexpected mutual declaration"
++  let nodes ← arrayField result "nodes"
++  let typeRoot ← natField declaration "typeRoot"
++  let valueRoot ← natField declaration "valueRoot"
++  check (typeRoot > 0 && typeRoot ≤ nodes.size) s!"{id}: missing or invalid type root"
++  check (valueRoot > 0 && valueRoot ≤ nodes.size && valueRoot != typeRoot) s!"{id}: missing or invalid proof root"
++  let typeNode := nodes[typeRoot - 1]!
++  let valueNode := nodes[valueRoot - 1]!
++  check ((← natField typeNode "id") == typeRoot) s!"{id}: type root points at wrong node"
++  check ((← natField valueNode "id") == valueRoot) s!"{id}: value root points at wrong node"
++  check ((← field typeNode "tag") == str "forallE") s!"{id}: actual theorem type was not retained"
++  check ((← field valueNode "tag") == str "lam") s!"{id}: actual proof lambda was not retained"
++
++unsafe def main (arguments : List String) : IO UInt32 := do
++  let [id] := arguments | throw (IO.userError "run exactly one trusted regression per owned process")
++  if ["identity", "composition", "repeated_binders", "long_composition"].contains id then
++    let (code, result) ← runFixture id
++    check (code == 0) s!"{id}: exporter failed"
++    check ((← field result "status") == str "exported") s!"{id}: wrong status"
++    check ((← field result "closureComplete") == toJson true) s!"{id}: incomplete closure"
++    check ((← arrayField result "axiomDependencies").isEmpty) s!"{id}: unexpected axiom"
++    checkTargetDeclaration id result
++    check (!(← arrayField result "nodes").isEmpty) s!"{id}: empty core graph"
++    let (repeatCode, repeatResult) ← runFixture id
++    check (repeatCode == code && repeatResult.compress == result.compress) s!"{id}: nondeterministic export"
++  else if id == "invalid_proof" then
++    let (invalidCode, invalid) ← runFixture "invalid_proof"
++    check (invalidCode != 0) "invalid proof did not return a failure exit code"
++    check ((← field invalid "status") == str "elaboration-error") "invalid proof was not rejected by Lean"
++    check ((← arrayField invalid "nodes").isEmpty) "invalid elaboration exported a recovered proof as evidence"
++  -- The actual sorry closure exceeds the declared 32-declaration budget. This
++  -- is a retained resource failure, not invalid mathematics or acceptance.
++  else if id == "sorry" then
++    let (sorryCode, sorryResult) ← runFixture "sorry"
++    check (sorryCode == 1) "sorry: expected explicit quota failure"
++    check ((← field sorryResult "status") == str "resource-limit") "sorry: quota was misclassified"
++    check ((← field sorryResult "closureComplete") == toJson false) "sorry: incomplete closure claimed complete"
++    check ((← arrayField sorryResult "axiomDependencies").contains (nameJson `sorryAx)) "sorryAx fact was omitted"
++    check ((← arrayField sorryResult "nodes").isEmpty && (← arrayField sorryResult "declarations").isEmpty)
++      "sorry: partial closure exposed as usable evidence"
++  else if id == "axiom_dependency" then
++    let (axiomCode, axiomResult) ← runFixture "axiom_dependency"
++    check (axiomCode == 0) "custom axiom: facts must remain exportable, not silently repaired"
++    check ((← arrayField axiomResult "axiomDependencies").contains (nameJson `MaCSadFixture.unproven))
++      "custom axiom: actual dependency was omitted"
++    check ((← field axiomResult "status") == str "exported") "custom axiom: export is not acceptance"
++    check ((← field axiomResult "closureComplete") == toJson true) "custom axiom: incomplete closure"
++  else if id == "unknown_source" then
++    let (unknownCode, _) ← runFixture "untrusted-upload.lean"
++    check (unknownCode == 64) "an arbitrary source path was accepted"
++  else throw (IO.userError "unknown regression")
++  IO.println s!"Trusted Lean export check passed: {id}; no LOGOS acceptance is claimed."
++  return 0
+diff --git a/tools/lean-bridge/fixtures/axiom_dependency.lean b/tools/lean-bridge/fixtures/axiom_dependency.lean
+new file mode 100644
+index 0000000000000000000000000000000000000000..521a9336f3e26c33fb1bec342d16ebec6cce8eea
+--- /dev/null
++++ b/tools/lean-bridge/fixtures/axiom_dependency.lean
+@@ -0,0 +1,7 @@
++namespace MaCSadFixture
++
++axiom unproven (P : Prop) : P
++
++theorem assumes (P : Prop) : P := unproven P
++
++end MaCSadFixture
+diff --git a/tools/lean-bridge/fixtures/composition.lean b/tools/lean-bridge/fixtures/composition.lean
+new file mode 100644
+index 0000000000000000000000000000000000000000..4da4c45064672436e94291a5e8ee29592c58facc
+--- /dev/null
++++ b/tools/lean-bridge/fixtures/composition.lean
+@@ -0,0 +1,5 @@
++namespace MaCSadFixture
++
++theorem composition (P Q R : Prop) (f : P → Q) (g : Q → R) (h : P) : R := g (f h)
++
++end MaCSadFixture
+diff --git a/tools/lean-bridge/fixtures/identity.lean b/tools/lean-bridge/fixtures/identity.lean
+new file mode 100644
+index 0000000000000000000000000000000000000000..6a42b27363e9804b88128f711e4f527a93d0ded0
+--- /dev/null
++++ b/tools/lean-bridge/fixtures/identity.lean
+@@ -0,0 +1,5 @@
++namespace MaCSadFixture
++
++theorem identity (P : Prop) (h : P) : P := h
++
++end MaCSadFixture
+diff --git a/tools/lean-bridge/fixtures/invalid_proof.lean b/tools/lean-bridge/fixtures/invalid_proof.lean
+new file mode 100644
+index 0000000000000000000000000000000000000000..2f355feb9bdada49c826701bfaa3f1957fc95d58
+--- /dev/null
++++ b/tools/lean-bridge/fixtures/invalid_proof.lean
+@@ -0,0 +1,5 @@
++namespace MaCSadFixture
++
++theorem invalid_proof (P Q : Prop) (h : P) : Q := h
++
++end MaCSadFixture
+diff --git a/tools/lean-bridge/fixtures/repeated_binders.lean b/tools/lean-bridge/fixtures/repeated_binders.lean
+new file mode 100644
+index 0000000000000000000000000000000000000000..c3287d4c2d243985df34242501ed222f8e66771f
+--- /dev/null
++++ b/tools/lean-bridge/fixtures/repeated_binders.lean
+@@ -0,0 +1,6 @@
++namespace MaCSadFixture
++
++theorem repeated_binders (P : Prop) (h : P) : ∀ P : Prop, P → P :=
++  fun P h => h
++
++end MaCSadFixture
+diff --git a/tools/lean-bridge/fixtures/sorry.lean b/tools/lean-bridge/fixtures/sorry.lean
+new file mode 100644
+index 0000000000000000000000000000000000000000..15deeb9de430a7e1188e3f73c933288e8c9e5a6b
+--- /dev/null
++++ b/tools/lean-bridge/fixtures/sorry.lean
+@@ -0,0 +1,5 @@
++namespace MaCSadFixture
++
++theorem contains_sorry (P : Prop) : P := by sorry
++
++end MaCSadFixture
+diff --git a/tools/lean-bridge/lean-toolchain b/tools/lean-bridge/lean-toolchain
+new file mode 100644
+index 0000000000000000000000000000000000000000..18640c8b066b182147f324d3aefd8ee48ee45238
+--- /dev/null
++++ b/tools/lean-bridge/lean-toolchain
+@@ -0,0 +1 @@
++leanprover/lean4:v4.31.0

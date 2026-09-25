@@ -1,0 +1,25 @@
+{
+  "claimed_type": {
+    "Sort": "Prop"
+  },
+  "prelude_version": "logos-coc-1",
+  "proof_term": {
+    "Lambda": {
+      "body": {
+        "Lambda": {
+          "body": {
+            "Var": "b1"
+          },
+          "param": "b1",
+          "param_type": {
+            "Var": "b0"
+          }
+        }
+      },
+      "param": "b0",
+      "param_type": {
+        "Sort": "Prop"
+      }
+    }
+  }
+}

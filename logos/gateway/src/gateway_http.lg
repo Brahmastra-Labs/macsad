@@ -1,10 +1,14 @@
 # MaCSad gateway HTTP adapter
 
+Import CommandEnvelope from "./command_envelope.lg".
 Import GatewayRouting from "./gateway_routing.lg".
 
 The transport adapter imports routing policy and returns one safe health read.
 There are deliberately no mutation routes. The first typed command endpoint waits
 for the complete authenticated, idempotent, transactional command boundary.
+
+## To inspectAppendMessageFields (fields: Seq of AppendMessageField, wireByteCount: Int) -> Text:
+    Return validateAppendMessageFields(fields, wireByteCount).
 
 ## To handle (request: Request) -> Response:
     If isHealthRoute(request's method, request's path):

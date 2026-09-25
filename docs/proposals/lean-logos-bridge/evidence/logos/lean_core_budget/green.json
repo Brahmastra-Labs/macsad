@@ -1,0 +1,52 @@
+{
+  "seed": 7,
+  "outcomes": [
+    {
+      "name": "Lean core preflight accounts for both roots at the quota boundary",
+      "verdict": "passed",
+      "failures": [],
+      "skip_reason": null,
+      "ops": 113
+    },
+    {
+      "name": "Lean core preflight preserves unsupported status",
+      "verdict": "passed",
+      "failures": [],
+      "skip_reason": null,
+      "ops": 114
+    },
+    {
+      "name": "Lean core preflight rejects malformed references before indexing",
+      "verdict": "passed",
+      "failures": [],
+      "skip_reason": null,
+      "ops": 117
+    },
+    {
+      "name": "Lean core preflight saturates a doubling DAG",
+      "verdict": "passed",
+      "failures": [],
+      "skip_reason": null,
+      "ops": 2606
+    },
+    {
+      "name": "Lean core scalar fields preserve exact indices and level support",
+      "verdict": "passed",
+      "failures": [],
+      "skip_reason": null,
+      "ops": 174
+    },
+    {
+      "name": "Lean core scalar fields reject hidden unused payload",
+      "verdict": "passed",
+      "failures": [],
+      "skip_reason": null,
+      "ops": 92
+    }
+  ],
+  "passed": 6,
+  "failed": 0,
+  "skipped": 0,
+  "properties": 1,
+  "proven": 1
+}

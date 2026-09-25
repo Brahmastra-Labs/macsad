@@ -1,0 +1,34 @@
+# Lean receipt dispatch; no case acceptance or publication authority
+
+Import LeanPolicyFacts from "./lean_policy_facts.lg".
+Import LeanImportPolicy from "./lean_import_policy.lg".
+Import LeanReplayPolicy from "./lean_replay_policy.lg".
+
+## To leanResultStatus (facts: Seq of Text) -> Text:
+    If length of facts is not equal to 17:
+        Return "rejected_contract".
+    Let stages be split(item 4 of facts, ",").
+    If length of stages is not equal to 7:
+        Return "rejected_contract".
+    Repeat for stage in stages:
+        Let mutable known be stage is equal to "passed".
+        If stage is equal to "failed":
+            Set known to true.
+        If stage is equal to "not_run":
+            Set known to true.
+        If stage is equal to "unsupported":
+            Set known to true.
+        If known is equal to false:
+            Return "rejected_contract".
+    If leanAssumptionsUnique(item 14 of facts) is equal to false:
+        Return "rejected_contract".
+    If item 1 of facts is equal to "import":
+        Let passed be leanStagePassed(stages, 1).
+        Let allowed be leanAssumptionsAllowed(item 14 of facts).
+        Let digest be leanDigestAccepted(item 11 of facts).
+        Return leanImportStatus(facts, passed, allowed, digest).
+    If item 1 of facts is equal to "replay":
+        Let replayPassed be leanStagePassed(stages, 2).
+        Let replayDigest be leanDigestAccepted(item 12 of facts).
+        Return leanReplayStatus(facts, item 1 of stages, replayPassed, replayDigest).
+    Return "rejected_contract".

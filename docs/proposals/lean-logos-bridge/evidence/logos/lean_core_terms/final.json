@@ -1,0 +1,45 @@
+{
+  "seed": 7,
+  "outcomes": [
+    {
+      "name": "Lean core emits the proposition identity statement and proof",
+      "verdict": "passed",
+      "failures": [],
+      "skip_reason": null,
+      "ops": 447
+    },
+    {
+      "name": "Lean core keeps application operand order",
+      "verdict": "passed",
+      "failures": [],
+      "skip_reason": null,
+      "ops": 267
+    },
+    {
+      "name": "Lean core never replaces unsupported assumptions or terms",
+      "verdict": "passed",
+      "failures": [],
+      "skip_reason": null,
+      "ops": 224
+    },
+    {
+      "name": "Lean core preserves binder order and distant references",
+      "verdict": "passed",
+      "failures": [],
+      "skip_reason": null,
+      "ops": 319
+    },
+    {
+      "name": "Lean core rejects malformed graph references and open variables",
+      "verdict": "passed",
+      "failures": [],
+      "skip_reason": null,
+      "ops": 114
+    }
+  ],
+  "passed": 5,
+  "failed": 0,
+  "skipped": 0,
+  "properties": 1,
+  "proven": 1
+}

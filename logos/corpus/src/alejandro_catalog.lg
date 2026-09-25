@@ -1,0 +1,27 @@
+# Typed original catalog
+
+Import AlejandroCase from "./alejandro_case.lg".
+Import AlejandroManifest from "./alejandro_manifest.lg".
+
+## An AlejandroCatalog has:
+    a sourceEnvelope, which is AlejandroManifest.
+    a cases, which is Seq of AlejandroCase.
+## To decodeAlejandroCatalog (raw: Text) -> Result of AlejandroCatalog and Text:
+    Inspect decodeAlejandroManifest(raw):
+        When Err (failure):
+            Return a new Err with error failure.
+        When Ok (sourceEnvelope):
+            Let cases be a new Seq of AlejandroCase.
+            Repeat for row in sourceEnvelope's cases:
+                Inspect decodeAlejandroCase(row):
+                    When Err (failure):
+                        Return a new Err with error failure.
+                    When Ok (original):
+                        Repeat for previous in cases:
+                            If previous's caseId is equal to original's caseId:
+                                Return a new Err with error "duplicate original case id".
+                            If previous's sourcePath is equal to original's sourcePath:
+                                Return a new Err with error "duplicate original source path".
+                        Push original to cases.
+            Return a new Ok with value (a new AlejandroCatalog with sourceEnvelope sourceEnvelope and cases cases).
+    Return a new Err with error "invalid original catalog".

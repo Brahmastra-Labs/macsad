@@ -20,6 +20,7 @@ import {
   sep,
 } from "node:path";
 import { fileURLToPath } from "node:url";
+import { inspectPages } from "./logos-pages.mjs";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 export const repositoryRoot = resolve(scriptDirectory, "..");
@@ -413,7 +414,9 @@ export function inspectProject(registration, root = repositoryRoot) {
   visit(entryPath);
 
   const reachable = new Set(postorder);
-  const orphans = allSourceFiles.filter((path) => !reachable.has(path));
+  const pages = inspectPages({ registration, projectRoot, entryPath, factByPath, sourceFacts, stop });
+  const pageReachable = new Set(pages.suites.flatMap((suite) => suite.copies.map((copy) => copy.absolutePath)));
+  const orphans = allSourceFiles.filter((path) => !reachable.has(path) && !pageReachable.has(path));
   if (orphans.length > 0) {
     stop(
       `${registration.name}: orphan/decorative .lg module(s) are outside the entry import closure: ${orphans
@@ -433,7 +436,7 @@ export function inspectProject(registration, root = repositoryRoot) {
     }
   }
 
-  const nonEntryPaths = allSourceFiles.filter((path) => path !== entryPath);
+  const nonEntryPaths = allSourceFiles.filter((path) => path !== entryPath && reachable.has(path));
   const entryTargets = new Set(entryFacts.imports.map((edge) => edge.target));
   const missingEntryLocks = nonEntryPaths.filter((path) => !entryTargets.has(path));
   const unexpectedEntryLocks = [...entryTargets].filter((path) => path === entryPath);
@@ -598,8 +601,9 @@ export function inspectProject(registration, root = repositoryRoot) {
     }
   }
 
+  suites.push(...pages.suites);
   const closureHash = createHash("sha256");
-  const closure = [...allSourceFiles].sort((left, right) =>
+  const closure = [...allSourceFiles, ...pages.files].sort((left, right) =>
     relativeTo(projectRoot, left).localeCompare(relativeTo(projectRoot, right), "en"),
   );
   for (const path of closure) {
@@ -696,7 +700,7 @@ function main() {
   if (command === "audit") {
     for (const project of inspectRegisteredProjects(manifest)) {
       process.stdout.write(
-        `${project.registration.name}: ${project.closure.length} reachable module(s), ${project.suites.length} exact leaf suite(s), closure sha256 ${project.closureDigest}\n`,
+        `${project.registration.name}: ${project.closure.length} reachable module(s), ${project.suites.length} exact test suite(s), closure sha256 ${project.closureDigest}\n`,
       );
     }
     return;

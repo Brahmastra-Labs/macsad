@@ -66,6 +66,8 @@ python3 -c 'compile(open("scripts/ci/static_server.py", encoding="utf-8").read()
 bash scripts/ci/check-workflows.sh
 node --test \
   tests/scripts/logos-project.test.mjs \
+  tests/scripts/logos-pages.test.mjs \
+  tests/scripts/logos-test-runner.test.mjs \
   tests/scripts/logos-source-lint.test.mjs \
   tests/scripts/compose-guardrails.test.mjs \
   tests/scripts/artifact-manifest.test.mjs \
@@ -98,6 +100,9 @@ done
 
 printf '== LOGOS exact test manifest ==\n'
 node scripts/verify-logos-tests.mjs
+
+printf '== Real LOGOS proof loop and adversarial wire contracts ==\n'
+python3 -m unittest host_adapters.tests.proof_demo_contract host_adapters.tests.proof_worker_contract host_adapters.tests.lean_worker_contract -v
 
 hash_tree() {
   local directory="$1"
