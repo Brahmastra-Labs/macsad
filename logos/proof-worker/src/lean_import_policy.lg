@@ -1,0 +1,95 @@
+# Original Lean run policy: all seven stages and an identified package
+
+## To leanImportStatus (facts: Seq of Text, allPassed: Bool, assumptionsAllowed: Bool, digestAccepted: Bool) -> Text:
+    Let exitCode be item 2 of facts.
+    Let outcome be item 3 of facts.
+    If item 16 of facts is not equal to "0":
+        Return "rejected_contract".
+    If item 17 of facts is not equal to "0":
+        Return "rejected_contract".
+    If item 7 of facts is equal to "":
+        Return "rejected_contract".
+    If item 5 of facts is not equal to item 7 of facts:
+        Return "rejected_contract".
+    If outcome is equal to "verified":
+        If item 8 of facts is equal to "":
+            Return "rejected_contract".
+        If item 6 of facts is not equal to item 8 of facts:
+            Return "rejected_contract".
+        If exitCode is not equal to "0":
+            Return "rejected_contract".
+        If allPassed is equal to false:
+            Return "rejected_contract".
+        If assumptionsAllowed is equal to false:
+            Return "rejected_contract".
+        If item 15 of facts is not equal to "1":
+            Return "rejected_contract".
+        If item 10 of facts is equal to "":
+            Return "rejected_contract".
+        If item 9 of facts is not equal to item 10 of facts:
+            Return "rejected_contract".
+        If digestAccepted is equal to false:
+            Return "rejected_contract".
+        If item 11 of facts is not equal to item 12 of facts:
+            Return "rejected_contract".
+        If item 13 of facts is not equal to "logos-lean-package/1":
+            Return "rejected_contract".
+        Return "verified".
+    If allPassed:
+        Return "rejected_contract".
+    If item 15 of facts is not equal to "0":
+        Return "rejected_contract".
+    Repeat for index in [9, 11, 12, 13]:
+        If item index of facts is not equal to "":
+            Return "rejected_contract".
+    Let outcomes be ["invalid_source", "unsupported_feature", "disallowed_assumptions", "resource_limit", "infrastructure_failure"].
+    Let mutable index be 1.
+    Repeat for candidate in outcomes:
+        If outcome is equal to candidate:
+            If exitCode is equal to numText(index):
+                Return candidate.
+            Return "rejected_contract".
+        Set index to index + 1.
+    Return "rejected_contract".
+
+## To leanImportTestFacts (outcome: Text, code: Text, target: Text, digest: Text, schema: Text) -> Seq of Text:
+    Let facts be ["import", code, outcome, "", target, "T.example", "T.example", "T.example"].
+    Let mutable path be "/private/package".
+    Let mutable observed be repeatText("a", 64).
+    Let mutable present be "1".
+    If outcome is not equal to "verified":
+        Set path to "".
+        Set observed to "".
+        Set present to "0".
+    Repeat for field in [path, "/private/package", digest, observed, schema, "", present, "0", "0"]:
+        Push field to facts.
+    Return facts.
+
+## Test: Lean import binds target package and digest
+    Let digest be repeatText("a", 64).
+    Let facts be leanImportTestFacts("verified", "0", "T.example", digest, "logos-lean-package/1").
+    Expect that leanImportStatus(facts, true, true, true) is equal to "verified".
+    Expect that leanImportStatus(facts, true, false, true) is equal to "rejected_contract".
+    Expect that leanImportStatus(facts, true, true, false) is equal to "rejected_contract".
+    Let wrongTarget be leanImportTestFacts("verified", "0", "Other.target", digest, "logos-lean-package/1").
+    Expect that leanImportStatus(wrongTarget, true, true, true) is equal to "rejected_contract".
+    Let wrongDigest be leanImportTestFacts("verified", "0", "T.example", repeatText("b", 64), "logos-lean-package/1").
+    Expect that leanImportStatus(wrongDigest, true, true, true) is equal to "rejected_contract".
+    Let wrongSchema be leanImportTestFacts("verified", "0", "T.example", digest, "logos-lean-package/2").
+    Expect that leanImportStatus(wrongSchema, true, true, true) is equal to "rejected_contract".
+    Let wrongExit be leanImportTestFacts("verified", "1", "T.example", digest, "logos-lean-package/1").
+    Expect that leanImportStatus(wrongExit, true, true, true) is equal to "rejected_contract".
+    For all booleans allStagesPassed:
+        Let status be leanImportStatus(facts, allStagesPassed, true, true).
+        If allStagesPassed:
+            Expect that status is equal to "verified".
+        Otherwise:
+            Expect that status is equal to "rejected_contract".
+
+## Test: Lean import preserves five typed refusal outcomes
+    Let outcomes be ["invalid_source", "unsupported_feature", "disallowed_assumptions", "resource_limit", "infrastructure_failure"].
+    Let mutable code be 1.
+    Repeat for outcome in outcomes:
+        Let facts be leanImportTestFacts(outcome, numText(code), "T.example", "", "").
+        Expect that leanImportStatus(facts, false, false, false) is equal to outcome.
+        Set code to code + 1.

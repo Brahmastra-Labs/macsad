@@ -1,7 +1,7 @@
 SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := help
 
-.PHONY: help doctor test test-foundation test-proof-demo lint-logos audit-actions configure prepare compose-config build up verify status logs down db-shell
+.PHONY: help doctor test test-foundation test-proof-demo test-lean-worker lint-logos audit-actions configure prepare compose-config build up verify status logs down db-shell
 
 help:
 	@bash scripts/dev.sh help
@@ -17,6 +17,9 @@ test-foundation:
 
 test-proof-demo:
 	@python3 -m unittest host_adapters.tests.proof_demo_contract host_adapters.tests.proof_worker_contract -v
+
+test-lean-worker:
+	@bash scripts/dev.sh test-lean-worker
 
 lint-logos:
 	@bash scripts/dev.sh lint-logos

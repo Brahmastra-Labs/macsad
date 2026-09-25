@@ -47,12 +47,12 @@
                             Set high to 143.
     Return remaining is equal to 0.
 
-## To proofWireHexAccepted (value: Text) -> Bool:
+## To proofWireHexBounded (value: Text, maximum: Int) -> Bool:
     Let bytes be text_bytes(value).
     Let count be length of bytes.
     If count is less than 2:
         Return false.
-    If count is greater than 512:
+    If count is greater than maximum:
         Return false.
     If count % 2 is equal to 1:
         Return false.
@@ -68,6 +68,9 @@
         Push high * 16 + low to decoded.
         Set index to index + 2.
     Return proofUtf8BytesAccepted(decoded).
+
+## To proofWireHexAccepted (value: Text) -> Bool:
+    Return proofWireHexBounded(value, 512).
 
 ## Test: Proof wire accepts canonical UTF8 boundaries
     Let samples be ["00", "7f", "c280", "dfbf", "e0a080", "ed9fbf", "ee8080", "efbfbf", "f0908080", "f48fbfbf"].
@@ -93,3 +96,11 @@
             Expect that accepted is equal to false.
         Otherwise:
             Expect that accepted is equal to true.
+
+## Test: Lean wire extends only the admitted field bound
+    Let field be repeatText("61", 257).
+    Expect that proofWireHexAccepted(field) is equal to false.
+    Expect that proofWireHexBounded(field, 65536) is equal to true.
+    Expect that proofWireHexBounded(repeatText("61", 32769), 65536) is equal to false.
+    Repeat for malformed in ["ff", "c080", "C3A9"]:
+        Expect that proofWireHexBounded(malformed, 65536) is equal to false.

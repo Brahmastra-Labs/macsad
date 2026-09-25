@@ -1,0 +1,50 @@
+# MaCSad Lean worker mechanical fact boundary
+
+Import LeanResultPolicy from "./lean_result_policy.lg".
+Import ProofWireEncoding from "./proof_wire_encoding.lg".
+Import ProofWorker from "./proof_worker.lg".
+
+## To leanWorkerStatus (arguments: Seq of Text) -> Text:
+    If length of arguments is not equal to 19:
+        Return "rejected_contract".
+    Let mutable total be 0.
+    Repeat for argument in arguments:
+        Set total to total + length of text_bytes(argument).
+        If total is greater than 131072:
+            Return "rejected_contract".
+    If item 2 of arguments is not equal to "macsad-lean-facts/1":
+        Return "rejected_contract".
+    Let facts be a new Seq of Text.
+    Let mutable index be 3.
+    While index is at most 19:
+        Let encoded be item index of arguments.
+        If encoded is equal to "-":
+            Push "" to facts.
+        Otherwise:
+            If proofWireHexBounded(encoded, 65536) is equal to false:
+                Return "rejected_contract".
+            Let decoded be fromHex(encoded).
+            Let size be length of text_bytes(decoded).
+            Let mutable limit be 32768.
+            If index is at least 7:
+                If index is at most 10:
+                    Set limit to 256.
+            If index is equal to 11:
+                Set limit to 4096.
+            If index is equal to 12:
+                Set limit to 4096.
+            If size is greater than limit:
+                Return "rejected_contract".
+            If toHex(decoded) is not equal to encoded:
+                Return "rejected_contract".
+            Push decoded to facts.
+        Set index to index + 1.
+    Return leanResultStatus(facts).
+
+## To proofOrLeanWorkerStatus (arguments: Seq of Text) -> Text:
+    If length of arguments is at least 2:
+        Let schemaParts be split(item 2 of arguments, "/").
+        If length of schemaParts is equal to 2:
+            If item 1 of schemaParts is equal to "macsad-lean-facts":
+                Return leanWorkerStatus(arguments).
+    Return proofWorkerStatus(arguments).

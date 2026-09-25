@@ -1,0 +1,58 @@
+# Package replay policy: six checks without claiming new Lean acceptance
+
+## To leanReplayStatus (facts: Seq of Text, leanStatus: Text, replayPassed: Bool, digestAccepted: Bool) -> Text:
+    Let exitCode be item 2 of facts.
+    Repeat for index in [3, 5, 6, 7, 8, 9, 10, 13, 14]:
+        If item index of facts is not equal to "":
+            Return "rejected_contract".
+    If item 15 of facts is not equal to "0":
+        Return "rejected_contract".
+    If item 17 of facts is not equal to "0":
+        Return "rejected_contract".
+    If leanStatus is not equal to "not_run":
+        Return "rejected_contract".
+    If digestAccepted is equal to false:
+        Return "rejected_contract".
+    If item 16 of facts is equal to "1":
+        If exitCode is not equal to "0":
+            Return "rejected_contract".
+        If replayPassed is equal to false:
+            Return "rejected_contract".
+        If item 11 of facts is not equal to item 12 of facts:
+            Return "rejected_contract".
+        Return "replayed".
+    If item 16 of facts is not equal to "0":
+        Return "rejected_contract".
+    If replayPassed:
+        Return "rejected_contract".
+    Repeat for code in ["1", "2", "3", "4", "5"]:
+        If exitCode is equal to code:
+            Return "replay_failed".
+    Return "rejected_contract".
+
+## To leanReplayTestFacts (digest: Text, replayed: Text, verified: Text, code: Text) -> Seq of Text:
+    Let facts be ["replay", code, "", "", "", "", "", "", "", ""].
+    Repeat for field in [digest, repeatText("a", 64), "", "", "0", replayed, verified]:
+        Push field to facts.
+    Return facts.
+
+## Test: Lean replay is distinct from original verification
+    For all booleans claimsOriginalAcceptance:
+        Let mutable flag be "0".
+        If claimsOriginalAcceptance:
+            Set flag to "1".
+        Let facts be leanReplayTestFacts(repeatText("a", 64), "1", flag, "0").
+        Let status be leanReplayStatus(facts, "not_run", true, true).
+        If claimsOriginalAcceptance:
+            Expect that status is equal to "rejected_contract".
+        Otherwise:
+            Expect that status is equal to "replayed".
+
+## Test: Lean replay rejects missing independent check and wrong package
+    Let facts be leanReplayTestFacts(repeatText("a", 64), "1", "0", "0").
+    Expect that leanReplayStatus(facts, "not_run", false, true) is equal to "rejected_contract".
+    Expect that leanReplayStatus(facts, "passed", true, true) is equal to "rejected_contract".
+    Let wrongDigest be leanReplayTestFacts(repeatText("b", 64), "1", "0", "0").
+    Expect that leanReplayStatus(wrongDigest, "not_run", true, true) is equal to "rejected_contract".
+    Let failed be leanReplayTestFacts("", "0", "0", "1").
+    Expect that leanReplayStatus(failed, "not_run", false, true) is equal to "replay_failed".

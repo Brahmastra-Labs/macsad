@@ -1,11 +1,16 @@
-# MaCSad stateless proof worker entry
+# MaCSad proof and current Lean report entry
 
 Import ProofResultPolicy from "./proof_result_policy.lg".
 Import ProofWireEncoding from "./proof_wire_encoding.lg".
 Import ProofWorker from "./proof_worker.lg".
+Import LeanPolicyFacts from "./lean_policy_facts.lg".
+Import LeanImportPolicy from "./lean_import_policy.lg".
+Import LeanReplayPolicy from "./lean_replay_policy.lg".
+Import LeanResultPolicy from "./lean_result_policy.lg".
+Import LeanWorker from "./lean_worker.lg".
 
 ## To native args () -> Seq of Text
 
 ## Main
 Let arguments be args().
-Show proofWorkerStatus(arguments).
+Show proofOrLeanWorkerStatus(arguments).

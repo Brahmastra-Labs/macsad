@@ -169,7 +169,7 @@
       "name": "proof-worker",
       "directory": "logos/proof-worker",
       "entry": "src/main.lg",
-      "logicalRoot": "src/proof_worker.lg",
+      "logicalRoot": "src/lean_worker.lg",
       "entryClosureLock": "pinned-transitive-scope-workaround",
       "allowedDiagnostics": [
         {
@@ -183,6 +183,36 @@
           "severity": "warning",
           "file": "src/main.lg",
           "message": "`Import ProofWireEncoding` is unused — no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import ProofWorker` is unused — no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import LeanPolicyFacts` is unused — no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import LeanImportPolicy` is unused — no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import LeanReplayPolicy` is unused — no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import LeanResultPolicy` is unused — no name from it is referenced here."
         }
       ],
       "domBundle": false,
@@ -208,7 +238,35 @@
             "Proof wire accepts canonical UTF8 boundaries",
             "Proof wire rejects malformed hex and UTF8",
             "Proof wire bounds individual encoded names",
-            "Proof wire requires lowercase hex"
+            "Proof wire requires lowercase hex",
+            "Lean wire extends only the admitted field bound"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/lean_policy_facts.lg",
+          "expectedTests": [
+            "Lean named assumptions are unique and policy allowed",
+            "Lean stages preserve seven original versus six replay checks"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/lean_import_policy.lg",
+          "expectedTests": [
+            "Lean import binds target package and digest",
+            "Lean import preserves five typed refusal outcomes"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/lean_replay_policy.lg",
+          "expectedTests": [
+            "Lean replay is distinct from original verification",
+            "Lean replay rejects missing independent check and wrong package"
           ],
           "minimumProperties": 1,
           "minimumProven": 1
