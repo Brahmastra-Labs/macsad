@@ -177,6 +177,8 @@ test_foundation() {
   python3 -c 'compile(open("scripts/ci/static_server.py", encoding="utf-8").read(), "scripts/ci/static_server.py", "exec")'
   node --test \
     tests/scripts/logos-project.test.mjs \
+    tests/scripts/logos-pages.test.mjs \
+    tests/scripts/logos-test-runner.test.mjs \
     tests/scripts/logos-source-lint.test.mjs \
     tests/scripts/compose-guardrails.test.mjs \
     tests/scripts/artifact-manifest.test.mjs \

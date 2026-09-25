@@ -67,3 +67,12 @@ export function selectTestRunner(args, root, { spawn = spawnSync, write = line =
     },
   };
 }
+
+// Rows have already passed the manifest/compiler diagnostic shape checks.
+// Compare the four identity fields, independent of object/row order, retaining
+// every occurrence. JSON tuple encoding also avoids delimiter collisions.
+export function sameDiagnosticInventory(actual, expected) {
+  const inventory = rows => rows.map(({ file, code, severity, message }) =>
+    JSON.stringify([file, code, severity, message])).sort();
+  return JSON.stringify(inventory(actual)) === JSON.stringify(inventory(expected));
+}

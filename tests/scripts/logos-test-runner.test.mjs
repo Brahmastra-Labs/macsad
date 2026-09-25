@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { selectTestRunner } from "../../scripts/logos-test-runner.mjs";
+import { sameDiagnosticInventory, selectTestRunner } from "../../scripts/logos-test-runner.mjs";
 
 const root = "/private/example/macsad";
 const sha = "a".repeat(64);
@@ -90,4 +90,43 @@ test("actual verifier CLI rejects an unknown flag before loading projects or run
   assert.equal(response.status, 1);
   assert.equal(response.stdout, "");
   assert.match(response.stderr, /unsupported LOGOS test arguments/);
+});
+
+
+test("diagnostic inventory ignores property and row order without mutating inputs", () => {
+  const actual = [
+    { code: "unused-import", severity: "warning", file: "src/main.lg", message: "Unused import A" },
+    { code: "compatibility", severity: "warning", file: "src/view.lg", message: "Compatibility warning" },
+  ];
+  const expected = [
+    { code: "compatibility", severity: "warning", message: "Compatibility warning", file: "src/view.lg" },
+    { code: "unused-import", severity: "warning", message: "Unused import A", file: "src/main.lg" },
+  ];
+  const before = JSON.stringify([actual, expected]);
+  assert.equal(sameDiagnosticInventory(actual, expected), true);
+  assert.equal(JSON.stringify([actual, expected]), before);
+});
+
+test("diagnostic inventory requires exact file, code, severity and message", () => {
+  const row = { file: "src/main.lg", code: "unused-import", severity: "warning", message: "Unused import A" };
+  for (const field of ["file", "code", "severity", "message"]) {
+    assert.equal(sameDiagnosticInventory([row], [{ ...row, [field]: row[field] + " " }]), false, field);
+  }
+});
+
+test("diagnostic inventory preserves duplicate multiplicities and empty inventories", () => {
+  const a = { file: "src/a.lg", code: "unused-import", severity: "warning", message: "Unused import A" };
+  const b = { ...a, file: "src/b.lg" };
+  assert.equal(sameDiagnosticInventory([], []), true);
+  assert.equal(sameDiagnosticInventory([a], []), false);
+  assert.equal(sameDiagnosticInventory([], [a]), false);
+  assert.equal(sameDiagnosticInventory([a, a, b], [b, a, a]), true);
+  assert.equal(sameDiagnosticInventory([a, a, b], [a, b]), false);
+  assert.equal(sameDiagnosticInventory([a, a, b], [a, b, b]), false);
+});
+
+test("diagnostic identity cannot collide through embedded separators", () => {
+  const a = { file: "src/a.lg", code: "x\0y", severity: "warning", message: "detail" };
+  const b = { file: "src/a.lg\0x", code: "y", severity: "warning", message: "detail" };
+  assert.equal(sameDiagnosticInventory([a], [b]), false);
 });

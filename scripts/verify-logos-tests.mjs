@@ -19,7 +19,7 @@ import {
 } from "./logos-project.mjs";
 
 import { stagePageSuite, verifyPageOutcomes } from "./logos-pages.mjs";
-import { selectTestRunner } from "./logos-test-runner.mjs";
+import { sameDiagnosticInventory, selectTestRunner } from "./logos-test-runner.mjs";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(scriptDirectory, "..");
@@ -127,13 +127,8 @@ for (const project of projects) {
       message: diagnostic.message,
     };
   });
-  const identity = (diagnostic) =>
-    `${diagnostic.file}\0${diagnostic.code}\0${diagnostic.severity}\0${diagnostic.message}`;
-  actualDiagnostics.sort((left, right) => identity(left).localeCompare(identity(right), "en"));
-  const expectedDiagnostics = project.registration.allowedDiagnostics
-    .map((diagnostic) => ({ ...diagnostic }))
-    .sort((left, right) => identity(left).localeCompare(identity(right), "en"));
-  if (JSON.stringify(actualDiagnostics) !== JSON.stringify(expectedDiagnostics)) {
+  const expectedDiagnostics = project.registration.allowedDiagnostics;
+  if (!sameDiagnosticInventory(actualDiagnostics, expectedDiagnostics)) {
     fail(
       `${projectName}: compiler diagnostic identity drift; expected ${JSON.stringify(expectedDiagnostics)}, received ${JSON.stringify(actualDiagnostics)}`,
     );
