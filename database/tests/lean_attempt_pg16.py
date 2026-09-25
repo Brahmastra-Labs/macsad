@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import json
 import os
+import signal
 from pathlib import Path
 import re
 import shutil
@@ -19,6 +20,7 @@ import uuid
 from lean_attempt_concurrency import run as concurrency_run
 from lean_admission_expiry import run as admission_expiry_run
 from lean_recovery_pg16 import recovery
+from lean_recovery_v3_pg16 import recovery as recovery_v3
 
 ROLE_PATHS = {
     'alejandro': 'pg_catalog', 'macsad_deployer': 'pg_catalog',
@@ -52,6 +54,8 @@ INPUTS = [
     'database/tests/0002_lean_concurrency_setup.sql',
     'database/tests/lean_attempt_concurrency.py', 'database/tests/lean_attempt_pg16.py',
     'database/tests/lean_admission_expiry.py', 'database/tests/lean_admission_expiry_setup.sql',
+    'database/migrations/0003_lean_admission_deadlines.sql',
+    'database/tests/lean_recovery_v3_pg16.py',
 ]
 PSQL = ['psql', '--no-psqlrc', '--quiet', '--tuples-only', '--no-align',
         '--set=ON_ERROR_STOP=1', '--set=VERBOSITY=verbose']
@@ -65,11 +69,15 @@ MIGRATIONS = ('database/migrations/0001_initial_schema.sql',
               'database/migrations/0002_lean_attempt_boundary.sql')
 
 
-def source_manifest(root):
+FORWARD_MIGRATION = 'database/migrations/0003_lean_admission_deadlines.sql'
+CURRENT_MIGRATIONS = MIGRATIONS + (FORWARD_MIGRATION,)
+
+
+def source_manifest(root, expected_migrations=MIGRATIONS):
     migrations = sorted(str(path.relative_to(root)) for path in
                         (root / 'database/migrations').glob('*.sql'))
-    if migrations != list(MIGRATIONS):
-        raise ValueError('cohort requires exactly migrations 0001 and 0002')
+    if migrations != list(expected_migrations):
+        raise ValueError('cohort requires exactly migrations ' + ', '.join(expected_migrations))
     sources = {}
     for relative in INPUTS:
         path = root / relative
@@ -92,7 +100,7 @@ def copy_pinned(root, staged, relative, sources):
 
 def stage_v1(root, staged, sources):
     for relative in INPUTS:
-        if relative != MIGRATIONS[1]:
+        if not relative.startswith('database/migrations/') or relative == MIGRATIONS[0]:
             copy_pinned(root, staged, relative, sources)
     if sorted(p.name for p in (staged/'database/migrations').glob('*.sql')) != ['0001_initial_schema.sql']:
         raise ValueError('v1 fixture stage contains a later migration')
@@ -196,6 +204,8 @@ class Harness:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--evidence-dir', type=Path, required=True)
+    parser.add_argument('--admission-version', type=int, choices=(2, 3), default=3,
+        help='2 runs the unchanged negative regression against original v2; never treats its failure as success')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
     evidence = args.evidence_dir.resolve()
@@ -205,10 +215,14 @@ def main():
     for tool in ('psql', 'pg_dump', 'pg_restore', 'createdb', 'dropdb', 'bash', 'sha256sum', 'awk', 'cmp', 'comm', 'sort', 'stat', 'realpath', 'python3'):
         if shutil.which(tool) is None:
             raise SystemExit('required test tool missing: ' + tool)
-    sources = source_manifest(root)
+    sources = source_manifest(root, CURRENT_MIGRATIONS)
     (evidence / 'source-manifest.json').write_text(json.dumps(sources, indent=2, sort_keys=True) + '\n')
     h = Harness(root, evidence)
-    outcome = {'schema': 'macsad-lean-pg16-evidence/1', 'passed': False, 'tests': {}}
+    outcome = {'schema': 'macsad-lean-pg16-evidence/1', 'passed': False, 'tests': {},
+               'admission_schema': args.admission_version}
+    def interrupted(signum, frame):
+        raise InterruptedError('PG16 cohort received termination signal')
+    previous_term = signal.signal(signal.SIGTERM, interrupted)
     try:
         if not re.search(r'\(PostgreSQL\) 16(?:\.|\s)', h.run(['psql', '--version'])):
             raise AssertionError('psql16 required')
@@ -244,7 +258,6 @@ def main():
             h.results['new_transaction_controls'] = 'passed'
             h.run(PSQL + ['--file', str(staged/'database/tests/0002_lean_concurrency_setup.sql')], upgrade)
             h.results.update(concurrency_run(upgrade))
-            h.results.update(admission_expiry_run(upgrade))
             h.verifier_negative_controls(staged, upgrade)
             recovery(h, staged, upgrade, 'v2_upgraded_recovery')
             fresh = h.create('fresh')
@@ -252,6 +265,23 @@ def main():
             h.run(PSQL + ['--file', str(staged/'database/tests/0001_invariants.sql')], fresh)
             h.results['unchanged_invariants_on_fresh_v2'] = 'passed'
             recovery(h, staged, fresh, 'v2_fresh_recovery')
+            # Preserve all original v2 controls/recoveries before upgrading.
+            # RED is a real nonzero run of the identical assertions against v2.
+            if args.admission_version == 3:
+                v2_ledger = json.loads(h.ledger(upgrade))
+                copy_pinned(root, staged, FORWARD_MIGRATION, sources)
+                h.migrate_twice(staged, upgrade, 'v2_to_v3_upgrade_repeat')
+                if json.loads(h.ledger(upgrade))[:2] != v2_ledger:
+                    raise AssertionError('forward upgrade changed historical v1/v2 ledger provenance')
+            h.results.update(admission_expiry_run(upgrade))
+            if args.admission_version == 3:
+                h.verifier_negative_controls(staged, upgrade)
+                recovery_v3(h, staged, upgrade, 'v3_upgraded_recovery')
+                current = h.create('fresh')
+                h.migrate_twice(staged, current, 'v3_fresh_repeat')
+                h.run(PSQL + ['--file', str(staged/'database/tests/0001_invariants.sql')], current)
+                h.results['unchanged_invariants_on_fresh_v3'] = 'passed'
+                recovery_v3(h, staged, current, 'v3_fresh_recovery')
         if any(digest(root / relative) != expected for relative, expected in sources.items()):
             raise AssertionError('test source changed during execution')
         outcome['passed'] = True
@@ -268,6 +298,7 @@ def main():
             raise
         finally:
             (evidence/'result.json').write_text(json.dumps(outcome, indent=2, sort_keys=True)+'\n')
+            signal.signal(signal.SIGTERM, previous_term)
     print(json.dumps(outcome, sort_keys=True))
 
 

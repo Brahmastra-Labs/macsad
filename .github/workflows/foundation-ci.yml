@@ -161,7 +161,7 @@ jobs:
           psql --no-psqlrc --set=ON_ERROR_STOP=1 --file=database/verify.sql
           psql --no-psqlrc --set=ON_ERROR_STOP=1 --file=database/tests/0001_invariants.sql
           MACSAD_TEST_ADMIN_USER=postgres timeout --signal=TERM --kill-after=15s 300s \
-            python3 database/tests/lean_attempt_pg16.py \
+            python3 database/tests/lean_attempt_pg16.py --admission-version 3 \
               --evidence-dir "${RUNNER_TEMP}/macsad-pg16-evidence"
 
       - name: Prove service-role defaults and viewer write denial
