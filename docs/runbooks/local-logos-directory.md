@@ -49,3 +49,71 @@ The current Lean import/replay worker integration is separate from the older
 `largo prove` demo. Re-running source is not an independent replay receipt.
 Authenticated jobs, durable execution, and private downloads need their own
 passing integration checks before the website is described as usable.
+
+## Connect an independently built source candidate
+
+For an independent copy with no `.git`, use the separate built-candidate mode.
+This requires Python 3.11 or newer for the standard TOML reader. Obtain the
+expected binary and inventory SHA-256 values from the owning build handoff;
+do not infer release approval from evidence stored beside a binary.
+
+```bash
+python3 host_adapters/logos_directory.py connect-built-candidate \
+  --candidate /path/to/independent-candidate \
+  --expected-binary-sha256 EXPECTED_64_HEX_BINARY_SHA256 \
+  --expected-source-inventory-sha256 EXPECTED_64_HEX_INVENTORY_SHA256
+bash scripts/dev.sh logos-status
+bash scripts/dev.sh logos --version
+```
+
+The expected layout is `repo/`, `build/`, and `evidence/`. The evidence must
+contain `copy.json`, `source-inputs.json`, `binary.json`, a successful
+`largo-build.command.json`, and its frozen `largo-SHA256` executable. The
+candidate must remain at its recorded path: the source root may be embedded in
+build/test artifacts. The connector never runs `candidate.py`, Cargo, Git, or
+an evidence-supplied command. It does not build, download, install, or execute
+the candidate while connecting/inspecting.
+
+Connection and every invocation check the supplied binary/inventory pins,
+evidence cross-links and build command, all source file byte hashes/sizes/modes,
+and the independently reconstructed workspace/path-dependency/literal-include
+source selection. Source fixtures have no changed-file exception. Symlinks and
+hardlinks in checked inputs are refused. Generated `target*`, `.lake`, and other
+copy-driver exclusions are not source inputs. Candidate binary snapshots are
+independent files with link count one. Evidence bytes are pinned in the local
+connection, so modifying build/copy metadata requires an explicit reconnect,
+even when the binary remains unchanged. Verification refuses missing, added,
+changed or omitted selected source inputs before execution.
+
+The record uses `macsad-logos-built-candidate/1`, mode
+`development-built-candidate`, `release_admitted: false`, and
+`source_binary_correspondence: local-build-evidence`. This means the local
+copy/build records and current bytes agree with the selected identities. It is
+not a signed attestation, a hermetic dependency audit, independent rebuild
+reproduction, or release admission. Shared toolchains/caches and generated
+exporter artifacts are not certified by these source checks. The older
+`development-directory` schema/behavior stays available and continues to label
+its binary/source relationship `unverified`.
+
+Bounds are 100,000 source entries, 1 GB of source bytes, 8 MiB inventory JSON,
+64 KiB each small evidence record, 16 MiB per parsed source/manifest, and
+512 MiB executable. Ordinary local verification does not protect against a
+concurrent hostile actor with the same OS account changing files between their
+last check and execution. Keep the candidate private and quiescent. No machine
+paths, connection records, source copies or binary snapshots belong in Git.
+
+After connection, the separate development test command is:
+
+```bash
+node scripts/verify-logos-tests.mjs --development-candidate
+```
+
+This explicit option requires `logos-status` to report the strict built-candidate
+schema, verified source inventory and local-build provenance. It prints that
+identity with `release_admitted: false`, rechecks the same connection before
+each compiler/test invocation, and then uses `scripts/dev.sh logos`, which
+verifies the source and executable again. A directory-mode connection, changed
+identity, failed status, unknown option or unexpected status record is refused.
+The no-argument command used by the quality gate continues to use
+`scripts/logos.sh` and the admitted release; environment variables cannot select
+development mode. Development results do not satisfy production promotion.

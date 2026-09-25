@@ -18,9 +18,17 @@ import {
   portablePath,
 } from "./logos-project.mjs";
 
+import { stagePageSuite, verifyPageOutcomes } from "./logos-pages.mjs";
+import { selectTestRunner } from "./logos-test-runner.mjs";
+
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(scriptDirectory, "..");
-const logosWrapper = join(repositoryRoot, "scripts", "logos.sh");
+let runner;
+try {
+  runner = selectTestRunner(process.argv.slice(2), repositoryRoot);
+} catch (error) {
+  fail(error.message);
+}
 
 function fail(message) {
   process.stderr.write(`error: ${message}\n`);
@@ -46,7 +54,8 @@ function sortedUniqueStrings(values, label) {
 }
 
 function runLogos(projectName, cwd, arguments_) {
-  const result = spawnSync("bash", [logosWrapper, ...arguments_], {
+  try { runner.verifyBeforeRun(); } catch (error) { fail(error.message); }
+  const result = spawnSync("bash", [...runner.prefix, ...arguments_], {
     cwd,
     env: process.env,
     encoding: "utf8",
@@ -149,6 +158,9 @@ for (const project of projects) {
 
     let result;
     try {
+      if (suite.kind === "page") {
+        stagePageSuite(suite, canonicalTemporary);
+      } else {
       const temporarySourceDirectory = join(canonicalTemporary, "src");
       mkdirSync(temporarySourceDirectory);
       const linkedEntry = join(temporarySourceDirectory, "main.lg");
@@ -167,6 +179,7 @@ for (const project of projects) {
         `[package]\nname = "macsad_${projectName.replaceAll("-", "_")}_leaf_test"\nversion = "0.1.0"\nauthors = []\nentry = "src/main.lg"\n\n[test]\nskip_budget = 0\n`,
         { encoding: "utf8", flag: "wx" },
       );
+      }
       result = runLogos(suiteLabel, canonicalTemporary, [
         "test",
         "--quiet",
@@ -240,6 +253,11 @@ for (const project of projects) {
         fail(`${suiteLabel}: malformed or non-passing outcome for ${String(outcome.name)}`);
       }
     }
+    try {
+      verifyPageOutcomes(suite, report.outcomes);
+    } catch (error) {
+      fail(`${suiteLabel}: ${error.message}`);
+    }
     if (report.properties < suite.minimumProperties) {
       fail(`${suiteLabel}: expected at least ${suite.minimumProperties} exercised properties`);
     }
@@ -251,7 +269,7 @@ for (const project of projects) {
     }
 
     process.stdout.write(
-      `LOGOS leaf tests: ${suiteLabel}: ${report.passed} passed, 0 failed, 0 skipped, ${report.proven} proved\n`,
+      `LOGOS tests: ${suiteLabel}: ${report.passed} passed, 0 failed, 0 skipped, ${report.proven} proved\n`,
     );
   }
 }

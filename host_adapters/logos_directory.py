@@ -6,6 +6,7 @@ All machine-specific paths and observations stay in ignored .runtime state.
 """
 import argparse
 import hashlib
+import importlib
 import json
 import os
 from pathlib import Path
@@ -124,6 +125,71 @@ def connect(repo, workspace, relative):
             os.unlink(temporary)
 
 
+
+def candidate_module():
+    if sys.version_info < (3, 11):
+        raise ValueError("built candidate connection requires Python 3.11 or newer")
+    if __package__:
+        return importlib.import_module(".logos_built_candidate", __package__)
+    return importlib.import_module("logos_built_candidate")
+
+
+def connect_built_candidate(repo, candidate, binary_sha256, source_inventory_sha256):
+    checks = candidate_module()
+    verified = checks.verify(candidate, binary_sha256, source_inventory_sha256)
+    root = runtime(repo, create=True)
+    descriptor, temporary = tempfile.mkstemp(prefix=".binary-", dir=root)
+    try:
+        with os.fdopen(descriptor, "wb") as output, Path(verified["binary"]).open("rb") as source:
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                output.write(chunk)
+            output.flush()
+            os.fsync(output.fileno())
+        copied = Path(temporary)
+        if checks.digest(copied) != binary_sha256:
+            raise ValueError("candidate binary changed while connecting")
+        copied.chmod(0o500)
+        snapshot = root / ("largo-" + binary_sha256)
+        if snapshot.exists() or snapshot.is_symlink():
+            checks.regular(snapshot, executable=True)
+            if checks.digest(snapshot) != binary_sha256:
+                raise ValueError("existing candidate snapshot is corrupt")
+            copied.unlink()
+        else:
+            os.replace(copied, snapshot)
+        record = {"schema": checks.SCHEMA, "mode": checks.MODE,
+                  "release_admitted": False, "source_binary_correspondence": "local-build-evidence",
+                  "candidate": verified["candidate"], "workspace": verified["workspace"],
+                  "binary_sha256": binary_sha256, "source_inventory_sha256": source_inventory_sha256,
+                  "snapshot_binary": str(snapshot), "evidence_sha256": verified["evidence_sha256"],
+                  "source_at_connection": verified["source"]}
+        write_json(root / "connection.json", record)
+        return record
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def inspect_built_candidate(root, record):
+    checks = candidate_module()
+    expected = {"schema", "mode", "release_admitted", "source_binary_correspondence", "candidate", "workspace",
+                "binary_sha256", "source_inventory_sha256", "snapshot_binary", "evidence_sha256", "source_at_connection"}
+    if (set(record) != expected or record["schema"] != checks.SCHEMA or record["mode"] != checks.MODE
+            or record["release_admitted"] is not False or record["source_binary_correspondence"] != "local-build-evidence"):
+        raise ValueError("invalid built candidate connection schema")
+    verified = checks.verify(Path(record["candidate"]), record["binary_sha256"], record["source_inventory_sha256"])
+    if (verified["candidate"] != record["candidate"] or verified["workspace"] != record["workspace"]
+            or verified["evidence_sha256"] != record["evidence_sha256"] or verified["source"] != record["source_at_connection"]):
+        raise ValueError("candidate evidence changed; reconnect explicitly")
+    snapshot = root / ("largo-" + record["binary_sha256"])
+    if record["snapshot_binary"] != str(snapshot):
+        raise ValueError("invalid candidate snapshot path")
+    checks.regular(snapshot, executable=True)
+    if checks.digest(snapshot) != record["binary_sha256"]:
+        raise ValueError("candidate snapshot digest mismatch")
+    return {**record, "source_now": verified["source"]}
+
+
 def unique_object(pairs):
     result = {}
     for key, value in pairs:
@@ -141,6 +207,8 @@ def inspect_connection(repo):
         raise ValueError("oversized development connection")
     try:
         record = json.loads(config.read_text(), object_pairs_hook=unique_object)
+        if isinstance(record, dict) and record.get("schema") == "macsad-logos-built-candidate/1":
+            return inspect_built_candidate(root, record)
         keys = {"schema", "mode", "release_admitted", "source_binary_correspondence",
                 "workspace", "binary_relative_path", "binary_sha256", "snapshot_binary",
                 "source_at_connection"}
@@ -176,6 +244,10 @@ def main():
     configure = commands.add_parser("connect")
     configure.add_argument("--workspace", type=Path, required=True)
     configure.add_argument("--binary", default="target/debug/largo")
+    built = commands.add_parser("connect-built-candidate")
+    built.add_argument("--candidate", type=Path, required=True)
+    built.add_argument("--expected-binary-sha256", required=True)
+    built.add_argument("--expected-source-inventory-sha256", required=True)
     commands.add_parser("inspect")
     run = commands.add_parser("run")
     run.add_argument("arguments", nargs=argparse.REMAINDER)
@@ -184,9 +256,12 @@ def main():
     try:
         if arguments.command == "connect":
             record = connect(repo, arguments.workspace, arguments.binary)
+        elif arguments.command == "connect-built-candidate":
+            record = connect_built_candidate(repo, arguments.candidate, arguments.expected_binary_sha256,
+                                             arguments.expected_source_inventory_sha256)
         else:
             record = inspect_connection(repo)
-        if arguments.command in ("connect", "inspect"):
+        if arguments.command in ("connect", "connect-built-candidate", "inspect"):
             print(json.dumps(record, sort_keys=True, indent=2))
             return
         environment = execution_environment(record, os.environ)
