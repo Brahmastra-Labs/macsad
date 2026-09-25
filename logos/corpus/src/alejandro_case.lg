@@ -1,0 +1,32 @@
+# Alejandro original case schema
+
+Import AlejandroIdentity from "./alejandro_identity.lg".
+Import AlejandroJsonFields from "./alejandro_json_fields.lg".
+
+## An AlejandroCase has:
+    a caseId, which is Text.
+    a tier, which is Text.
+    a title, which is Text.
+    an expectation, which is Text.
+    a sourcePath, which is Text.
+    a historical, which is Json.
+## To decodeAlejandroCase (row: Json) -> Result of AlejandroCase and Text:
+    Inspect alejandroOriginalCaseFields(row):
+        When Err (failure):
+            Return a new Err with error failure.
+        When Ok (values):
+            Let caseId be item 1 of values.
+            Let title be item 3 of values.
+            Let expectation be item 5 of values.
+            Let path be item 7 of values.
+            If alejandroCaseIdAccepted(caseId) is equal to false:
+                Return a new Err with error "invalid original case id".
+            If title is equal to "":
+                Return a new Err with error "empty original title".
+            If expectation is not equal to "translate" and expectation is not equal to "degrade" and expectation is not equal to "reject":
+                Return a new Err with error "unknown historical expectation".
+            If alejandroSourcePathAccepted(path, caseId) is equal to false:
+                Return a new Err with error "invalid original source path".
+            Let original be a new AlejandroCase with caseId caseId and tier (item 2 of values) and title title and expectation expectation and sourcePath path and historical row.
+            Return a new Ok with value original.
+    Return a new Err with error "invalid original case".

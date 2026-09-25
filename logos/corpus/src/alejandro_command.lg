@@ -1,0 +1,35 @@
+# LOGOS-only original case preparation command
+
+Import AlejandroCliPolicy from "./alejandro_cli_policy.lg".
+Import AlejandroImporter from "./alejandro_importer.lg".
+Import AlejandroPins from "./alejandro_pins.lg".
+
+## To prepareAlejandroCommand (argv: Seq of Text) -> Result of Json and Text:
+    If alejandroCliArgsAccepted(argv) is equal to false:
+        Return a new Err with error "usage: corpus CASE_ID MANIFEST SOURCE LEDGER APPROVED_PINS".
+    Let raw be a new Seq of Text.
+    Repeat for position from 3 to 6:
+        Inspect read(item position of argv):
+            When Err (failure):
+                Return a new Err with error "corpus input read failed: {failure}".
+            When Ok (contents):
+                If length of text_bytes(contents) is greater than 16777216:
+                    Return a new Err with error "corpus input exceeds admission limit".
+                Push contents to raw.
+    Inspect decodeAlejandroPins(item 4 of raw, item 2 of argv):
+        When Err (failure):
+            Return a new Err with error failure.
+        When Ok (pins):
+            Return prepareAlejandroRevisionColumns(item 1 of raw, item 2 of raw, item 3 of raw, pins).
+    Return a new Err with error "original corpus preparation failed".
+## To alejandroCommandOutput (result: Result of Json and Text) -> Json:
+    Let entries be a new Seq of JEntry.
+    Inspect result:
+        When Ok (draft):
+            Push a new JEntry with key "outcome" and val (a new JStr with s "prepared") to entries.
+            Push a new JEntry with key "revision" and val draft to entries.
+        When Err (failure):
+            Push a new JEntry with key "outcome" and val (a new JStr with s "refused") to entries.
+            Push a new JEntry with key "code" and val (a new JStr with s "corpus_input_rejected") to entries.
+            Push a new JEntry with key "message" and val (a new JStr with s failure) to entries.
+    Return a new JObj with entries entries.

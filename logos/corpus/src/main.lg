@@ -1,0 +1,20 @@
+# Alejandro original problem preparation command
+
+Import AlejandroCase from "./alejandro_case.lg".
+Import AlejandroCatalog from "./alejandro_catalog.lg".
+Import AlejandroCliPolicy from "./alejandro_cli_policy.lg".
+Import AlejandroCommand from "./alejandro_command.lg".
+Import AlejandroEvidencePolicy from "./alejandro_evidence_policy.lg".
+Import AlejandroIdentity from "./alejandro_identity.lg".
+Import AlejandroImporter from "./alejandro_importer.lg".
+Import AlejandroJsonFields from "./alejandro_json_fields.lg".
+Import AlejandroLedger from "./alejandro_ledger.lg".
+Import AlejandroLedgerRow from "./alejandro_ledger_row.lg".
+Import AlejandroManifest from "./alejandro_manifest.lg".
+Import AlejandroPins from "./alejandro_pins.lg".
+Import AlejandroProvenance from "./alejandro_provenance.lg".
+Import AlejandroRevision from "./alejandro_revision.lg".
+Import AlejandroRevisionColumns from "./alejandro_revision_columns.lg".
+
+## Main
+Show jsonSerialize(alejandroCommandOutput(prepareAlejandroCommand(args()))).

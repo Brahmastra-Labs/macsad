@@ -1,0 +1,54 @@
+# Original source provenance admission
+## An AlejandroPins has:
+    a caseId, which is Text.
+    a sourcePath, which is Text.
+    an archiveDigest, which is Text.
+    a manifestDigest, which is Text.
+    a sourceDigest, which is Text.
+    a ledgerDigest, which is Text.
+## To alejandroRawDigest (raw: Text) -> Text:
+    Let digest be sha256(text_bytes(raw)).
+    Let hexBytes be a new Seq of Int.
+    Repeat for byteValue in digest:
+        Push hexDigit(byteValue / 16) to hexBytes.
+        Push hexDigit(byteValue % 16) to hexBytes.
+    Return text_from_bytes(hexBytes).
+## To alejandroDigestAccepted (digest: Text) -> Bool:
+    If length of text_bytes(digest) is not equal to 64:
+        Return false.
+    Repeat for position from 1 to 64:
+        If indexOf("0123456789abcdef", charAt(digest, position)) is equal to 0:
+            Return false.
+    Return true.
+## To alejandroOriginalPinsAccepted (pins: AlejandroPins) -> Bool:
+    If pins's archiveDigest is not equal to "df8cba2c198c771eee2745d0f8c8720f156825648290f8d3ee9c206c8acf8928":
+        Return false.
+    If pins's manifestDigest is not equal to "0fd8b0b552a283edc60351d7139b8cdd4cff1e81bc30aabad0acc818b6abfc8d":
+        Return false.
+    Return alejandroDigestAccepted(pins's sourceDigest) and alejandroDigestAccepted(pins's ledgerDigest).
+## To alejandroRawMatches (raw: Text, expected: Text) -> Bool:
+    If alejandroDigestAccepted(expected) is equal to false:
+        Return false.
+    Return alejandroRawDigest(raw) is equal to expected.
+## To alejandroProvenanceBody (pins: AlejandroPins) -> Json:
+    Let entries be a new Seq of JEntry.
+    Push a new JEntry with key "archive_sha256" and val (a new JStr with s (pins's archiveDigest)) to entries.
+    Push a new JEntry with key "manifest_sha256" and val (a new JStr with s (pins's manifestDigest)) to entries.
+    Push a new JEntry with key "source_sha256" and val (a new JStr with s (pins's sourceDigest)) to entries.
+    Push a new JEntry with key "ledger_sha256" and val (a new JStr with s (pins's ledgerDigest)) to entries.
+    Push a new JEntry with key "archive_relation" and val (a new JStr with s "recorded_origin_not_extraction_verified") to entries.
+    Return a new JObj with entries entries.
+## Test: Source hashes identify exact UTF8 bytes
+    Expect that alejandroRawDigest("abc") is equal to "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad".
+    Expect that alejandroRawMatches("abc\n", alejandroRawDigest("abc")) is equal to false.
+    Expect that alejandroRawMatches("λ", alejandroRawDigest("λ")) is equal to true.
+## Test: Provenance digest syntax rejects malformed pins
+    Repeat for invalid in ["", repeatText("0", 63), repeatText("0", 65), repeatText("A", 64), repeatText("g", 64)]:
+        Expect that alejandroDigestAccepted(invalid) is equal to false.
+    Expect that alejandroDigestAccepted(repeatText("0", 64)) is equal to true.
+## Test: Source digest pins require lowercase hexadecimal
+    For all booleans lowercase:
+        Let mutable digit be "A".
+        If lowercase:
+            Set digit to "a".
+        Expect that alejandroDigestAccepted(repeatText(digit, 64)) is equal to lowercase.

@@ -1,0 +1,118 @@
+# Closed JSON fields shared by original corpus schemas
+## To alejandroStringField (object: Json, key: Text) -> Result of Text and Text:
+    Inspect jsonField(object, key):
+        When Ok (field):
+            Return jsonString(field).
+        When Err (failure):
+            Return a new Err with error failure.
+    Return a new Err with error "missing text field".
+## To alejandroIntField (object: Json, key: Text) -> Result of Int and Text:
+    Inspect jsonField(object, key):
+        When Err (problem):
+            Return a new Err with error problem.
+        When Ok (field):
+            Return jsonInt(field).
+    Return a new Err with error "missing integer field".
+## To alejandroArrayField (object: Json, key: Text) -> Result of Seq of Json and Text:
+    Inspect jsonField(object, key):
+        When Ok (arrayValue):
+            Return jsonArray(arrayValue).
+        When Err (problem):
+            Return a new Err with error problem.
+    Return a new Err with error "missing array field".
+## To alejandroTextFields (row: Json, texts: Seq of Text, lists: Seq of Text, optional: Seq of Text) -> Result of Seq of Text and Text:
+    Let keys be a new Seq of Text.
+    Repeat for group in [texts, lists, optional]:
+        Repeat for key in group:
+            Push key to keys.
+    Inspect jsonNoExtraKeys(row, keys):
+        When Err (failure):
+            Return a new Err with error failure.
+    Let values be a new Seq of Text.
+    Repeat for key in texts:
+        Inspect alejandroStringField(row, key):
+            When Ok (textValue):
+                Push textValue to values.
+            When Err (failure):
+                Return a new Err with error failure.
+    Repeat for key in lists:
+        Inspect alejandroArrayField(row, key):
+            When Err (problem):
+                Return a new Err with error problem.
+            When Ok (items):
+                Repeat for itemValue in items:
+                    Inspect jsonString(itemValue):
+                        When Err (failure):
+                            Return a new Err with error "{key}: {failure}".
+    Return a new Ok with value values.
+## To alejandroStrictObject (raw: Text) -> Result of Json and Text:
+    If length of text_bytes(raw) is greater than 16777216:
+        Return a new Err with error "JSON source exceeds admission limit".
+    Inspect jsonParseStrict(raw):
+        When JErr (failure):
+            Return a new Err with error failure.
+        When JOk (value):
+            Inspect jsonRequireObject(value):
+                When Err (failure):
+                    Return a new Err with error failure.
+                When Ok (entries):
+                    Return a new Ok with value value.
+    Return a new Err with error "invalid source object".
+## Test: Closed case fields preserve historical values
+    Let entries be [a new JEntry with key "expect" and val (a new JStr with s "reject")].
+    Push a new JEntry with key "guards" and val (a new JArr with elems [a new JStr with s "sorryAx"]) to entries.
+    Inspect alejandroTextFields(a new JObj with entries entries, ["expect"], ["guards"], []):
+        When Ok (values):
+            Expect that item 1 of values is equal to "reject".
+        When Err (failure):
+            Expect that false is equal to true.
+## Test: Closed fields reject missing null wrong and extra values
+    Let input1 be text_from_bytes([123, 125]).
+    Let input2 be text_from_bytes([123, 34, 105, 100, 34, 58, 110, 117, 108, 108, 125]).
+    Let input3 be text_from_bytes([123, 34, 105, 100, 34, 58, 55, 125]).
+    Let input4 be text_from_bytes([123, 34, 105, 100, 34, 58, 34, 84, 48, 48, 45, 48, 48, 49, 34, 44, 34, 118, 101, 114, 105, 102, 105, 101, 100, 34, 58, 116, 114, 117, 101, 125]).
+    Repeat for raw in [input1, input2, input3, input4]:
+        Inspect alejandroStrictObject(raw):
+            When Ok (row):
+                Inspect alejandroTextFields(row, ["id"], [], []):
+                    When Ok (values):
+                        Expect that false is equal to true.
+                    When Err (failure):
+                        Expect that length of text_bytes(failure) is greater than 0.
+            When Err (failure):
+                Expect that false is equal to true.
+## Test: Strict corpus JSON rejects duplicate keys and nonobjects
+    Let input1 be text_from_bytes([123, 34, 105, 100, 34, 58, 34, 97, 34, 44, 34, 105, 100, 34, 58, 34, 98, 34, 125]).
+    Let input2 be text_from_bytes([91, 93]).
+    Let input3 be text_from_bytes([110, 117, 108, 108]).
+    Let input4 be text_from_bytes([123]).
+    Let input5 be text_from_bytes([123, 34, 118, 34, 58, 123, 34, 120, 34, 58, 49, 44, 34, 120, 34, 58, 50, 125, 125]).
+    Repeat for raw in [input1, input2, input3, input4, input5]:
+        Inspect alejandroStrictObject(raw):
+            When Ok (value):
+                Expect that false is equal to true.
+            When Err (failure):
+                Expect that length of text_bytes(failure) is greater than 0.
+## Test: Original string fields reject boolean coercion
+    For all booleans supplied:
+        Let row be a new JObj with entries [a new JEntry with key "id" and val (a new JBool with b supplied)].
+        Inspect alejandroStringField(row, "id"):
+            When Err (failure):
+                Expect that length of text_bytes(failure) is greater than 0.
+            When Ok (value):
+                Expect that false is equal to true.
+## To alejandroOriginalCaseFields (row: Json) -> Result of Seq of Text and Text:
+    Let texts be ["id", "tier", "title", "lean", "expect", "target", "path"].
+    Return alejandroTextFields(row, texts, ["evidence", "guards", "oracle", "loss", "diag", "note"], []).
+## Test: Original case schema requires all thirteen fields
+    Let entries be a new Seq of JEntry.
+    Repeat for name in ["id", "tier", "title", "lean", "expect", "target", "path"]:
+        Push a new JEntry with key name and val (a new JStr with s "preserved") to entries.
+    Repeat for name in ["evidence", "guards", "oracle", "loss", "diag", "note"]:
+        Push a new JEntry with key name and val (a new JArr with elems [a new JStr with s "historical"]) to entries.
+    Inspect alejandroOriginalCaseFields(a new JObj with entries entries):
+        When Ok (values):
+            Expect that length of values is equal to 7.
+            Expect that item 4 of values is equal to "preserved".
+        When Err (failure):
+            Expect that false is equal to true.

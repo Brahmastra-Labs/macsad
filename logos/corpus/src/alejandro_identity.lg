@@ -1,0 +1,52 @@
+# Stable original identity and path rules
+## To alejandroCaseIdAccepted (value: Text) -> Bool:
+    Let bytes be text_bytes(value).
+    If length of bytes is not equal to 7:
+        Return false.
+    If item 1 of bytes is not equal to 84:
+        Return false.
+    If item 4 of bytes is not equal to 45:
+        Return false.
+    Repeat for position in [2, 3, 5, 6, 7]:
+        Let digit be item position of bytes.
+        If digit is less than 48:
+            Return false.
+        If digit is greater than 57:
+            Return false.
+    Return true.
+## To alejandroSourcePathAccepted (path: Text, caseId: Text) -> Bool:
+    If alejandroCaseIdAccepted(caseId) is equal to false:
+        Return false.
+    Let parts be split(path, "/").
+    If length of parts is not equal to 3:
+        Return false.
+    If item 1 of parts is not equal to "cases":
+        Return false.
+    Let tierPath be item 2 of parts.
+    Let filename be item 3 of parts.
+    Let tierPrefix be "t" combined with charAt(caseId, 2) combined with charAt(caseId, 3) combined with "_".
+    If indexOf(tierPath, tierPrefix) is not equal to 1:
+        Return false.
+    If indexOf(filename, caseId combined with "_") is not equal to 1:
+        Return false.
+    Let suffixes be split(filename, ".").
+    If item (length of suffixes) of suffixes is not equal to "lean":
+        Return false.
+    Repeat for forbidden in ["..", "\\", ":", "%", text_from_bytes([0])]:
+        If indexOf(path, forbidden) is greater than 0:
+            Return false.
+    Return true.
+## Test: Original case ids stay distinct and canonical
+    Expect that alejandroCaseIdAccepted("T00-001") is equal to true.
+    Repeat for invalid in ["T0-001", "t00-001", "T00_001", "T00-001x", "T0a-001"]:
+        Expect that alejandroCaseIdAccepted(invalid) is equal to false.
+## Test: Original source paths cannot escape their corpus
+    Expect that alejandroSourcePathAccepted("cases/t00_terms/T00-001_original.lean", "T00-001") is equal to true.
+    Repeat for invalid in ["../T00-001_x.lean", "cases/../T00-001_x.lean", "cases/t00/T00-002_x.lean", "cases/t00/T00-001_x.rs"]:
+        Expect that alejandroSourcePathAccepted(invalid, "T00-001") is equal to false.
+## Test: Source paths bind the original case identity
+    For all booleans sameCase:
+        Let mutable selected be "T00-002".
+        If sameCase:
+            Set selected to "T00-001".
+        Expect that alejandroSourcePathAccepted("cases/t00_terms/T00-001_original.lean", selected) is equal to sameCase.

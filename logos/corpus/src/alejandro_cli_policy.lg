@@ -1,0 +1,24 @@
+# Explicit corpus preparation arguments
+## To alejandroCliArgsAccepted (argv: Seq of Text) -> Bool:
+    If length of argv is not equal to 6:
+        Return false.
+    Repeat for position from 2 to 6:
+        Let value be item position of argv.
+        If length of text_bytes(value) is less than 1 or length of text_bytes(value) is greater than 4096:
+            Return false.
+        If indexOf(value, text_from_bytes([0])) is greater than 0:
+            Return false.
+    Return true.
+## Test: Corpus command requires explicit input paths
+    Expect that alejandroCliArgsAccepted(["corpus", "T00-001", "manifest", "source", "ledger", "pins"]) is equal to true.
+    Expect that alejandroCliArgsAccepted(["corpus"]) is equal to false.
+    Expect that alejandroCliArgsAccepted(["corpus", "T00-001", "manifest", "source", "ledger", "pins", "extra"]) is equal to false.
+## Test: Corpus command rejects empty and NUL paths
+    Repeat for invalid in ["", text_from_bytes([0]), repeatText("x", 4097)]:
+        Expect that alejandroCliArgsAccepted(["corpus", "T00-001", "manifest", invalid, "ledger", "pins"]) is equal to false.
+## Test: Corpus path admission respects its exact byte boundary
+    For all booleans bounded:
+        Let mutable size be 4097.
+        If bounded:
+            Set size to 4096.
+        Expect that alejandroCliArgsAccepted(["corpus", "T00-001", "manifest", repeatText("x", size), "ledger", "pins"]) is equal to bounded.

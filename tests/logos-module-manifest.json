@@ -16,25 +16,25 @@
           "code": "unused-import",
           "severity": "warning",
           "file": "src/main.lg",
-          "message": "`Import AdminPolicy` is unused — no name from it is referenced here."
+          "message": "`Import AdminPolicy` is unused \u2014 no name from it is referenced here."
         },
         {
           "code": "unused-import",
           "severity": "warning",
           "file": "src/main.lg",
-          "message": "`Import AdminInvariants` is unused — no name from it is referenced here."
+          "message": "`Import AdminInvariants` is unused \u2014 no name from it is referenced here."
         },
         {
           "code": "unused-import",
           "severity": "warning",
           "file": "src/main.lg",
-          "message": "`Import BoardRowDecoder` is unused — no name from it is referenced here."
+          "message": "`Import BoardRowDecoder` is unused \u2014 no name from it is referenced here."
         },
         {
           "code": "unused-import",
           "severity": "warning",
           "file": "src/main.lg",
-          "message": "`Import BoardWirePolicy` is unused — no name from it is referenced here."
+          "message": "`Import BoardWirePolicy` is unused \u2014 no name from it is referenced here."
         }
       ],
       "domBundle": true,
@@ -82,7 +82,7 @@
           "code": "unused-import",
           "severity": "warning",
           "file": "src/main.lg",
-          "message": "`Import PublicationPolicy` is unused — no name from it is referenced here."
+          "message": "`Import PublicationPolicy` is unused \u2014 no name from it is referenced here."
         }
       ],
       "domBundle": true,
@@ -108,25 +108,25 @@
           "code": "unused-import",
           "severity": "warning",
           "file": "src/main.lg",
-          "message": "`Import GatewayRouting` is unused — no name from it is referenced here."
+          "message": "`Import GatewayRouting` is unused \u2014 no name from it is referenced here."
         },
         {
           "code": "unused-import",
           "severity": "warning",
           "file": "src/main.lg",
-          "message": "`Import GatewayReadPolicy` is unused — no name from it is referenced here."
+          "message": "`Import GatewayReadPolicy` is unused \u2014 no name from it is referenced here."
         },
         {
           "code": "unused-import",
           "severity": "warning",
           "file": "src/main.lg",
-          "message": "`Import SchemaProbePolicy` is unused — no name from it is referenced here."
+          "message": "`Import SchemaProbePolicy` is unused \u2014 no name from it is referenced here."
         },
         {
           "code": "unused-import",
           "severity": "warning",
           "file": "src/main.lg",
-          "message": "`Import CommandEnvelope` is unused — no name from it is referenced here."
+          "message": "`Import CommandEnvelope` is unused \u2014 no name from it is referenced here."
         }
       ],
       "domBundle": false,
@@ -176,43 +176,43 @@
           "code": "unused-import",
           "severity": "warning",
           "file": "src/main.lg",
-          "message": "`Import ProofResultPolicy` is unused — no name from it is referenced here."
+          "message": "`Import ProofResultPolicy` is unused \u2014 no name from it is referenced here."
         },
         {
           "code": "unused-import",
           "severity": "warning",
           "file": "src/main.lg",
-          "message": "`Import ProofWireEncoding` is unused — no name from it is referenced here."
+          "message": "`Import ProofWireEncoding` is unused \u2014 no name from it is referenced here."
         },
         {
           "code": "unused-import",
           "severity": "warning",
           "file": "src/main.lg",
-          "message": "`Import ProofWorker` is unused — no name from it is referenced here."
+          "message": "`Import ProofWorker` is unused \u2014 no name from it is referenced here."
         },
         {
           "code": "unused-import",
           "severity": "warning",
           "file": "src/main.lg",
-          "message": "`Import LeanPolicyFacts` is unused — no name from it is referenced here."
+          "message": "`Import LeanPolicyFacts` is unused \u2014 no name from it is referenced here."
         },
         {
           "code": "unused-import",
           "severity": "warning",
           "file": "src/main.lg",
-          "message": "`Import LeanImportPolicy` is unused — no name from it is referenced here."
+          "message": "`Import LeanImportPolicy` is unused \u2014 no name from it is referenced here."
         },
         {
           "code": "unused-import",
           "severity": "warning",
           "file": "src/main.lg",
-          "message": "`Import LeanReplayPolicy` is unused — no name from it is referenced here."
+          "message": "`Import LeanReplayPolicy` is unused \u2014 no name from it is referenced here."
         },
         {
           "code": "unused-import",
           "severity": "warning",
           "file": "src/main.lg",
-          "message": "`Import LeanResultPolicy` is unused — no name from it is referenced here."
+          "message": "`Import LeanResultPolicy` is unused \u2014 no name from it is referenced here."
         }
       ],
       "domBundle": false,
@@ -272,6 +272,153 @@
           "minimumProven": 1
         }
       ]
+    },
+    {
+      "name": "corpus",
+      "directory": "logos/corpus",
+      "entry": "src/main.lg",
+      "logicalRoot": "src/alejandro_command.lg",
+      "entryClosureLock": "pinned-transitive-scope-workaround",
+      "testLeaves": [
+        {
+          "path": "src/alejandro_cli_policy.lg",
+          "expectedTests": [
+            "Corpus command requires explicit input paths",
+            "Corpus command rejects empty and NUL paths",
+            "Corpus path admission respects its exact byte boundary"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/alejandro_evidence_policy.lg",
+          "expectedTests": [
+            "Recorded choices require whole exact values",
+            "Current ledger statuses cannot introduce verified state"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/alejandro_identity.lg",
+          "expectedTests": [
+            "Original case ids stay distinct and canonical",
+            "Original source paths cannot escape their corpus",
+            "Source paths bind the original case identity"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/alejandro_json_fields.lg",
+          "expectedTests": [
+            "Closed case fields preserve historical values",
+            "Closed fields reject missing null wrong and extra values",
+            "Strict corpus JSON rejects duplicate keys and nonobjects",
+            "Original string fields reject boolean coercion",
+            "Original case schema requires all thirteen fields"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/alejandro_provenance.lg",
+          "expectedTests": [
+            "Source hashes identify exact UTF8 bytes",
+            "Provenance digest syntax rejects malformed pins",
+            "Source digest pins require lowercase hexadecimal"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        }
+      ],
+      "allowedDiagnostics": [
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import AlejandroCase` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import AlejandroCatalog` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import AlejandroCliPolicy` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import AlejandroEvidencePolicy` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import AlejandroIdentity` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import AlejandroImporter` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import AlejandroJsonFields` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import AlejandroLedger` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import AlejandroLedgerRow` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import AlejandroManifest` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import AlejandroPins` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import AlejandroProvenance` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import AlejandroRevision` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import AlejandroRevisionColumns` is unused \u2014 no name from it is referenced here."
+        }
+      ],
+      "domBundle": false
     }
   ]
 }

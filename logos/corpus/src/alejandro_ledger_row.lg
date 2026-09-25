@@ -1,0 +1,25 @@
+# Recorded declaration evidence schema
+
+Import AlejandroJsonFields from "./alejandro_json_fields.lg".
+Import AlejandroEvidencePolicy from "./alejandro_evidence_policy.lg".
+
+## To validateAlejandroDeclaration (row: Json) -> Result of Text and Text:
+    Let texts be ["lean", "lean_kind", "lean_type", "status", "test", "logos", "why"].
+    Inspect alejandroTextFields(row, texts, ["lean_levels", "lean_axioms"], ["refusal"]):
+        When Err (problem):
+            Return a new Err with error problem.
+        When Ok (values):
+            Let name be item 1 of values.
+            If name is equal to "":
+                Return a new Err with error "empty original declaration name".
+            Let kind be item 2 of values.
+            If alejandroRecordedChoice(kind, ["def", "theorem", "opaque", "inductive", "ctor", "axiom", "rec"]) is equal to false:
+                Return a new Err with error "unknown original declaration kind".
+            If alejandroRecordedChoice(item 4 of values, ["bridged", "open", "refused"]) is equal to false:
+                Return a new Err with error "unknown recorded ledger status".
+            If jsonHas(row, "refusal"):
+                Inspect jsonRequireObject(jsonGet(row, "refusal")):
+                    When Err (failure):
+                        Return a new Err with error "recorded refusal must be an object".
+            Return a new Ok with value name.
+    Return a new Err with error "invalid declaration observation".
