@@ -90,6 +90,7 @@ jobs:
           node scripts/ci/verify-firebat2-contract.mjs
           bash database/tests/data_workers_contract.sh
           python3 -m unittest discover --start-directory host_adapters/tests --pattern 'test_*.py'
+          python3 -m unittest discover --start-directory database/tests --pattern 'test_lean_pg16*.py'
 
       - name: Render the complete Compose model
         run: |
@@ -159,7 +160,9 @@ jobs:
           bash database/apply_migrations.sh
           psql --no-psqlrc --set=ON_ERROR_STOP=1 --file=database/verify.sql
           psql --no-psqlrc --set=ON_ERROR_STOP=1 --file=database/tests/0001_invariants.sql
-          MACSAD_TEST_ADMIN_USER=postgres bash database/tests/data_workers_roundtrip.sh
+          MACSAD_TEST_ADMIN_USER=postgres timeout --signal=TERM --kill-after=15s 300s \
+            python3 database/tests/lean_attempt_pg16.py \
+              --evidence-dir "${RUNNER_TEMP}/macsad-pg16-evidence"
 
       - name: Prove service-role defaults and viewer write denial
         run: |
@@ -176,6 +179,15 @@ jobs:
             printf 'macsad_viewer unexpectedly performed a write\n' >&2
             exit 1
           fi
+
+      - name: Retain exact PostgreSQL cohort evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: macsad-pg16-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/macsad-pg16-evidence
+          if-no-files-found: error
+          retention-days: 14
 
       - name: State the evidence boundary
         run: |
