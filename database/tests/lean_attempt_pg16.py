@@ -169,7 +169,7 @@ class Harness:
     def verifier_negative_controls(self, staged, env):
         verify = PSQL + ['--file', str(staged / 'database/verify.sql')]
         # Unrelated app-executable function still refuses. No broad prefix grant.
-        self.sql('SET ROLE macsad_owner; CREATE FUNCTION macsad.lean_acl_unapproved_control() RETURNS integer LANGUAGE sql AS $$SELECT 1$$; GRANT EXECUTE ON FUNCTION macsad.lean_acl_unapproved_control() TO macsad_app;', env)
+        self.sql('SET ROLE macsad_owner; CREATE FUNCTION macsad.lean_acl_unapproved_control() RETURNS integer LANGUAGE sql AS $$SELECT 1$$; REVOKE ALL ON FUNCTION macsad.lean_acl_unapproved_control() FROM PUBLIC; GRANT EXECUTE ON FUNCTION macsad.lean_acl_unapproved_control() TO macsad_app;', env)
         self.run(verify, env, expected_error='macsad_app can execute a routine outside the approved API')
         self.sql('SET ROLE macsad_owner; DROP FUNCTION macsad.lean_acl_unapproved_control()', env)
         # A missing expected permission must not disappear from a NOT IN list.
