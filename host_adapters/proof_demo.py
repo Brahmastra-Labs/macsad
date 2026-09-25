@@ -20,6 +20,8 @@ from pathlib import Path
 from host_adapters.proof_process import (
     ProcessObservation, proof_policy_arguments, read_source, run_bounded,
 )
+from host_adapters.local_cas import LocalCAS
+from host_adapters.worker_artifacts import capture_published_evidence
 
 
 REPOSITORY = Path(__file__).resolve().parents[1]
@@ -31,6 +33,10 @@ PROJECT_FILES = (
 
 class EvidencePublicationError(RuntimeError):
     """Published bytes are visible, but final directory durability is uncertain."""
+
+
+class EvidenceCaptureError(RuntimeError):
+    """Local evidence exists; CAS capture did not return a durable index."""
 
 
 def prepare_submission(source, expected):
@@ -134,7 +140,8 @@ def _admitted_inputs(workspace):
     return environment, wrapper, lock, lock_bytes, wrapper_bytes, project
 
 
-def run_demo(source, expected, output_directory, workspace):
+def run_demo(source, expected, output_directory, workspace, *, cas_directory=None,
+             cas_max_object_bytes=8 * 1024 * 1024, cas_max_total_bytes=64 * 1024 * 1024):
     content, expected = prepare_submission(source, expected)
     output_directory = Path(output_directory)
     if output_directory.is_symlink() or not output_directory.is_dir():
@@ -142,7 +149,10 @@ def run_demo(source, expected, output_directory, workspace):
     output_directory = output_directory.resolve(strict=True)
     workspace = Path(workspace).resolve(strict=True)
     environment, wrapper, lock, lock_bytes, wrapper_bytes, project = _admitted_inputs(workspace)
-    adapter_sources = {name: read_source(REPOSITORY / "host_adapters" / name) for name in ("proof_demo.py", "proof_process.py")}
+    adapter_names = ["proof_demo.py", "proof_process.py"]
+    if cas_directory is not None:
+        adapter_names += ["local_cas.py", "worker_artifacts.py"]
+    adapter_sources = {name: read_source(REPOSITORY / "host_adapters" / name) for name in adapter_names}
 
     def invoke(arguments, directory):
         def verify_identity():
@@ -206,8 +216,16 @@ def run_demo(source, expected, output_directory, workspace):
         }
         write_new(pending / "result.json", _json_bytes(summary))
         destination = publish_evidence(pending, run_name, {"schema": "macsad-proof-evidence/1", "request": request})
+        if cas_directory is not None:
+            try:
+                with LocalCAS(cas_directory, max_bytes=cas_max_object_bytes) as store:
+                    index = capture_published_evidence(destination, store, max_total_bytes=cas_max_total_bytes)
+                return dict(summary, evidence_directory=str(destination),
+                            cas_file_set={"sha256": index.sha256, "bytes": index.bytes})
+            except (OSError, ValueError, RuntimeError) as error:
+                raise EvidenceCaptureError("CAS capture incomplete; published evidence retained at " + str(destination)) from error
         return dict(summary, evidence_directory=str(destination))
-    except EvidencePublicationError:
+    except (EvidencePublicationError, EvidenceCaptureError):
         raise
     except Exception as error:
         # Retain partial evidence for diagnosis; never present it as a completed run.
@@ -219,12 +237,17 @@ def main(argv=None):
     parser.add_argument("source", type=Path, help="self-contained UTF-8 LOGOS file (maximum 32768 bytes)")
     parser.add_argument("--target", action="append", required=True, help="exact theorem name, repeated in declaration order")
     parser.add_argument("--output-directory", type=Path, required=True, help="existing private directory for new evidence bundles")
+    parser.add_argument("--cas-directory", type=Path, help="optional existing private CAS; persistence only, not proof acceptance")
+    parser.add_argument("--cas-max-object-bytes", type=int, default=8 * 1024 * 1024)
+    parser.add_argument("--cas-max-total-bytes", type=int, default=64 * 1024 * 1024)
     parser.add_argument("--logos-workspace", type=Path, default=os.environ.get("LOGOS_WORKSPACE"), help="checkout matching the repository's admitted toolchain lock")
     options = parser.parse_args(argv)
     if options.logos_workspace is None:
         parser.error("--logos-workspace or LOGOS_WORKSPACE is required")
     try:
-        result = run_demo(options.source, options.target, options.output_directory, options.logos_workspace)
+        result = run_demo(options.source, options.target, options.output_directory, options.logos_workspace,
+                          cas_directory=options.cas_directory, cas_max_object_bytes=options.cas_max_object_bytes,
+                          cas_max_total_bytes=options.cas_max_total_bytes)
     except (OSError, ValueError, RuntimeError) as error:
         parser.exit(2, "error: " + str(error) + "\n")
     print(_json_bytes(result).decode("utf-8"), end="")
