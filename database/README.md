@@ -91,3 +91,54 @@ bash database/tests/data_workers_contract.sh
 ```
 
 `stack.sh up` stages reviewed inputs, builds the images, runs the one-shot migrator, starts the four services, and performs endpoint plus schema checks. `stack.sh verify` proves the exact three tailnet bindings, absence of a database host port, admin/public/pgAdmin health, the `macsad_viewer` login and read-only default, schema version, and write denial after explicitly disabling that default. The migration runner remains safe to rerun: with no pending migrations it only revalidates history and the live schema.
+
+
+## Lean transaction cohort in Foundation
+
+Migration 0002 adds the fixed Lean command API; 0003 corrects deadline admission
+without rewriting the 0002 bytes or ledger. PostgreSQL remains the transaction
+authority; these routines do not authenticate browser fields or decide proofs.
+The catalog verifier admits only the five exact routine signatures/owners,
+return types, languages, volatility, search paths and privileges.
+
+Foundation uses its existing isolated PostgreSQL 16 service and role bootstrap.
+After the ordinary clean-database migrate/repeat/verify/invariant checks, it runs
+`database/tests/lean_attempt_pg16.py` under a 300-second bound. That cohort creates
+only random owned scratch databases. It never starts a service or creates roles.
+It runs the original complete worker roundtrip and representative fixture at
+schema1, the original schema2 transaction/concurrency/ACL and recovery controls,
+then upgrades with 0003 and runs eleven deadline controls plus schema3 recovery.
+Historical ledger rows must remain identical. Fresh schema2 and schema3 each
+receive unchanged invariant checks and exact full-table recovery comparisons.
+Original fixture assertions are not rewritten for the newer schema.
+
+With the existing libpq test connection and a permitted test-admin identity:
+
+```sh
+python3 -m unittest discover --start-directory database/tests --pattern 'test_lean_pg16*.py'
+MACSAD_TEST_ADMIN_USER=postgres timeout --signal=TERM --kill-after=15s 300s \
+  python3 database/tests/lean_attempt_pg16.py --admission-version 3 \
+    --evidence-dir /absolute/new-external-evidence-directory
+```
+
+The evidence parent must exist outside the checkout and its child must not
+exist. It records source hashes, command logs, exact restore comparisons and
+`result.json`; successful cleanup and all results are required. Foundation
+retains this directory for 14 days, including failed attempts. Upload is not a
+passing result. The full local quality gate invokes the same version-aware
+cohort when DATABASE_URL is supplied; MACSAD_TEST_ADMIN_USER must have the
+existing test-cluster create/drop-database and per-database role-setting rights.
+
+`--admission-version 2` is a bounded regression reproduction, using the identical
+new assertions after the unchanged historical 0002. It is expected to fail at
+the expired-assignment counterexample; it never converts failure into success.
+Foundation explicitly selects version3. An earlier setup failure is not the
+intended RED. All migrations must be supplied even for that reproduction; the
+cohort stages only the selected historical prefix into its owned databases.
+
+The existing subprocess/direct-child cleanup semantics are retained. Outer
+cancellation or a hard timeout can prevent nested cleanup; Foundation's runner
+and service are disposable. This does not claim a general descendant-process
+sandbox. No arbitrary process scan, process-group kill, backend termination or
+forced database drop is added. Application/deployment must still consume the
+committed command result through the separately reviewed LOGOS client.

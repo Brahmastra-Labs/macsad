@@ -10,6 +10,10 @@ DECLARE
   ledger_count bigint;
   ledger_max bigint;
   database_owner name;
+  approved_api oid[];
+  api_schema_version bigint;
+  expected_api record;
+  actual_api record;
 BEGIN
   IF current_setting('server_version_num')::integer < 160000
      OR current_setting('server_version_num')::integer >= 170000 THEN
@@ -522,14 +526,50 @@ BEGIN
     RAISE EXCEPTION 'macsad_app has UPDATE outside the approved state-bearing tables';
   END IF;
 
+  -- Versioned, exact API identities: missing expected routines fail closed.
+  approved_api := ARRAY[to_regprocedure(
+    'macsad.record_budget_entry(uuid,macsad.budget_entry_kind,numeric,text,macsad.sha256_digest,uuid,uuid,uuid,uuid,uuid,text)'
+  )::oid];
+  IF approved_api[1] IS NULL THEN
+    RAISE EXCEPTION 'approved budget API is missing';
+  END IF;
+  SELECT max(version) INTO api_schema_version FROM macsad_meta.schema_migration;
+  IF api_schema_version >= 2 THEN
+    FOR expected_api IN SELECT * FROM (VALUES
+      ('macsad.lean_digest(jsonb)', 'macsad.sha256_digest', 'sql', 'i', 'search_path=pg_catalog'),
+      ('macsad.lean_begin_command(uuid,uuid,text,text,text,jsonb)', 'macsad.command_receipt', 'plpgsql', 'v', 'search_path=pg_catalog, macsad'),
+      ('macsad.lean_finish_command(uuid,uuid,jsonb,boolean)', 'jsonb', 'plpgsql', 'v', 'search_path=pg_catalog, macsad'),
+      ('macsad.lean_submit(uuid,uuid,uuid,bigint,text,uuid,text,uuid,macsad.sha256_digest,jsonb,macsad.sha256_digest)', 'jsonb', 'plpgsql', 'v', 'search_path=pg_catalog, macsad'),
+      ('macsad.lean_advance(uuid,uuid,uuid,bigint,text,text,bigint,integer,jsonb,uuid[],macsad.sha256_digest)', 'jsonb', 'plpgsql', 'v', 'search_path=pg_catalog, macsad')
+    ) AS required(signature, return_type, language_name, volatility, search_path_setting)
+    LOOP
+      SELECT p.*, language.lanname INTO actual_api
+      FROM pg_proc p JOIN pg_language language ON language.oid=p.prolang
+      WHERE p.oid=to_regprocedure(expected_api.signature);
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'approved Lean API is missing: %', expected_api.signature;
+      END IF;
+      IF actual_api.prosecdef OR actual_api.prokind <> 'f'
+         OR actual_api.proowner <> 'macsad_owner'::regrole
+         OR actual_api.prorettype <> to_regtype(expected_api.return_type)
+         OR actual_api.lanname <> expected_api.language_name
+         OR actual_api.provolatile::text <> expected_api.volatility
+         OR actual_api.proconfig IS DISTINCT FROM ARRAY[expected_api.search_path_setting]
+         OR NOT has_function_privilege('macsad_app',actual_api.oid,'EXECUTE')
+         OR NOT has_function_privilege('macsad_migrator',actual_api.oid,'EXECUTE')
+         OR has_function_privilege('macsad_reader',actual_api.oid,'EXECUTE') THEN
+        RAISE EXCEPTION 'approved Lean API contract differs: %', expected_api.signature;
+      END IF;
+      approved_api := array_append(approved_api,actual_api.oid);
+    END LOOP;
+  END IF;
+
   SELECT count(*) INTO bad_count
   FROM pg_proc AS p
   JOIN pg_namespace AS n ON n.oid = p.pronamespace
   WHERE n.nspname IN ('macsad', 'macsad_meta')
     AND has_function_privilege('macsad_app', p.oid, 'EXECUTE')
-    AND p.oid IS DISTINCT FROM to_regprocedure(
-      'macsad.record_budget_entry(uuid,macsad.budget_entry_kind,numeric,text,macsad.sha256_digest,uuid,uuid,uuid,uuid,uuid,text)'
-    );
+    AND NOT (p.oid = ANY(approved_api));
 
   IF bad_count <> 0 THEN
     RAISE EXCEPTION 'macsad_app can execute a routine outside the approved API';

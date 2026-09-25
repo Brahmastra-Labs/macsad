@@ -82,6 +82,7 @@ bash database/tests/data_workers_contract.sh
 
 printf '== Mechanical development adapter tests ==\n'
 python3 -m unittest discover --start-directory host_adapters/tests --pattern 'test_*.py'
+python3 -m unittest discover --start-directory database/tests --pattern 'test_lean_pg16*.py'
 
 logos_project_output="$(node scripts/logos-project.mjs projects)"
 [[ -n "${logos_project_output}" ]] || die 'module manifest returned no LOGOS projects'
@@ -157,6 +158,7 @@ database_evidence='not-run'
 if [[ -n "${DATABASE_URL:-}" ]]; then
   printf '== Fresh PostgreSQL 16 migration and invariant gate ==\n'
   MACSAD_REPOSITORY_ROOT="${REPOSITORY_ROOT}" \
+    MACSAD_PG_EVIDENCE="${TEMP_ROOT}/pg16-evidence" \
     DATABASE_URL="${DATABASE_URL}" node --input-type=module <<'NODE'
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
@@ -247,12 +249,15 @@ run("psql", [
   `--dbname=${databaseName}`,
   `--file=${join(repositoryRoot, "database", "tests", "0001_invariants.sql")}`,
 ]);
-run("bash", [join(repositoryRoot, "database", "workers", "seed_representative_v1.sh")]);
-run("bash", [
-  join(repositoryRoot, "database", "tests", "representative_v1_field_coverage.sh"),
+// The original v1 fixture and all its assertions run at v1 inside the cohort,
+// before forward upgrades. Never seed that historical fixture directly at v3.
+run("timeout", [
+  "--signal=TERM", "--kill-after=15s", "300s", "python3",
+  join(repositoryRoot, "database", "tests", "lean_attempt_pg16.py"),
+  "--admission-version", "3", "--evidence-dir", process.env.MACSAD_PG_EVIDENCE,
 ]);
 NODE
-  database_evidence='clean-migrate-repeat-verify-invariants-representative-field-coverage'
+  database_evidence='clean-migrate-repeat-verify-invariants-v1-fixtures-v2-v3-concurrency-recovery'
 elif [[ "${MACSAD_REQUIRE_DATABASE:-0}" == '1' ]]; then
   die 'MACSAD_REQUIRE_DATABASE=1 but DATABASE_URL is unset'
 else
