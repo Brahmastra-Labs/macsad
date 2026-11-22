@@ -1,0 +1,43 @@
+# Attempt record
+
+Import VerdictRecord from "./verdict_record.lg".
+
+One model call and what became of it, and a lemma of the shared library. Both
+carry lists or nested records, so the derive gives them encoders and the
+decoders are written by hand in `records_decode.lg` (see `LOGOS_ISSUES.md`,
+issue 1).
+
+## Note
+An attempt: who asked which model under which strategy, the hashes of what was
+asked, answered and checked, the approach it took, and the verdict and cost.
+
+## An Attempt has:
+    an id, which is Text.
+    a unitId, which is Text.
+    a problemId, which is Text.
+    a contributor, which is Text.
+    a model, which is Text.
+    a strategyId, which is Text.
+    a promptSha, which is Text.
+    a responseSha, which is Text.
+    a documentSha, which is Text.
+    an approachFingerprint, which is Text.
+    a verdict, which is Verdict.
+    a costMicros, which is Int.
+    a startedAt, which is Int.
+    a finishedAt, which is Int.
+
+## Note
+A lemma, deduplicated by the hash of its statement: `verified` when its proof
+passed the policy, `retracted` if the verifier withdraws it. An axiom a
+decomposition leaves open is a child node, not a lemma.
+
+## A Lemma has:
+    an id, which is Text.
+    a name, which is Text.
+    a statement, which is Text.
+    a statementSha, which is Text.
+    a problemId, which is Text.
+    a documentSha, which is Text.
+    a status, which is Text.
+    an axioms, which is Seq of Text.

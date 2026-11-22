@@ -1,0 +1,70 @@
+# Replay
+
+Import HostFiles from "./host_files.lg".
+Import ChatRequest from "./chat_request.lg".
+Import ChatReply from "./chat_reply.lg".
+
+The replay provider: model answers read from recordings instead of bought. A
+recording is keyed by the prompt hash over the exact request body, so it answers
+exactly one question — this model, these messages, this temperature and token
+allowance — and a changed question finds no recording rather than an old answer.
+A directory holds `<hash>.json`, the reply in OpenRouter's own shape (read by the
+same `parseChatReply` a live one is, cost and all), and `<hash>.request.json`,
+the request it answers. A prompt without a recording leaves its request behind
+and stops with its hash, so the answer can be recorded and the run repeated.
+
+## To replayReplyPath (dir: Text, sha: Text) -> Text:
+    Return dir + "/" + sha + ".json".
+
+## To replayRequestPath (dir: Text, sha: Text) -> Text:
+    Return dir + "/" + sha + ".request.json".
+
+## Note
+A reply in OpenRouter's shape, for authoring a recording: the answer as the first
+choice's message, its token counts and its cost in micro-dollars.
+
+## To replyDocument (id: Text, model: Text, content: Text, promptTokens: Int, completionTokens: Int, costMicros: Int) -> Text:
+    Let message be a new JObj with entries [a new JEntry with key "role" and val (a new JStr with s "assistant"), a new JEntry with key "content" and val (a new JStr with s content)].
+    Let choice be a new JObj with entries [a new JEntry with key "finish_reason" and val (a new JStr with s "stop"), a new JEntry with key "message" and val message].
+    Let mutable cost be "0".
+    If costMicros is greater than 0:
+        Set cost to jsonRenderDec(costMicros, 0 - 6).
+    Let counts be "\"prompt_tokens\":{promptTokens},\"completion_tokens\":{completionTokens},\"cost\":" + cost.
+    Let head be "{{\"id\":" + jsonQuote(id) + ",\"model\":" + jsonQuote(model) + ",\"object\":\"chat.completion\",\"choices\":[" + jsonSerialize(choice) + "]".
+    Return head + ",\"usage\":{{" + counts + "}}}}".
+
+## Note
+The recorded answer to `request`, or the stop naming the missing recording after
+writing down the request it would answer.
+
+## To replayComplete (dir: Text, request: ChatRequest) -> Result of ChatReply and Text:
+    Let sha be promptSha(request).
+    Let path be replayReplyPath(dir, sha).
+    If pathExists(path):
+        Inspect readText(path):
+            When Err (e):
+                Return a new Err with error "the recording {path} is unreadable: " + e.
+            When Ok (text):
+                Inspect parseChatReply(text):
+                    When Err (e):
+                        Return a new Err with error "the recording {path} is not a reply: " + e.
+                    When Ok (reply):
+                        Return a new Ok with value reply.
+    Let made be ensureDir(dir).
+    Let written be writeText(replayRequestPath(dir, sha), chatRequestJson(request)).
+    Return a new Err with error "no recorded reply for prompt {sha}; its request is at " + replayRequestPath(dir, sha).
+
+## Note
+A recording made: the reply to `request` under its prompt hash, the request
+beside it. Answers the hash.
+
+## To recordReply (dir: Text, request: ChatRequest, replyText: Text) -> Result of Text and Text:
+    Let sha be promptSha(request).
+    Let made be ensureDir(dir).
+    Let wrote be writeText(replayRequestPath(dir, sha), chatRequestJson(request)).
+    Inspect writeText(replayReplyPath(dir, sha), replyText):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (done):
+            Return a new Ok with value sha.
+    Return a new Err with error "unrecorded".

@@ -1,0 +1,94 @@
+# Model price
+
+Import WireRead from "./wire_read.lg".
+Import WireNumber from "./wire_number.lg".
+Import Budget from "./budget.lg".
+
+A model's price as the factory computes with it, from OpenRouter's public model
+list, and what a call is held at and charged. Prices are micro-dollars per
+million tokens (`0.0000025` dollars a token is 2,500,000); where OpenRouter lists
+a dearer tier for long prompts (`overrides`), the dearest is kept, because a
+reservation is a worst case. A router whose price is not fixed (`-1`) is refused.
+
+## A ModelPrice has:
+    an id, which is Text.
+    a promptPerMTok, which is Int.
+    a completionPerMTok, which is Int.
+    a requestMicros, which is Int.
+    a contextLength, which is Int.
+    a maxCompletionTokens, which is Int.
+
+## To pricePerMTok (v: Json, what: Text) -> Result of Int and Text:
+    Inspect v:
+        When JStr (s):
+            If startsWith(trim(s), "-"):
+                Return a new Err with error "the {what} price is not fixed ({s})".
+            Return decimalTextScaledCeil(s, 12).
+        When JNull:
+            Return a new Ok with value 0.
+        Otherwise:
+            Return a new Err with error "the {what} price is not a decimal string".
+    Return a new Err with error "unreadable price".
+
+## Note
+The dearest of a price listed in the base pricing and every override tier.
+
+## To dearest (pricing: Json, what: Text) -> Result of Int and Text:
+    Let mutable tiers be [pricing].
+    Inspect jsonGet(pricing, "overrides"):
+        When JArr (more):
+            Set tiers to tiers + more.
+        Otherwise:
+            Set tiers to tiers.
+    Let mutable most be 0.
+    Repeat for tier in tiers:
+        If jsonHas(tier, what):
+            Inspect pricePerMTok(jsonGet(tier, what), what):
+                When Err (e):
+                    Return a new Err with error e.
+                When Ok (p):
+                    If p is greater than most:
+                        Set most to p.
+    Return a new Ok with value most.
+
+## Note
+The price of `modelId` in an OpenRouter model list document.
+
+## To priceOf (modelsJson: Text, modelId: Text) -> Result of ModelPrice and Text:
+    Inspect parseStrict(modelsJson):
+        When Err (e):
+            Return a new Err with error "the model list is not JSON: " + e.
+        When Ok (v):
+            Inspect jsonGet(v, "data"):
+                When JArr (models):
+                    Repeat for m in models:
+                        If textAt(m, "id") is equal to modelId:
+                            Return modelPriceOf(m).
+                    Return a new Err with error "OpenRouter lists no model {modelId}".
+                Otherwise:
+                    Return a new Err with error "the model list has no data array".
+    Return a new Err with error "unreadable model list".
+
+## Note
+One model entry's price.
+
+## To modelPriceOf (m: Json) -> Result of ModelPrice and Text:
+    Let id be textAt(m, "id").
+    Let pricing be jsonGet(m, "pricing").
+    Let mutable found be a new Seq of Int.
+    Repeat for what in ["prompt", "completion", "request"]:
+        Inspect dearest(pricing, what):
+            When Err (e):
+                Return a new Err with error id + ": " + e.
+            When Ok (p):
+                Push p to found.
+    Let mutable price be a new ModelPrice with id id and promptPerMTok (item 1 of found) and completionPerMTok (item 2 of found) and requestMicros ceilDiv(item 3 of found, 1000000).
+    Set price's contextLength to intAt(m, "context_length").
+    Set price's maxCompletionTokens to intAt(jsonGet(m, "top_provider"), "max_completion_tokens").
+    Return a new Ok with value price.
+
+## Note
+A free price: a recording or a mock answer costs nothing to ask.
+
+## To freePrice (model: Text) -> ModelPrice:
+    Return a new ModelPrice with id model and promptPerMTok 0 and completionPerMTok 0 and requestMicros 0 and contextLength 0 and maxCompletionTokens 0.

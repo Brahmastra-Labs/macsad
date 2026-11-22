@@ -1,0 +1,120 @@
+# Ref tactics compute
+
+Import RefExample from "./ref_example.lg".
+
+The tactics that compute, rewrite and decide. Every document here is checked by
+the kernel in `factory selftest --live`.
+
+## To exampleRfl () -> RefExample:
+    Let lead be "`rfl` closes `Eq A x y` when `x` and `y` compute to the same value; `Nat_add` recurses on its SECOND argument, so `Nat_add n Zero` computes to `n`:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem two_plus_two : Eq Nat (Nat_add (Succ (Succ Zero)) (Succ (Succ Zero))) (Succ (Succ (Succ (Succ Zero))))" to doc.
+    Push "  := by rfl." to doc.
+    Push "" to doc.
+    Push "Theorem add_zero_right : forall (n : Nat), Eq Nat (Nat_add n Zero) n := by intro n; rfl." to doc.
+    Return positiveExample("rfl", lead, join(doc, "\n")).
+
+## To exampleInduction () -> RefExample:
+    Let lead be "`induction n as [ | k ih]` leaves the `Zero` case, then the `Succ k` case with `ih`; `change` restates a goal as something it computes to, and `rw [h]` rewrites by an equation:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem zero_add : forall (n : Nat), Eq Nat (Nat_add Zero n) n := by intro n; induction n as [ | k ih]; rfl;" to doc.
+    Push "  change Eq Nat (Succ (Nat_add Zero k)) (Succ k); rw [ih]; rfl." to doc.
+    Return positiveExample("induction", lead, join(doc, "\n")).
+
+## To exampleRwReverse () -> RefExample:
+    Let lead be "`rw [<- h]` rewrites right to left:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem rewrite_back : forall (a : Nat), forall (b : Nat), Eq Nat a b -> Eq Nat (Succ b) (Succ a) := by intro" to doc.
+    Push "  a b h; rw [<- h]; rfl." to doc.
+    Return positiveExample("rw_reverse", lead, join(doc, "\n")).
+
+## To exampleSubst () -> RefExample:
+    Let lead be "`subst h` replaces a variable by what `h` equates it with:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem sym_by_subst : forall (a : Nat), forall (b : Nat), Eq Nat a b -> Eq Nat b a := by intro a b h; subst" to doc.
+    Push "  h; rfl." to doc.
+    Return positiveExample("subst", lead, join(doc, "\n")).
+
+## To exampleInjection () -> RefExample:
+    Let lead be "`injection h as [e]` takes `Succ a = Succ b` to `a = b`:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem succ_inj_example : forall (a : Nat), forall (b : Nat), Eq Nat (Succ a) (Succ b) -> Eq Nat a b := by" to doc.
+    Push "  intro a b h; injection h as [e]; exact e." to doc.
+    Return positiveExample("injection", lead, join(doc, "\n")).
+
+## To exampleCasesImpossible () -> RefExample:
+    Let lead be "`cases h` on an impossible equation or predicate closes the goal — no constructor can have built it:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem succ_ne_zero : forall (n : Nat), Not (Eq Nat (Succ n) Zero) := by intro n h; cases h." to doc.
+    Push "" to doc.
+    Push "Inductive Even : Nat -> Prop := even_zero : Even Zero | even_ss : forall (n : Nat), Even n -> Even (Succ (Succ" to doc.
+    Push "  n))." to doc.
+    Push "" to doc.
+    Push "Theorem one_not_even : Not (Even (Succ Zero)) := by intro h; cases h." to doc.
+    Return positiveExample("cases_impossible", lead, join(doc, "\n")).
+
+## To exampleDecide () -> RefExample:
+    Let lead be "`decide` settles a closed decidable proposition by computing — equalities, `Not`, `Nat_le`, `Nat_lt` on numbers:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem two_ne_one : Not (Eq Nat (Succ (Succ Zero)) (Succ Zero)) := by decide." to doc.
+    Push "" to doc.
+    Push "Theorem one_le_two : Nat_le (Succ Zero) (Succ (Succ Zero)) := by decide." to doc.
+    Return positiveExample("decide", lead, join(doc, "\n")).
+
+## To exampleCalc () -> RefExample:
+    Let lead be "`calc [Eq A a b := p, Eq A _ c := q]` chains equations; `_` is the end of the step before:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem trans3 : forall (a : Nat), forall (b : Nat), forall (c : Nat), Eq Nat a b -> Eq Nat b c -> Eq Nat a c" to doc.
+    Push "  := by intro a b c h1 h2; calc [Eq Nat a b := h1, Eq Nat _ c := h2]." to doc.
+    Return positiveExample("calc", lead, join(doc, "\n")).
+
+## To exampleCc () -> RefExample:
+    Let lead be "`cc` closes an equation the hypotheses give by congruence:".
+    Let mutable doc be a new Seq of Text.
+    Push "Axiom f : Nat -> Nat." to doc.
+    Push "" to doc.
+    Push "Theorem congr_example : forall (a : Nat), forall (b : Nat), Eq Nat a b -> Eq Nat (f a) (f b) := by intro a b" to doc.
+    Push "  h; cc." to doc.
+    Return positiveExample("cc", lead, join(doc, "\n")).
+
+## To exampleSimp () -> RefExample:
+    Let lead be "`simp [l1, l2]` rewrites by the named equations until none applies, then closes the goal by `rfl`:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem plus_zero : forall (n : Nat), Eq Nat (Nat_add n Zero) n := by intro n; rfl." to doc.
+    Push "" to doc.
+    Push "Theorem simp_example : forall (a : Nat), Eq Nat (Nat_add (Nat_add a Zero) Zero) a := by intro a; simp" to doc.
+    Push "  [plus_zero]." to doc.
+    Return positiveExample("simp", lead, join(doc, "\n")).
+
+## To exampleRefine () -> RefExample:
+    Let lead be "`refine t` uses a term with `_` holes; each hole becomes a goal:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem pair_up : forall (P : Prop), forall (Q : Prop), P -> Q -> And P Q := by intro P Q p q; refine (conj P" to doc.
+    Push "  Q _ _); exact p; exact q." to doc.
+    Return positiveExample("refine", lead, join(doc, "\n")).
+
+## To exampleIntLaws () -> RefExample:
+    Let lead be "The integer laws are theorems to cite: `add_comm`, `add_assoc`, `mul_comm`, `mul_assoc`, `mul_distrib_add`, `add_zero`, `mul_one`, `le_refl`, `le_trans`:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem int_add_comm_example : forall (a : Int), forall (b : Int), Eq Int (add a b) (add b a) := by intro a b;" to doc.
+    Push "  exact (add_comm a b)." to doc.
+    Return positiveExample("int_laws", lead, join(doc, "\n")).
+
+## Note
+This file's examples, in the order the reference shows them.
+
+## To computeTacticExamples () -> Seq of RefExample:
+    Let mutable out be a new Seq of RefExample.
+    Push exampleRfl() to out.
+    Push exampleInduction() to out.
+    Push exampleRwReverse() to out.
+    Push exampleSubst() to out.
+    Push exampleInjection() to out.
+    Push exampleCasesImpossible() to out.
+    Push exampleDecide() to out.
+    Push exampleCalc() to out.
+    Push exampleCc() to out.
+    Push exampleSimp() to out.
+    Push exampleRefine() to out.
+    Push exampleIntLaws() to out.
+    Return out.

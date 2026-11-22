@@ -1,0 +1,120 @@
+# Atlas scan
+
+The OPDP atlas cut into records without being parsed whole (parsed whole, the
+85 MB release 1.2 takes 19.4 s and 1.95 GB; release 1.8 is twelve times larger).
+A byte scanner keeps a few integers of state across chunks and cuts out each
+element of the top-level `records` array as one compact line; the rest is kept
+as the header, the array emptied, so its declared record count can be checked.
+
+## An AtlasScan has:
+    a depth, which is Int.
+    an inString, which is Bool.
+    an escaped, which is Bool.
+    an inRecords, which is Bool.
+    an inRecord, which is Bool.
+    a keyBytes, which is Seq of Int.
+    a lastKey, which is Text.
+    a recordBytes, which is Seq of Int.
+    a headerBytes, which is Seq of Int.
+    a records, which is Seq of Text.
+    a count, which is Int.
+
+## To newAtlasScan () -> AtlasScan:
+    Return a new AtlasScan with depth 0 and inString false and escaped false and inRecords false and inRecord false and keyBytes [] and lastKey "" and records [] and count 0.
+
+## Note
+The scan after the next piece of the document. The array after the key `records`
+at depth one is THE records array; whitespace between tokens is dropped.
+
+## To scanChunk (st: AtlasScan, bytes: Seq of Int) -> AtlasScan:
+    Let mutable out be st.
+    Let mutable depth be st's depth.
+    Let mutable inString be st's inString.
+    Let mutable escaped be st's escaped.
+    Let mutable inRecords be st's inRecords.
+    Let mutable inRecord be st's inRecord.
+    Let mutable key be copy of st's keyBytes.
+    Let mutable rec be copy of st's recordBytes.
+    Let mutable header be copy of st's headerBytes.
+    Let mutable done be copy of st's records.
+    Repeat for b in bytes:
+        Let wasString be inString.
+        Let atTop be depth is equal to 1 and inRecords is equal to false.
+        If wasString:
+            If escaped:
+                Set escaped to false.
+            Otherwise:
+                If b is equal to 92:
+                    Set escaped to true.
+                If b is equal to 34:
+                    Set inString to false.
+                    If atTop:
+                        Set out's lastKey to text_from_bytes(key).
+                If b is not equal to 92 and b is not equal to 34 and atTop:
+                    Push b to key.
+        Otherwise:
+            If b is equal to 34:
+                Set inString to true.
+                Set key to [].
+            If b is equal to 123 or b is equal to 91:
+                Set depth to depth + 1.
+                If inRecords and depth is equal to 3:
+                    Set inRecord to true.
+                    Set rec to [].
+        If wasString or (b is not equal to 32 and b is not equal to 10 and b is not equal to 13 and b is not equal to 9):
+            If inRecord:
+                Push b to rec.
+            If inRecord is equal to false and inRecords is equal to false:
+                Push b to header.
+        If wasString is equal to false and (b is equal to 125 or b is equal to 93):
+            Set depth to depth - 1.
+            If inRecord and depth is equal to 2:
+                Push text_from_bytes(rec) to done.
+                Set inRecord to false.
+            If inRecords and depth is equal to 1:
+                Set inRecords to false.
+                Push 93 to header.
+        If wasString is equal to false and b is equal to 91 and depth is equal to 2 and inRecords is equal to false and out's lastKey is equal to "records":
+            Set inRecords to true.
+    Let mutable next be a new AtlasScan with depth depth and inString inString and escaped escaped and inRecords inRecords and inRecord inRecord and keyBytes key.
+    Set next's lastKey to out's lastKey.
+    Set next's recordBytes to rec.
+    Set next's headerBytes to header.
+    Set next's records to done.
+    Set next's count to st's count + length of done - length of st's records.
+    Return next.
+
+## To scanComplete (st: AtlasScan) -> Bool:
+    Return st's depth is equal to 0 and st's inString is equal to false and st's inRecord is equal to false.
+
+## To scanInPieces (doc: Text, pieceSize: Int) -> AtlasScan:
+    Let bs be text_bytes(doc).
+    Let mutable st be newAtlasScan().
+    Let mutable start be 1.
+    While start is at most length of bs:
+        Let upto be start + pieceSize - 1.
+        If upto is greater than length of bs:
+            Set st to scanChunk(st, items start through (length of bs) of bs).
+        Otherwise:
+            Set st to scanChunk(st, items start through upto of bs).
+        Set start to upto + 1.
+    Return st.
+
+## Test: records come out compact, strings keep their spaces, the header stays, and a nested records key is not the array
+
+Let doc be "{{\n  \"name\": \"U\",\n  \"records\": [\n    {{ \"id\" : 1 , \"t\" : \"a  b \\\" {{[ c\" }},\n    {{\"id\": 2}}\n  ],\n  \"tail\": 1\n}}\n".
+Let st be scanInPieces(doc, 1000000).
+Expect that st's records is equal to ["{{\"id\":1,\"t\":\"a  b \\\" {{[ c\"}}", "{{\"id\":2}}"].
+Expect that text_from_bytes(st's headerBytes) is equal to "{{\"name\":\"U\",\"records\":[],\"tail\":1}}".
+Expect that scanComplete(st) and st's count is equal to 2.
+Let deeper be scanInPieces("{{\"meta\": {{\"records\": [{{\"x\": 1}}]}}, \"records\": [{{\"problem_id\": 9}}]}}", 5).
+Expect that deeper's records is equal to ["{{\"problem_id\":9}}"].
+
+## Test: the scan does not depend on where the chunks are cut
+
+For all booleans tiny:
+    Let doc be "{{\"records\": [{{\"a\": \"x, y\"}}, {{\"b\": [1, {{\"c\": 2}}]}}], \"n\": 2}}".
+    Let mutable size be 7.
+    If tiny:
+        Set size to 1.
+    Expect that (scanInPieces(doc, size))'s records is equal to (scanInPieces(doc, 1000))'s records.

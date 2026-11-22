@@ -1,0 +1,31 @@
+# Reference
+
+Import RefExample from "./ref_example.lg".
+Import RefLanguage from "./ref_language.lg".
+Import RefTacticsBasic from "./ref_tactics_basic.lg".
+Import RefTacticsCompute from "./ref_tactics_compute.lg".
+Import RefFailures from "./ref_failures.lg".
+Import RefProse from "./ref_prose.lg".
+
+The kernel reference every prompt carries, BUILT from its checked examples so it
+cannot quote one the checks did not run.
+
+## To allExamples () -> Seq of RefExample:
+    Return languageExamples() + basicTacticExamples() + computeTacticExamples() + failureExamples().
+
+## Note
+The reference, in full.
+
+## To kernelReference () -> Text:
+    Let mutable parts be [referenceIntro(), "## The language, by example"].
+    Repeat for e in languageExamples():
+        Push renderExample(e) to parts.
+    Push "## The prelude\n\n- " + join(preludeTable(), "\n- ") to parts.
+    Push tacticsIntro() to parts.
+    Repeat for e in basicTacticExamples() + computeTacticExamples():
+        Push renderExample(e) to parts.
+    Push "## What a refusal looks like" to parts.
+    Repeat for e in failureExamples():
+        Push renderExample(e) to parts.
+    Push submissionRules() to parts.
+    Return join(parts, "\n\n").

@@ -1,0 +1,3 @@
+{"id":"cohort:smoke","parentId":null,"problemId":null,"kind":"cohort","label":"Coordinator smoke fixtures","stage":"ranked","rank":0}
+{"id":"collection:smoke/coordinator","parentId":"cohort:smoke","problemId":null,"kind":"collection","label":"Coordinator","stage":"ranked","rank":0}
+{"id":"problem:smoke:coordinator","parentId":"collection:smoke/coordinator","problemId":"smoke:coordinator","kind":"problem","label":"Coordinator smoke problem","stage":"ranked","rank":0}

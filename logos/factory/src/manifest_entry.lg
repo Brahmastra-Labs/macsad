@@ -1,0 +1,71 @@
+# Manifest entry
+
+Import WireShape from "./wire_shape.lg".
+Import WireRead from "./wire_read.lg".
+Import ProblemRecord from "./problem_record.lg".
+Import MscCategory from "./msc_category.lg".
+
+One entry of Alejandro's formalization-lab manifest as a factory problem. The
+lab pins 200 open statements at exact upstream commits; an entry becomes
+`op:<id>`, the lab's identity for the PINNED STATEMENT, narrower than the
+upstream file it came from (formal-conjectures' `fc:ErdosProblems/10` holds
+several variants). The upstream key is its `externalKey`, so another adapter
+meets it there instead of duplicating work, and an Erdős problem carries
+`erdos:<n>` as its `crossRef`, the handle the atlas's Erdős records share.
+
+## To labCohort () -> Text:
+    Return "formalization-lab-200".
+
+## Note
+The upstream identity of an entry: the `fc:` key, or `<repository>:<key>`.
+
+## To externalKeyOf (entry: Json) -> Text:
+    Let key be textAt(entry, "problem_key").
+    If startsWith(key, "fc:"):
+        Return key.
+    Return textAt(entry, "repository") + ":" + key.
+
+## Note
+The Erdős handle, when the lab recorded an Erdős problem number.
+
+## To crossRefOf (entry: Json) -> Option of Text:
+    Let number be textAt(jsonGet(entry, "external_status"), "problem_number").
+    If number is equal to "" or textAt(entry, "collection") is not equal to "ErdosProblems":
+        Return none.
+    Return some ("erdos:" + number).
+
+## Note
+The category of an entry: its first AMS subject.
+
+## To categoryOf (entry: Json) -> Text:
+    Inspect jsonGet(entry, "ams_subjects"):
+        When JArr (codes):
+            If length of codes is greater than 0:
+                Inspect item 1 of codes:
+                    When JNum (code):
+                        Return mscCategory(code).
+                    Otherwise:
+                        Return "miscellaneous".
+        Otherwise:
+            Return "miscellaneous".
+    Return "miscellaneous".
+
+## Note
+One entry as a problem, read open: the lab keeps its whole audit trail there.
+
+## To manifestProblem (entry: Json) -> Result of Problem and Text:
+    Let shape be ["id:text", "problem_key:text", "title:text", "collection:text", "repository:text", "statement:text", "declaration:text"].
+    Let problem be openShapeProblem(entry, shape + ["lean_module:text", "status:text", "ams_subjects:array"]).
+    If problem is not equal to "":
+        Return a new Err with error "manifest entry " + textAt(entry, "id") + ": " + problem.
+    Let mutable p be bareProblem("op:" + textAt(entry, "id"), textAt(entry, "title"), "formalization-lab").
+    Set p's cohort to labCohort().
+    Set p's collection to textAt(entry, "collection").
+    Set p's category to categoryOf(entry).
+    Set p's leanStatement to some textAt(entry, "statement").
+    Set p's leanModule to some textAt(entry, "lean_module").
+    Set p's leanDeclaration to some textAt(entry, "declaration").
+    Set p's externalKey to some externalKeyOf(entry).
+    Set p's crossRef to crossRefOf(entry).
+    Set p's status to problemStatus(textAt(entry, "status")).
+    Return a new Ok with value p.

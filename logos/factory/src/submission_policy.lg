@@ -1,0 +1,115 @@
+# Submission policy
+
+Import KernelBlocks from "./kernel_blocks.lg".
+Import VernacularCommand from "./vernacular_command.lg".
+Import VernacularNames from "./vernacular_names.lg".
+
+A submission is never run as written. The factory assembles the document the
+kernel checks — the accepted statement byte for byte, then the submission, then
+two closing checks: `Check <proof>.`, which must print `<proof> : <goal>`, and
+`Print Axioms <proof>.`, which the acceptance policy reads. Before that, the
+submission is read here and refused if it uses a command that changes how text
+reads, declares a name twice, redeclares the goal, or lacks its one theorem.
+
+## To declaredNames (block: Text) -> Seq of Text:
+    Return declaredNamesOf(block, commandOf(block)).
+
+## Note
+Every name a document declares, in order, repeats included.
+
+## To submissionNames (submission: Text) -> Seq of Text:
+    Let mutable out be a new Seq of Text.
+    Repeat for block in (kernelBlocks(submission))'s items:
+        Set out to out + declaredNames(block).
+    Return out.
+
+## Note
+A submission's skeleton: every theorem's steps, theorems separated by ` | `.
+
+## To submissionSkeleton (submission: Text) -> Text:
+    Let mutable parts be a new Seq of Text.
+    Repeat for block in (kernelBlocks(submission))'s items:
+        If commandOf(block) is equal to "Theorem":
+            Push join(tacticSkeleton(block), ";") to parts.
+    Return join(parts, " | ").
+
+## Note
+The faults of a document's blocks against the commands it may use, and how many
+of its blocks declare `target` with type `wanted` (`mistyped` counts the others).
+
+## To blockFaults (doc: Text, allowed: Seq of Text, what: Text, target: Text, wanted: Text) -> (Seq of Text, Int, Int):
+    Let mutable out be a new Seq of Text.
+    Let mutable found be 0.
+    Let mutable mistyped be 0.
+    Let mutable index be 0.
+    Repeat for block in (kernelBlocks(doc))'s items:
+        Set index to index + 1.
+        Let command be commandOf(block).
+        If allowed contains command is equal to false:
+            Push "block {index} uses `{command}`, which a {what} may not use" to out.
+        Let names be declaredNames(block).
+        If length of names is greater than 0 and item 1 of names is equal to target:
+            If headTypeOf(block) is equal to wanted:
+                Set found to found + 1.
+            Otherwise:
+                Set mistyped to mistyped + 1.
+    Return (out, found, mistyped).
+
+## Note
+Everything wrong with a submission that can be seen without the kernel.
+
+## To submissionProblems (submission: Text, proofName: Text, goalName: Text) -> Seq of Text:
+    Let blocks be kernelBlocks(submission).
+    If blocks's problem is not equal to "":
+        Return [blocks's problem].
+    If length of blocks's items is equal to 0:
+        Return ["the submission is empty"].
+    Let (faults, found, mistyped) be blockFaults(submission, submissionCommands(), "submission", proofName, goalName).
+    Let mutable out be faults.
+    If mistyped is greater than 0:
+        Push "the theorem {proofName} must have type exactly `{goalName}`" to out.
+    If found is equal to 0 and mistyped is equal to 0:
+        Push "the submission has no `Theorem {proofName} : {goalName} := …`" to out.
+    Let mutable seen be a new Seq of Text.
+    Repeat for name in submissionNames(submission):
+        If seen contains name:
+            Push "the name {name} is declared twice" to out.
+        Push name to seen.
+        If name is equal to goalName:
+            Push "the submission redeclares the goal {goalName}" to out.
+    Return out.
+
+## Note
+Everything wrong with a statement document: definitions and inductive types only,
+and the goal defined once, as a `Prop`.
+
+## To statementProblems (document: Text, goalName: Text) -> Seq of Text:
+    Let blocks be kernelBlocks(document).
+    If blocks's problem is not equal to "":
+        Return [blocks's problem].
+    Let (faults, found, mistyped) be blockFaults(document, statementCommands(), "statement", goalName, "Prop").
+    Let mutable out be faults.
+    If found + mistyped is not equal to 1 or mistyped is equal to 1:
+        Push "the statement must define `{goalName}` exactly once, as `Definition {goalName} : Prop := …`" to out.
+    Return out.
+
+## Note
+The proof document the kernel checks.
+
+## To assembleProofDocument (statement: Text, submission: Text, proofName: Text) -> Text:
+    Let closing be "\n\n/-! ## Closing checks, appended by the factory -/\n\nCheck " + proofName + ".\n\nPrint Axioms " + proofName + ".\n".
+    Return trimEnd(statement) + "\n\n/-! ## Submission -/\n\n" + trim(submission) + closing.
+
+## Note
+The document that checks a statement on its own, ending in `Check <goal>.`.
+
+## To statementCheckDocument (statementDoc: Text, goalName: Text) -> Text:
+    Return trimEnd(statementDoc) + "\n\n/-! ## Closing check, appended by the factory -/\n\nCheck " + goalName + ".\n".
+
+## Note
+The document that asks the kernel whether `name` is already bound after `preamble`.
+
+## To nameProbeDocument (preamble: Text, name: Text) -> Text:
+    If trim(preamble) is equal to "":
+        Return "Check " + name + ".\n".
+    Return trimEnd(preamble) + "\n\nCheck " + name + ".\n".

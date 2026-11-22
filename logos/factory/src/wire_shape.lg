@@ -1,0 +1,118 @@
+# Wire shape
+
+The shape of a JSON document, checked once and whole before anything is read
+from it, so a document is never half-read. A specification lists `name:kind`
+fields; the kinds are `text`, `int`, `bool`, `texts` (strings), `object`, `array`,
+`opttext` and `optint` (the value or `null`), and `any`.
+
+## Note
+The kind of a `name:kind` specification (`any` when it names none).
+
+## To fieldKind (spec: Text) -> Text:
+    Let parts be split(spec, ":").
+    If length of parts is at least 2:
+        Return item 2 of parts.
+    Return "any".
+
+## Note
+The name of a specification.
+
+## To fieldName (spec: Text) -> Text:
+    Return item 1 of split(spec, ":").
+
+## Note
+Whether every element of an array is a string.
+
+## To allStrings (elems: Seq of Json) -> Bool:
+    Repeat for e in elems:
+        Inspect e:
+            When JStr (s):
+                Let ignored be s.
+            Otherwise:
+                Return false.
+    Return true.
+
+## Note
+Whether a value has the shape a kind names. An unknown kind matches nothing, so
+a mistyped specification fails loudly instead of accepting everything.
+
+## To hasKind (v: Json, kind: Text) -> Bool:
+    If kind is equal to "any":
+        Return true.
+    Inspect v:
+        When JNull:
+            Return kind is equal to "opttext" or kind is equal to "optint".
+        When JBool (b):
+            Return kind is equal to "bool".
+        When JNum (n):
+            Return kind is equal to "int" or kind is equal to "optint".
+        When JStr (s):
+            Return kind is equal to "text" or kind is equal to "opttext".
+        When JArr (elems):
+            Return kind is equal to "array" or (kind is equal to "texts" and allStrings(elems)).
+        When JObj (entries):
+            Return kind is equal to "object".
+        Otherwise:
+            Return false.
+    Return false.
+
+## Note
+The first field of an OPEN shape that `v` breaks, or the empty text when it has
+the shape. Other fields are allowed: foreign documents grow fields.
+
+## To openShapeProblem (v: Json, specs: Seq of Text) -> Text:
+    Inspect v:
+        When JObj (entries):
+            Let ignored be entries.
+        Otherwise:
+            Return "expected a JSON object".
+    Repeat for spec in specs:
+        Let name be fieldName(spec).
+        If jsonHas(v, name) is equal to false:
+            Return "missing field \"{name}\"".
+        If hasKind(jsonGet(v, name), fieldKind(spec)) is equal to false:
+            Return "field \"{name}\" is not {fieldKind(spec)}".
+    Return "".
+
+## Note
+The same for a CLOSED shape: also no field the specification does not name.
+
+## To shapeProblem (v: Json, specs: Seq of Text) -> Text:
+    Let mutable names be a new Seq of Text.
+    Repeat for spec in specs:
+        Push fieldName(spec) to names.
+    Inspect jsonNoExtraKeys(v, names):
+        When Err (e):
+            Return e.
+        When Ok (fine):
+            Return openShapeProblem(v, specs).
+    Return "unreadable".
+
+## Test: a field specification splits into its name and kind
+
+Expect that fieldName("seq:int") is equal to "seq".
+Expect that fieldKind("seq:int") is equal to "int".
+Expect that fieldKind("payload") is equal to "any".
+
+## Test: a closed shape accepts exactly its fields and names the first wrong one
+
+Let v be jsonParse("{{\"a\": \"x\", \"n\": 3, \"ok\": true, \"tags\": [\"p\"], \"m\": null}}").
+Expect that shapeProblem(v, ["a:text", "n:int", "ok:bool", "tags:texts", "m:opttext"]) is equal to "".
+Expect that shapeProblem(v, ["a:text", "n:text", "ok:bool", "tags:texts", "m:opttext"]) is equal to "field \"n\" is not text".
+Expect that shapeProblem(v, ["a:text"]) is equal to "unexpected key \"n\"".
+Expect that shapeProblem(jsonParse("[1]"), ["a:text"]) is equal to "expected a JSON object".
+
+## Test: an open shape tolerates fields it does not name, and a mixed array is not texts
+
+Let v be jsonParse("{{\"a\": \"x\", \"extra\": 1}}").
+Expect that openShapeProblem(v, ["a:text"]) is equal to "".
+Expect that openShapeProblem(v, ["b:text"]) is equal to "missing field \"b\"".
+Expect that hasKind(jsonParse("[\"a\", 1]"), "array") is equal to true.
+Expect that hasKind(jsonParse("[\"a\", 1]"), "texts") is equal to false.
+Expect that hasKind(v, "mystery") is equal to false.
+
+## Test: a boolean has the bool shape and no other
+
+For all booleans b:
+    Expect that hasKind(a new JBool with b b, "bool") is equal to true.
+    Expect that hasKind(a new JBool with b b, "int") is equal to false.

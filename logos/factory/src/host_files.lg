@@ -1,0 +1,96 @@
+# Host files
+
+The edge where files and the environment come in. Every file the factory keeps —
+trails, ledgers, artifacts, results — goes through these, and they work in a
+test's sealed world (an in-memory filesystem), so the code that keeps state on
+disk is tested without touching a disk.
+
+## Note
+A file's text, a file replaced, and text added to the end of a file (created when
+absent) — how every ledger grows, so an entry once written is never rewritten.
+
+## To readText (path: Text) -> Result of Text and Text:
+    Return read(path).
+
+## To writeText (path: Text, content: Text) -> Result of Unit and Text:
+    Return write(path, content).
+
+## To appendText (path: Text, content: Text) -> Result of Unit and Text:
+    Return appendFile(path, content).
+
+## Note
+Whether anything is at a path, the sorted names in a directory, and a directory
+made with every directory above it.
+
+## To pathExists (path: Text) -> Bool:
+    Return fileExists(path).
+
+## To listNames (dir: Text) -> Result of Seq of Text and Text:
+    Return listDir(dir).
+
+## To ensureDir (dir: Text) -> Result of Unit and Text:
+    Return makeDirs(dir).
+
+## Note
+A file replaced all at once: written beside itself, then renamed over the old,
+so a reader sees the old content or the new and never half of either.
+
+## To writeAtomically (path: Text, content: Text) -> Result of Unit and Text:
+    Inspect write(path + ".tmp", content):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (done):
+            Return renameFile(path + ".tmp", path).
+    Return a new Err with error "unwritten".
+
+## Note
+One line added to a file in a directory, the directory made first.
+
+## To appendLine (dir: Text, name: Text, line: Text) -> Result of Unit and Text:
+    Let made be makeDirs(dir).
+    Return appendFile(dir + "/" + name, line + "\n").
+
+## Note
+An environment variable, or `fallback` when it is unset or blank; the program's
+arguments (its own name first); and the time in Unix milliseconds.
+
+## To envOr (name: Text, fallback: Text) -> Text:
+    Inspect get(name):
+        When Some (v):
+            If trim(v) is equal to "":
+                Return fallback.
+            Return v.
+        When None:
+            Return fallback.
+    Return fallback.
+
+## To programArgs () -> Seq of Text:
+    Return args().
+
+## To clockMs () -> Int:
+    Return now().
+
+## Test: an atomic write replaces a file whole and leaves no temporary behind
+
+Let first be writeAtomically("ledger.json", "first").
+Let second be writeAtomically("ledger.json", "second").
+Expect that readText("ledger.json") is equal to a new Ok with value "second".
+Expect that pathExists("ledger.json.tmp") is equal to false.
+
+## Test: lines are appended one at a time under a made directory
+
+Let a be appendLine("trails/opdp", "116.jsonl", "one").
+Let b be appendLine("trails/opdp", "116.jsonl", "two").
+Expect that readText("trails/opdp/116.jsonl") is equal to a new Ok with value "one\ntwo\n".
+Expect that listNames("trails/opdp") is equal to a new Ok with value ["116.jsonl"].
+
+## Test: a sealed world has no environment to read
+
+Expect that envOr("MACSAD_LARGO", "largo") is equal to "largo".
+
+## Test: a file exists exactly when it was written
+
+For all booleans written:
+    If written:
+        Let w be writeText("maybe.txt", "x").
+    Expect that pathExists("maybe.txt") is equal to written.

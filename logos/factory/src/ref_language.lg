@@ -1,0 +1,62 @@
+# Ref language
+
+Import RefExample from "./ref_example.lg".
+
+The commands and the terms, by example. Every document here is checked by the
+kernel in `factory selftest --live`.
+
+## To exampleDefinition () -> RefExample:
+    Let lead be "`Definition name : Type := term.` A `fix` makes a recursion; `match` lists one case per constructor, in order, each constructor argument a `fun`:".
+    Let mutable doc be a new Seq of Text.
+    Push "Definition double : Nat -> Nat := fix double => fun (n : Nat) => match n return (fun (x : Nat) => Nat) with" to doc.
+    Push "  Zero | fun (k : Nat) => Succ (Succ (double k)) end." to doc.
+    Push "" to doc.
+    Push "Eval (double (Succ (Succ Zero)))." to doc.
+    Push "" to doc.
+    Push "Theorem double_two : Eq Nat (double (Succ (Succ Zero))) (Succ (Succ (Succ (Succ Zero)))) := by rfl." to doc.
+    Return positiveExample("definition", lead, join(doc, "\n")).
+
+## To exampleInductive () -> RefExample:
+    Let lead be "`Inductive Name : arity := c1 : type1 | c2 : type2.` declares a type or a predicate:".
+    Let mutable doc be a new Seq of Text.
+    Push "Inductive Even : Nat -> Prop := even_zero : Even Zero | even_ss : forall (n : Nat), Even n -> Even (Succ (Succ" to doc.
+    Push "  n))." to doc.
+    Push "" to doc.
+    Push "Theorem even_four : Even (Succ (Succ (Succ (Succ Zero)))) := by apply even_ss; apply even_ss; exact even_zero." to doc.
+    Return positiveExample("inductive", lead, join(doc, "\n")).
+
+## To exampleTermProof () -> RefExample:
+    Let lead be "A theorem may be proved by a term instead of a script; a `match` on a proof of `And P Q` has one case taking both parts:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem and_comm_term : forall (P : Prop), forall (Q : Prop), And P Q -> And Q P := fun (P : Prop) => fun (Q :" to doc.
+    Push "  Prop) => fun (h : And P Q) => match h return (fun (x : And P Q) => And Q P) with fun (p : P) => fun (q : Q)" to doc.
+    Push "  => conj Q P q p end." to doc.
+    Return positiveExample("term_proof", lead, join(doc, "\n")).
+
+## To exampleBinders () -> RefExample:
+    Let lead be "`forall (a : A) (b : B), …` binds several names at once:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem self_sum : forall (a : Nat) (b : Nat), Eq Nat (Nat_add a b) (Nat_add a b) := by intro a b; rfl." to doc.
+    Return positiveExample("binders", lead, join(doc, "\n")).
+
+## To exampleNumerals () -> RefExample:
+    Let lead be "A numeral takes its type from where it stands: a `Nat` where a `Nat` is expected, an `Int` otherwise:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem two_plus_three : Eq Nat (Nat_add 2 3) 5 := by rfl." to doc.
+    Push "" to doc.
+    Push "Theorem int_arithmetic : Eq Int (mul 2 3) 6 := by decide." to doc.
+    Return positiveExample("numerals", lead, join(doc, "\n")).
+
+## To examplePrintAxioms () -> RefExample:
+    Let lead be "`Print Axioms name.` reports what a theorem rests on; a proof by excluded middle rests on Lean's three axioms:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem em_example : forall (P : Prop), Or P (Not P) := by intro P; exact (Classical_em P)." to doc.
+    Push "" to doc.
+    Push "Print Axioms em_example." to doc.
+    Return positiveExample("print_axioms", lead, join(doc, "\n")).
+
+## Note
+This file's examples, in the order the reference shows them.
+
+## To languageExamples () -> Seq of RefExample:
+    Return [exampleDefinition(), exampleInductive(), exampleTermProof(), exampleBinders(), exampleNumerals(), examplePrintAxioms()].

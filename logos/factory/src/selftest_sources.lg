@@ -1,0 +1,87 @@
+# Selftest sources
+
+Import HostFiles from "./host_files.lg".
+Import ProblemRecord from "./problem_record.lg".
+Import ChatRequest from "./chat_request.lg".
+Import ChatReply from "./chat_reply.lg".
+Import Budget from "./budget.lg".
+Import ModelPrice from "./model_price.lg".
+Import Cost from "./cost.lg".
+Import Replay from "./replay.lg".
+Import IngestFc from "./ingest_fc.lg".
+Import AtlasScan from "./atlas_scan.lg".
+Import OpdpRow from "./opdp_row.lg".
+Import AtlasGraph from "./atlas_graph.lg".
+Import SelftestRecords from "./selftest_records.lg".
+
+The sources the factory reads, checked on their real bytes: OpenRouter's public
+model list (three entries recorded on 2026-11-22), a reply in OpenRouter's shape,
+the formalization lab's real manifest, and an atlas record in the atlas's shape.
+
+## To openRouterChecks () -> Seq of Text:
+    Let mutable f be a new Seq of Text.
+    Let reply be replyDocument("gen-1", "openai/gpt-4o-mini", "```logos-kernel\nTheorem proof_of_goal : goal := by rfl.\n```", 1200, 85, 231).
+    Inspect readText("tests/fixtures/openrouter/models.sample.json"):
+        When Err (e):
+            Push "the recorded model list is readable: " + e to f.
+        When Ok (models):
+            Let mini be priceOf(models, "openai/gpt-4o-mini").
+            Inspect mini:
+                When Ok (p):
+                    Set f to f + expectThat("gpt-4o-mini costs 150000 and 600000 a million", p's promptPerMTok is equal to 150000 and p's completionPerMTok is equal to 600000).
+                    Set f to f + expectThat("the worst case of the sample request is 613", reservationMicros(p, sampleRequest()) is equal to 613).
+                    Inspect parseChatReply(reply):
+                        When Ok (r):
+                            Set f to f + expectThat("the reported cost is charged", actualCostMicros(p, r, 613) is equal to 231).
+                        When Err (e):
+                            Push "the reply reads: " + e to f.
+                When Err (e):
+                    Push "gpt-4o-mini is priced: " + e to f.
+            Inspect priceOf(models, "google/gemini-2.5-pro"):
+                When Ok (p):
+                    Set f to f + expectThat("the dearest tier is kept", p's promptPerMTok is equal to 2500000 and p's completionPerMTok is equal to 15000000).
+                When Err (e):
+                    Push "gemini is priced: " + e to f.
+            Let router be priceOf(models, "openrouter/auto").
+            Set f to f + expectThat("a router without a fixed price is refused", router is equal to a new Err with error "openrouter/auto: the prompt price is not fixed (-1)").
+    Let refused be parseChatReply("{{\"error\":{{\"code\":402,\"message\":\"Insufficient credits\"}}}}").
+    Set f to f + expectThat("an error reply is an error", refused is equal to a new Err with error "OpenRouter error 402: Insufficient credits").
+    Return f.
+
+## Note
+The formalization lab's manifest, at the path `MACSAD_MANIFEST` names; an unset variable is reported, never guessed.
+
+## To manifestChecks () -> Seq of Text:
+    Let path be envOr("MACSAD_MANIFEST", "").
+    If path is equal to "":
+        Return ["MACSAD_MANIFEST names the formalization lab's open-problems/manifest.json"].
+    Inspect readText(path):
+        When Err (e):
+            Return ["the manifest at " + path + " is readable: " + e].
+        When Ok (text):
+            Inspect ingestManifest(text):
+                When Err (e):
+                    Return ["the manifest ingests: " + e].
+                When Ok (got):
+                    Let mutable erdos be 0.
+                    Repeat for p in got's problems:
+                        If p's crossRef is not equal to none:
+                            Set erdos to erdos + 1.
+                    Let last be item 200 of got's problems.
+                    Let mutable f be expectThat("the manifest holds 200 problems, 45 of them Erdős", length of got's problems is equal to 200 and erdos is equal to 45).
+                    Set f to f + expectThat("OP200 is keyed by its repository", last's externalKey is equal to some "open-conjecture-formalizations:one-third-two-thirds").
+                    Return f + expectThat("the graph is a cohort, its collections and the problems", length of got's nodes is equal to 200 + 1 + 19).
+    Return ["unread manifest"].
+
+## To atlasChecks () -> Seq of Text:
+    Let one be "{{\"problem_id\":116,\"problem_number\":\"GREEN-028\",\"title\":\"Gowers\",\"catalog_status\":\"open\",\"classification\":{{\"category\":{{\"slug\":\"combinatorics\"}},".
+    Let two be "\"source_collection\":{{\"slug\":\"green-problems\"}}}},\"ai_assessment\":{{\"fit\":\"ai_favored\"}},\"tractability\":{{\"score\":6,\"progress_probability\":{{\"low\":0.4,\"high\":0.55}}}},".
+    Let three be "\"verification\":{{\"if_true_score\":5.2,\"if_false_score\":4.5}},\"formalization\":{{\"score\":3.7}},\"tool_leverage\":{{\"score\":5.3}}}}".
+    Let st be scanInPieces("{{\"records\": [" + one + two + three + "]}}", 64).
+    Inspect opdpRowOf(item 1 of st's records, "UnsolvedMath"):
+        When Ok (row):
+            Let mutable f be expectThat("an atlas record is projected exactly", row's problem's id is equal to "opdp:116" and rowRank(row) is equal to 5345).
+            Return f + expectThat("its collection and category place it", row's collectionSlug is equal to "green-problems" and row's categorySlug is equal to "combinatorics").
+        When Err (e):
+            Return ["the atlas record projects: " + e].
+    Return ["unprojected"].

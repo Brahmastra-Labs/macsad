@@ -1,0 +1,74 @@
+# Selftest records
+
+Import Conventions from "./conventions.lg".
+Import VerdictRecord from "./verdict_record.lg".
+Import TrailRecord from "./trail_record.lg".
+Import TrailMemory from "./trail_memory.lg".
+Import TrailDigest from "./trail_digest.lg".
+Import AttemptRecord from "./attempt_record.lg".
+Import RecordsDecode from "./records_decode.lg".
+Import RankScore from "./rank_score.lg".
+Import RankTrail from "./rank_trail.lg".
+Import Rank from "./rank.lg".
+
+The checks that cross modules, which the macsad test contract cannot hold as
+`## Test`s (a test-bearing module must import nothing): the hand decoders against
+the derived encoders, the trail's exact canonical form and digest, and a trail's
+effect on a rank. Each check answers the names of what failed.
+
+## To expectThat (name: Text, ok: Bool) -> Seq of Text:
+    If ok:
+        Return [].
+    Return [name].
+
+## Note
+A trail entry with both lists filled, and a two-attempt trail with one wall.
+
+## To sampleEntry () -> TrailEntry:
+    Let mutable e be blankEntry("opdp:116", "prove", "rejected", "block 3: Tactic error: step 2 (`rfl`)").
+    Set e's seq to 3.
+    Set e's ts to 1795000000000.
+    Set e's contributor to "c1".
+    Set e's model to "replay/m".
+    Set e's strategyId to "s1".
+    Set e's promptSha to "ab".
+    Set e's approachFingerprint to "fp".
+    Set e's artifactShas to ["d1", "d2"].
+    Set e's exitCode to 1.
+    Set e's costMicros to 1250.
+    Set e's summary to "rfl does not close Nat_add Zero n".
+    Set e's nextSuggestions to ["induct on n"].
+    Return e.
+
+## To recordChecks () -> Seq of Text:
+    Let mutable f be a new Seq of Text.
+    Let v be newVerdict("admitted_axiom", 0, "", ["collatz_lemma", "propext"], "rests on collatz_lemma").
+    Set f to f + expectThat("a verdict round-trips", decodeVerdict(jsonParse(toJson_Verdict(v))) is equal to a new Ok with value v).
+    Let e be sampleEntry().
+    Set f to f + expectThat("a trail entry round-trips", readTrailEntry(toJson_TrailEntry(e)) is equal to a new Ok with value e).
+    Let mutable a be a new Attempt with id "a1" and unitId "u1" and problemId "opdp:116" and contributor "c1" and model "m" and strategyId "s1".
+    Set a's verdict to v.
+    Set f to f + expectThat("an attempt round-trips", decodeAttempt(jsonParse(toJson_Attempt(a))) is equal to a new Ok with value a).
+    Let l be a new Lemma with id "lemma:ab" and name "step" and statement "forall (n : Nat), Eq Nat n n" and statementSha "ab" and problemId "p" and status "verified" and axioms [].
+    Set f to f + expectThat("a lemma round-trips", decodeLemma(jsonParse(toJson_Lemma(l))) is equal to a new Ok with value l).
+    Set f to f + expectThat("a decoder refuses an extra key", decodeVerdict(jsonParse("{{\"kind\":\"verified\",\"by\":1}}")) is equal to a new Err with error "Verdict: unexpected key \"by\"").
+    Let body be "{{\"seq\":3,\"ts\":1795000000000,\"problemId\":\"opdp:116\",\"stage\":\"in_progress\",\"kind\":\"prove\",\"contributor\":\"c1\",\"model\":\"replay/m\",".
+    Let rest be "\"strategyId\":\"s1\",\"promptSha\":\"ab\",\"approachFingerprint\":\"fp\",\"artifactShas\":[\"d1\",\"d2\"],\"verdict\":\"rejected\",\"exitCode\":1,".
+    Let tail be "\"diagnostics\":\"block 3: Tactic error: step 2 (`rfl`)\",\"costMicros\":1250,\"summary\":\"rfl does not close Nat_add Zero n\",\"nextSuggestions\":[\"induct on n\"]}}".
+    Set f to f + expectThat("the canonical trail body is frozen field by field", canonicalTrailBody(e) is equal to body + rest + tail).
+    Return f.
+
+## To trailChecks () -> Seq of Text:
+    Let mutable f be a new Seq of Text.
+    Let mutable t be appendToTrail([], blankEntry("opdp:116", "prove", "rejected", "block 2: rfl does not apply")).
+    Set t to appendToTrail(t, blankEntry("opdp:116", "prove", "rejected", "block 2: rfl does not apply")).
+    Set t to appendToTrail(t, blankEntry("opdp:116", "repair", "verified", "")).
+    Set f to f + expectThat("a repeated wall is counted", repeatedFailures(t) is equal to 2 and verifiedCount(t) is equal to 1).
+    Set f to f + expectThat("failure reasons are counted", failureCounts(t) is equal to ["2× block 2: rfl does not apply"]).
+    Set f to f + expectThat("a dropped entry breaks the chain", verifyTrail([item 1 of t, item 3 of t]) is equal to "entry 2: seq is 3, expected 2").
+    Let foreign be appendToTrail(t, blankEntry("opdp:117", "prove", "rejected", "x")).
+    Set f to f + expectThat("a foreign entry breaks the chain", verifyTrail(foreign) is equal to "entry 4: belongs to opdp:117").
+    Set f to f + expectThat("a trail lowers record 116 by five percent", priority(sampleInputs(), trailSignals(t)) is equal to 5345 * 95 / 100).
+    Set f to f + expectThat("an empty trail says it is the first", trailDigest("p", [], 5) contains "No attempt has been made yet.").
+    Set f to f + expectThat("the digest shows the last attempt first", trailDigest("opdp:116", t, 1) contains "- #3 repair, strategy , model : verified").
+    Return f.

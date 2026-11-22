@@ -1,0 +1,96 @@
+# Records decode
+
+Import WireShape from "./wire_shape.lg".
+Import WireRead from "./wire_read.lg".
+Import VerdictRecord from "./verdict_record.lg".
+Import TrailRecord from "./trail_record.lg".
+Import AttemptRecord from "./attempt_record.lg".
+
+Decoders for the records that carry a `Seq` field, which the derive encodes but
+does not decode (`LOGOS_ISSUES.md`, issue 1). Each is a closed shape check, then
+total reads: a document is read whole or refused with its first fault.
+
+## To decodeVerdict (v: Json) -> Result of Verdict and Text:
+    Let problem be shapeProblem(v, ["kind:text", "block:int", "error:text", "axioms:texts", "detail:text"]).
+    If problem is not equal to "":
+        Return a new Err with error "Verdict: " + problem.
+    Return a new Ok with value newVerdict(textAt(v, "kind"), intAt(v, "block"), textAt(v, "error"), textsAt(v, "axioms"), textAt(v, "detail")).
+
+## Note
+An attempt's verdict nests as an object.
+
+## To decodeAttempt (v: Json) -> Result of Attempt and Text:
+    Let names be ["id:text", "unitId:text", "problemId:text", "contributor:text", "model:text", "strategyId:text", "promptSha:text"].
+    Let more be ["responseSha:text", "documentSha:text", "approachFingerprint:text", "verdict:object", "costMicros:int", "startedAt:int", "finishedAt:int"].
+    Let problem be shapeProblem(v, names + more).
+    If problem is not equal to "":
+        Return a new Err with error "Attempt: " + problem.
+    Inspect decodeVerdict(jsonGet(v, "verdict")):
+        When Err (e):
+            Return a new Err with error "Attempt: " + e.
+        When Ok (verdict):
+            Let mutable a be a new Attempt with id textAt(v, "id") and unitId textAt(v, "unitId") and problemId textAt(v, "problemId") and contributor textAt(v, "contributor").
+            Set a's model to textAt(v, "model").
+            Set a's strategyId to textAt(v, "strategyId").
+            Set a's promptSha to textAt(v, "promptSha").
+            Set a's responseSha to textAt(v, "responseSha").
+            Set a's documentSha to textAt(v, "documentSha").
+            Set a's approachFingerprint to textAt(v, "approachFingerprint").
+            Set a's verdict to verdict.
+            Set a's costMicros to intAt(v, "costMicros").
+            Set a's startedAt to intAt(v, "startedAt").
+            Set a's finishedAt to intAt(v, "finishedAt").
+            Return a new Ok with value a.
+    Return a new Err with error "Attempt: unreadable".
+
+## Note
+A trail entry's nineteen fields.
+
+## To decodeTrailEntry (v: Json) -> Result of TrailEntry and Text:
+    Let names be ["seq:int", "ts:int", "problemId:text", "stage:text", "kind:text", "contributor:text", "model:text", "strategyId:text", "promptSha:text"].
+    Let more be ["approachFingerprint:text", "artifactShas:texts", "verdict:text", "exitCode:int", "diagnostics:text", "costMicros:int", "summary:text"].
+    Let problem be shapeProblem(v, names + more + ["nextSuggestions:texts", "prevHash:text", "hash:text"]).
+    If problem is not equal to "":
+        Return a new Err with error "TrailEntry: " + problem.
+    Let mutable e be blankEntry(textAt(v, "problemId"), textAt(v, "kind"), textAt(v, "verdict"), textAt(v, "diagnostics")).
+    Set e's seq to intAt(v, "seq").
+    Set e's ts to intAt(v, "ts").
+    Set e's stage to textAt(v, "stage").
+    Set e's contributor to textAt(v, "contributor").
+    Set e's model to textAt(v, "model").
+    Set e's strategyId to textAt(v, "strategyId").
+    Set e's promptSha to textAt(v, "promptSha").
+    Set e's approachFingerprint to textAt(v, "approachFingerprint").
+    Set e's artifactShas to textsAt(v, "artifactShas").
+    Set e's exitCode to intAt(v, "exitCode").
+    Set e's costMicros to intAt(v, "costMicros").
+    Set e's summary to textAt(v, "summary").
+    Set e's nextSuggestions to textsAt(v, "nextSuggestions").
+    Set e's prevHash to textAt(v, "prevHash").
+    Set e's hash to textAt(v, "hash").
+    Return a new Ok with value e.
+
+## Note
+A lemma's eight fields.
+
+## To decodeLemma (v: Json) -> Result of Lemma and Text:
+    Let problem be shapeProblem(v, ["id:text", "name:text", "statement:text", "statementSha:text", "problemId:text", "documentSha:text", "status:text", "axioms:texts"]).
+    If problem is not equal to "":
+        Return a new Err with error "Lemma: " + problem.
+    Let mutable l be a new Lemma with id textAt(v, "id") and name textAt(v, "name") and statement textAt(v, "statement") and statementSha textAt(v, "statementSha").
+    Set l's problemId to textAt(v, "problemId").
+    Set l's documentSha to textAt(v, "documentSha").
+    Set l's status to textAt(v, "status").
+    Set l's axioms to textsAt(v, "axioms").
+    Return a new Ok with value l.
+
+## Note
+Each of them read from text.
+
+## To readTrailEntry (text: Text) -> Result of TrailEntry and Text:
+    Inspect parseStrict(text):
+        When Err (e):
+            Return a new Err with error "TrailEntry: " + e.
+        When Ok (v):
+            Return decodeTrailEntry(v).
+    Return a new Err with error "TrailEntry: unreadable".

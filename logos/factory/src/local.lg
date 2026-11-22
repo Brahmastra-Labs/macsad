@@ -1,0 +1,94 @@
+# Local
+
+Import Conventions from "./conventions.lg".
+Import HostFiles from "./host_files.lg".
+Import NodeRecord from "./node_record.lg".
+Import VerdictRecord from "./verdict_record.lg".
+Import TrailRecord from "./trail_record.lg".
+Import AttemptRecord from "./attempt_record.lg".
+Import ChatRequest from "./chat_request.lg".
+Import ChatReply from "./chat_reply.lg".
+Import Budget from "./budget.lg".
+Import Cost from "./cost.lg".
+Import Replay from "./replay.lg".
+Import LocalSettings from "./local_settings.lg".
+Import LocalStore from "./local_store.lg".
+Import LocalPlan from "./local_plan.lg".
+Import LocalAttempt from "./local_attempt.lg".
+
+The whole loop on one machine against one problem: read its trail, build the
+prompt its next unit needs, ask the model (a recording, a mock or OpenRouter),
+take the one submission out of the answer, judge it with the real kernel, and
+write down what happened. It is the worker's loop with the coordinator replaced
+by a workspace directory, so the loop runs before any service exists.
+
+## An AttemptOutcome has:
+    a verdict, which is Text.
+    a proceed, which is Bool.
+    a line, which is Text.
+
+## To stopped (line: Text, verdict: Text) -> AttemptOutcome:
+    Return a new AttemptOutcome with verdict verdict and proceed false and line line.
+
+## Note
+One attempt on `problemId`, written down whatever happens: a budget stop and a
+judged answer both reach the trail; a missing recording reaches nothing.
+
+## To runAttempt (workspace: Text, problemId: Text, s: LocalSettings, budget: Budget) -> (AttemptOutcome, Budget):
+    Inspect loadStatement(workspace, problemId):
+        When Err (e):
+            Return (stopped(e, ""), budget).
+        When Ok (statement):
+            Inspect loadTrail(workspace + "/trails/" + slugOf(problemId) + ".jsonl"):
+                When Err (e):
+                    Return (stopped(e, ""), budget).
+                When Ok (trail):
+                    Let kind be nextKind(trail).
+                    If kind is equal to "done":
+                        Return (stopped("{problemId} is already verified", "verified"), budget).
+                    Let request be planRequest(workspace, problemId, statement, trail, kind).
+                    Let strategy be loadStrategy(workspace).
+                    Let mutable entry be blankEntry(problemId, kind, "", "").
+                    Set entry's ts to clockMs().
+                    Set entry's contributor to s's contributor.
+                    Set entry's model to request's model.
+                    Set entry's strategyId to strategy's id.
+                    Set entry's promptSha to promptSha(request).
+                    Inspect priceFor(workspace, s, request's model):
+                        When Err (e):
+                            Return (stopped(e, ""), budget).
+                        When Ok (price):
+                            Let held be reservationMicros(price, request).
+                            Inspect reserve(budget, held):
+                                When Err (stop):
+                                    Set entry's kind to "budget_stop".
+                                    Set entry's diagnostics to stop.
+                                    Let sealed be appendToTrail(trail, entry).
+                                    Let w be appendLine(workspace + "/trails", slugOf(problemId) + ".jsonl", toJson_TrailEntry(item (length of sealed) of sealed)).
+                                    Return (stopped(stop, "budget_exhausted"), budget).
+                                When Ok (holding):
+                                    Inspect askModel(s, request):
+                                        When Err (why):
+                                            Return (stopped(why, ""), settle(holding, held, 0)).
+                                        When Ok (reply):
+                                            Let cost be actualCostMicros(price, reply, held).
+                                            Let promptArtifacts be ["prompt:" + storeArtifact(workspace, chatRequestJson(request)), "response:" + storeArtifact(workspace, reply's content)].
+                                            Let j be judgeAnswer(workspace, statement, kind, strategy's id, trail, reply's content).
+                                            Let sealed be appendToTrail(trail, attemptEntry(entry, j, cost, promptArtifacts)).
+                                            Let last be item (length of sealed) of sealed.
+                                            Let mutable a be a new Attempt with id "{slugOf(problemId)}-{last's seq}" and unitId "local" and problemId problemId and contributor s's contributor.
+                                            Set a's model to reply's model.
+                                            Set a's strategyId to strategy's id.
+                                            Set a's promptSha to last's promptSha.
+                                            Set a's responseSha to sha256Hex(reply's content).
+                                            Set a's documentSha to j's documentSha.
+                                            Set a's approachFingerprint to j's fingerprint.
+                                            Set a's verdict to j's verdict.
+                                            Set a's costMicros to cost.
+                                            Set a's startedAt to entry's ts.
+                                            Set a's finishedAt to clockMs().
+                                            Let fault be recordAttempt(workspace, s's resultsDir, last, a, j).
+                                            Let line be "{problemId} #{last's seq} {kind}: {j's verdict's kind} · cost " + formatMicros(cost) + fault.
+                                            Let outcome be a new AttemptOutcome with verdict j's verdict's kind and proceed (j's verdict's kind is not equal to "verified") and line line.
+                                            Return (outcome, settle(holding, held, cost)).
+    Return (stopped("unreachable", ""), budget).

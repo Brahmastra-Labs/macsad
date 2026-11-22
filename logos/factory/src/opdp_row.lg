@@ -1,0 +1,119 @@
+# Opdp row
+
+Import WireShape from "./wire_shape.lg".
+Import WireRead from "./wire_read.lg".
+Import WireNumber from "./wire_number.lg".
+Import ProblemRecord from "./problem_record.lg".
+Import RankScore from "./rank_score.lg".
+
+One atlas record projected into a factory problem and the inputs it is ranked by.
+The key is the numeric `problem_id` (`opdp:116`); `problem_number` is not unique.
+`null` stays apart from zero: a record whose tractability score is `null` (the
+atlas's solved and ill-posed gates) is untractable and ranks zero, while a score
+of `0` is a real score. Scores are read exactly into basis points, a finer value
+refused rather than rounded. Records are read open: later releases add fields.
+
+## An OpdpRow has:
+    a problem, which is Problem.
+    an inputs, which is RankInputs.
+    a collectionSlug, which is Text.
+    a collectionLabel, which is Text.
+    a categorySlug, which is Text.
+    a categoryLabel, which is Text.
+
+## Note
+A value at a path in basis points: a 0–10 score at three digits, a probability at four.
+
+## To bpAt (v: Json, path: Text, digits: Int) -> Result of Int and Text:
+    Inspect jsonScaled(jsonPath(v, path), digits):
+        When Ok (n):
+            Return a new Ok with value n.
+        When Err (e):
+            Return a new Err with error path + ": " + e.
+    Return a new Err with error path + ": unreadable".
+
+## Note
+The scheduler's inputs from a record.
+
+## To opdpRankInputs (v: Json) -> Result of RankInputs and Text:
+    Let tractable be jsonIsNull(jsonPath(v, "tractability.score")) is equal to false.
+    Let mutable paths be ["tool_leverage.score", "formalization.score", "verification.if_true_score", "verification.if_false_score"].
+    If tractable:
+        Set paths to paths + ["tractability.progress_probability.low", "tractability.progress_probability.high"].
+    Let mutable values be a new Seq of Int.
+    Repeat for path in paths:
+        Let mutable digits be 3.
+        If startsWith(path, "tractability"):
+            Set digits to 4.
+        Inspect bpAt(v, path, digits):
+            When Err (e):
+                Return a new Err with error e.
+            When Ok (x):
+                Push x to values.
+    Set values to values + [0, 0].
+    Let mutable r be unprofiledInputs("informal", textAt(jsonPath(v, "classification.category"), "slug")).
+    Set r's tractable to tractable.
+    Set r's progressLowBp to item 5 of values.
+    Set r's progressHighBp to item 6 of values.
+    Set r's aiFit to textAt(jsonGet(v, "ai_assessment"), "fit").
+    Set r's toolLeverageBp to item 1 of values.
+    Set r's formalizationBp to item 2 of values.
+    Set r's verificationBp to (item 3 of values + item 4 of values) / 2.
+    Return a new Ok with value r.
+
+## Note
+A classification part's slug, or `unassigned` where the atlas writes `null`.
+
+## To slugOr (v: Json, path: Text) -> Text:
+    If textAt(jsonPath(v, path), "slug") is equal to "":
+        Return "unassigned".
+    Return textAt(jsonPath(v, path), "slug").
+
+## Note
+A record's status: the assessment gate outranks the catalog row.
+
+## To opdpStatus (v: Json) -> Text:
+    Let gate be textAt(jsonGet(v, "assessment_gate"), "value").
+    If gate is equal to "solved" or gate is equal to "ill_posed":
+        Return problemStatus(gate).
+    Return problemStatus(textAt(v, "catalog_status")).
+
+## Note
+One record's text as a row, under the corpus the release's header names unless
+the record names its own `cohort`.
+
+## To opdpRowOf (text: Text, defaultCohort: Text) -> Result of OpdpRow and Text:
+    Inspect parseStrict(text):
+        When Err (e):
+            Return a new Err with error "not JSON: " + e.
+        When Ok (v):
+            Let shape be ["problem_id:int", "problem_number:text", "title:text", "catalog_status:text", "classification:object", "ai_assessment:object"].
+            Let problem be openShapeProblem(v, shape + ["tractability:object", "verification:object", "formalization:object", "tool_leverage:object"]).
+            If problem is not equal to "":
+                Return a new Err with error problem.
+            Inspect opdpRankInputs(v):
+                When Err (e):
+                    Return a new Err with error e.
+                When Ok (inputs):
+                    Return a new Ok with value opdpRowFrom(v, defaultCohort, inputs).
+    Return a new Err with error "unreadable record".
+
+## To opdpRowFrom (v: Json, defaultCohort: Text, inputs: RankInputs) -> OpdpRow:
+    Let collection be slugOr(v, "classification.source_collection").
+    Let number be textAt(v, "problem_number").
+    Let idNumber be intAt(v, "problem_id").
+    Let mutable p be bareProblem("opdp:{idNumber}", textAt(v, "title"), "opdp").
+    Set p's cohort to defaultCohort.
+    If textAt(v, "cohort") is not equal to "":
+        Set p's cohort to textAt(v, "cohort").
+    Set p's collection to collection.
+    Set p's category to slugOr(v, "classification.category").
+    Set p's statementInformal to textAt(jsonGet(v, "source_text"), "statement").
+    Set p's externalKey to some number.
+    If collection is equal to "erdos-problems" and startsWith(number, "EP-"):
+        Set p's crossRef to some ("erdos:" + removePrefix(number, "EP-")).
+    Set p's status to opdpStatus(v).
+    Let mutable row be a new OpdpRow with problem p and inputs inputs and collectionSlug collection and categorySlug p's category.
+    Set row's collectionLabel to textAt(jsonPath(v, "classification.source_collection"), "label").
+    Set row's categoryLabel to textAt(jsonPath(v, "classification.category"), "label").
+    Return row.

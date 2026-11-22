@@ -1,0 +1,101 @@
+# Local plan
+
+Import HostFiles from "./host_files.lg".
+Import HostTools from "./host_tools.lg".
+Import NodeRecord from "./node_record.lg".
+Import WorkRecord from "./work_record.lg".
+Import TrailRecord from "./trail_record.lg".
+Import TrailMemory from "./trail_memory.lg".
+Import TrailDigest from "./trail_digest.lg".
+Import KernelBlocks from "./kernel_blocks.lg".
+Import ChatRequest from "./chat_request.lg".
+Import ChatReply from "./chat_reply.lg".
+Import ModelPrice from "./model_price.lg".
+Import Replay from "./replay.lg".
+Import Prompts from "./prompts.lg".
+Import LocalSettings from "./local_settings.lg".
+Import LocalStore from "./local_store.lg".
+
+What the next attempt on a problem asks, and of whom. The next unit is `repair`
+when the last attempt was refused at a block (there is a submission to fix and an
+error to fix it by), `prove` otherwise, and `done` once one was verified.
+
+## To nextKind (trail: Seq of TrailEntry) -> Text:
+    If verifiedCount(trail) is greater than 0:
+        Return "done".
+    Inspect lastAttempt(trail):
+        When Some (e):
+            If e's verdict is equal to "rejected" and startsWith(e's diagnostics, "block "):
+                Return "repair".
+        When None:
+            Return "prove".
+    Return "prove".
+
+## Note
+The block number at the start of an entry's diagnostics (`block 4: …`), or `0`.
+
+## To failedBlockOf (diagnostics: Text) -> Int:
+    Let digits be item 1 of split(removePrefix(diagnostics, "block "), ":").
+    If startsWith(diagnostics, "block ") and allDigits(digits) and digits is not equal to "":
+        Return parseInt(digits).
+    Return 0.
+
+## Note
+The request the next attempt makes, for a unit of `kind`.
+
+## To planRequest (workspace: Text, problemId: Text, statement: Statement, trail: Seq of TrailEntry, kind: Text) -> ChatRequest:
+    Let strategy be loadStrategy(workspace).
+    Let mutable c be a new PromptContext with problem loadProblem(workspace, problemId) and statement statement's document and goalName statement's goalName.
+    Set c's trailDigest to trailDigest(problemId, trail, 5).
+    Set c's lemmas to [].
+    Set c's playbook to strategy's playbook.
+    Inspect lastAttempt(trail):
+        When Some (last):
+            If kind is equal to "repair":
+                Set c's previous to artifactOf(workspace, last, "submission").
+                Set c's diagnostics to last's diagnostics.
+                Set c's failedBlock to blockText(artifactOf(workspace, last, "document"), failedBlockOf(last's diagnostics)).
+        When None:
+            Set c's previous to "".
+    Return promptRequest(buildPrompt(kind, c), strategy).
+
+## Note
+The model's answer, from the provider the settings name.
+
+## To askModel (s: LocalSettings, request: ChatRequest) -> Result of ChatReply and Text:
+    If s's provider is equal to "replay":
+        Return replayComplete(s's replayDir, request).
+    If s's provider is equal to "mock":
+        Return parseChatReply(replyDocument("mock", request's model, envOr("MACSAD_MOCK_ANSWER", "Summary: the mock has no answer."), 0, 0, 0)).
+    Inspect openRouterKey():
+        When None:
+            Return a new Err with error "OPENROUTER_API_KEY is not set".
+        When Some (key):
+            Inspect httpCall("POST", chatCompletionsUrl(), openRouterHeaders(key), chatRequestJson(request), 300000):
+                When Err (e):
+                    Return a new Err with error "OpenRouter could not be reached: " + e.
+                When Ok (reply):
+                    If reply's status is not equal to 200:
+                        Return a new Err with error "OpenRouter answered {reply's status}: " + shortenText(reply's body, 400).
+                    Return parseChatReply(reply's body).
+    Return a new Err with error "no answer".
+
+## Note
+The price a call is held at: nothing for a recording or a mock; the listed price
+for OpenRouter, from the cached `models.json`, fetched (no key needed) when absent.
+
+## To priceFor (workspace: Text, s: LocalSettings, model: Text) -> Result of ModelPrice and Text:
+    If s's provider is not equal to "openrouter":
+        Return a new Ok with value freePrice(model).
+    If pathExists(workspace + "/models.json") is equal to false:
+        Inspect httpCall("GET", modelsUrl(), a new Map of Text to Text, "", 60000):
+            When Err (e):
+                Return a new Err with error "the model list could not be fetched: " + e.
+            When Ok (reply):
+                Let cached be writeAtomically(workspace + "/models.json", reply's body).
+    Inspect readText(workspace + "/models.json"):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (text):
+            Return priceOf(text, model).
+    Return a new Err with error "no price".

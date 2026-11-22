@@ -1,0 +1,44 @@
+# Atlas prepare
+
+Import HostFiles from "./host_files.lg".
+Import HostTools from "./host_tools.lg".
+
+A release made into the chunk files the streamed ingest reads: a `.gz` copied
+(the source is never touched) and decompressed with `gzip`, then cut with
+`split -C` into pieces of at most `chunkMb` megabytes that end at line ends — the
+atlas is pretty-printed, so a piece never cuts a character in two.
+
+## To runStep (program: Text, arguments: Seq of Text) -> Text:
+    Inspect runTool(program, arguments, 600000, 65536):
+        When Err (e):
+            Return program + ": " + e.
+        When Ok (r):
+            If r's exitCode is not equal to 0:
+                Return program + " failed: " + r's stderr.
+            Return "".
+    Return program + ": unrun".
+
+## Note
+The chunk paths of a release, in order.
+
+## To prepareAtlas (path: Text, workDir: Text, chunkMb: Int) -> Result of Seq of Text and Text:
+    Let made be ensureDir(workDir + "/parts").
+    Let mutable plain be path.
+    If endsWith(path, ".gz"):
+        Let copied be runStep("cp", [path, workDir + "/atlas.json.gz"]).
+        Let unzipped be runStep("gzip", ["-d", "-f", workDir + "/atlas.json.gz"]).
+        If copied + unzipped is not equal to "":
+            Return a new Err with error copied + unzipped.
+        Set plain to workDir + "/atlas.json".
+    Let cut be runStep("split", ["-C", "{chunkMb}M", "-d", "-a", "5", plain, workDir + "/parts/atlas."]).
+    If cut is not equal to "":
+        Return a new Err with error cut.
+    Inspect listNames(workDir + "/parts"):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (names):
+            Let mutable out be a new Seq of Text.
+            Repeat for name in names:
+                Push workDir + "/parts/" + name to out.
+            Return a new Ok with value out.
+    Return a new Err with error "unprepared".

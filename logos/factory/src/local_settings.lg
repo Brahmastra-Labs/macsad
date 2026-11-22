@@ -1,0 +1,75 @@
+# Local settings
+
+Import HostFiles from "./host_files.lg".
+Import HostTools from "./host_tools.lg".
+Import WireNumber from "./wire_number.lg".
+Import WorkRecord from "./work_record.lg".
+
+On whose behalf and with what a run works, read from the environment the
+containers set: `MACSAD_PROVIDER` (`openrouter`, `replay` or `mock`; `openrouter`
+when `OPENROUTER_API_KEY` is set, else `replay`), `MACSAD_REPLAY_DIR` and
+`MACSAD_RESULTS_DIR` (else the workspace's `replays/` and `results/`),
+`MACSAD_CONTRIBUTOR` (else `local`), `MACSAD_BUDGET_USD` (else one dollar) and
+`MACSAD_MODEL` (else `openai/gpt-4o-mini`).
+
+## A LocalSettings has:
+    a provider, which is Text.
+    a replayDir, which is Text.
+    a resultsDir, which is Text.
+    a contributor, which is Text.
+    a budgetMicros, which is Int.
+
+## Note
+A budget in dollars as micro-dollars, exactly; finer or not a number is refused.
+
+## To dollarsToMicros (text: Text) -> Result of Int and Text:
+    Inspect jsonTryParse(trim(text)):
+        When JOk (v):
+            Inspect jsonScaled(v, 6):
+                When Ok (micros):
+                    If micros is less than 0:
+                        Return a new Err with error "a budget cannot be negative".
+                    Return a new Ok with value micros.
+                When Err (e):
+                    Return a new Err with error "the budget " + text + " is not a whole number of micro-dollars".
+        When JErr (e):
+            Return a new Err with error "the budget " + text + " is not a number".
+    Return a new Err with error "unreadable budget".
+
+## Note
+The settings of a run in `workspace`.
+
+## To localSettings (workspace: Text) -> Result of LocalSettings and Text:
+    Let mutable provider be "replay".
+    Inspect openRouterKey():
+        When Some (key):
+            If trim(key) is not equal to "":
+                Set provider to "openrouter".
+        When None:
+            Set provider to "replay".
+    Set provider to envOr("MACSAD_PROVIDER", provider).
+    If ["openrouter", "replay", "mock"] contains provider is equal to false:
+        Return a new Err with error "MACSAD_PROVIDER is {provider}; it must be openrouter, replay or mock".
+    Inspect dollarsToMicros(envOr("MACSAD_BUDGET_USD", "1")):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (micros):
+            Let mutable s be a new LocalSettings with provider provider and contributor envOr("MACSAD_CONTRIBUTOR", "local") and budgetMicros micros.
+            Set s's replayDir to envOr("MACSAD_REPLAY_DIR", workspace + "/replays").
+            Set s's resultsDir to envOr("MACSAD_RESULTS_DIR", workspace + "/results").
+            Return a new Ok with value s.
+    Return a new Err with error "unreadable settings".
+
+## Note
+The strategy a workspace without `strategy.json` attacks with.
+
+## To defaultStrategy () -> Strategy:
+    Let a be "Read the trail first: do not repeat an approach that failed. Prefer structural induction on the first natural number, ".
+    Let playbook be a + "compute with `change` and `rfl`, and state the step you need as a helper theorem before the main one.".
+    Let mutable s be a new Strategy with id "default-prove-v1" and version 1 and parentId none and unitKind "prove" and model envOr("MACSAD_MODEL", "openai/gpt-4o-mini").
+    Set s's temperatureBp to 2000.
+    Set s's maxTokens to 4096.
+    Set s's playbook to playbook.
+    Set s's contextRules to "the last 5 attempts".
+    Set s's status to "active".
+    Return s.

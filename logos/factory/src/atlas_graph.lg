@@ -1,0 +1,75 @@
+# Atlas graph
+
+Import NodeRecord from "./node_record.lg".
+Import RankScore from "./rank_score.lg".
+Import RankTrail from "./rank_trail.lg".
+Import Rank from "./rank.lg".
+Import OpdpRow from "./opdp_row.lg".
+
+The atlas graph above the problems, built while rows stream past: each cohort,
+collection and category once, in first-seen order, each ranked by its best
+problem, so the graph orders its branches by where the most promising work is.
+
+## An AtlasGraph has:
+    an ids, which is Seq of Text.
+    a nodes, which is Map of Text to Node.
+
+## To newAtlasGraph () -> AtlasGraph:
+    Return a new AtlasGraph with ids [] and nodes (a new Map of Text to Node).
+
+## Note
+A row's rank before anything has been tried on it.
+
+## To rowRank (row: OpdpRow) -> Int:
+    Return priority(row's inputs, noSignals()).
+
+## Note
+The graph with node `id` raised to at least `rank`, made the first time.
+
+## To raiseNode (g: AtlasGraph, node: Node) -> AtlasGraph:
+    Let mutable nodes be g's nodes.
+    Let mutable ids be g's ids.
+    If ids contains node's id:
+        Let mutable known be item (node's id) of nodes.
+        If node's rank is greater than known's rank:
+            Set known's rank to node's rank.
+            Set nodes at node's id to known.
+    Otherwise:
+        Push node's id to ids.
+        Set nodes at node's id to node.
+    Return a new AtlasGraph with ids ids and nodes nodes.
+
+## Note
+The graph with a row's cohort, collection and category raised to its rank.
+
+## To graphWithRow (g: AtlasGraph, row: OpdpRow) -> AtlasGraph:
+    Let p be row's problem.
+    Let rank be rowRank(row).
+    Let cohort be cohortNodeId(p's cohort).
+    Let collection be collectionNodeId(p's cohort, row's collectionSlug).
+    Let mutable label be row's collectionLabel.
+    If label is equal to "":
+        Set label to row's collectionSlug.
+    Let mutable out be raiseNode(g, rankedNode(cohort, none, none, "cohort", p's cohort, rank)).
+    Set out to raiseNode(out, rankedNode(collection, some cohort, none, "collection", label, rank)).
+    Let category be categoryNodeId(p's cohort, row's collectionSlug, row's categorySlug).
+    Return raiseNode(out, rankedNode(category, some collection, none, "category", row's categoryLabel, rank)).
+
+## Note
+A row's own node, under its category.
+
+## To rowNode (row: OpdpRow) -> Node:
+    Let p be row's problem.
+    Let parent be categoryNodeId(p's cohort, row's collectionSlug, row's categorySlug).
+    Return rankedNode(problemNodeId(p's id), some parent, some p's id, "problem", p's title, rowRank(row)).
+
+## Note
+The graph's nodes, parents before children.
+
+## To graphNodes (g: AtlasGraph) -> Seq of Node:
+    Let mutable out be a new Seq of Node.
+    Repeat for kind in ["cohort", "collection", "category"]:
+        Repeat for id in g's ids:
+            If (item id of g's nodes)'s kind is equal to kind:
+                Push item id of g's nodes to out.
+    Return out.

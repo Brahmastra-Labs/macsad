@@ -1,0 +1,72 @@
+# Roles verify
+
+Import HostFiles from "./host_files.lg".
+Import HostTools from "./host_tools.lg".
+Import VerdictRecord from "./verdict_record.lg".
+Import KernelReport from "./kernel_report.lg".
+Import RefExample from "./ref_example.lg".
+Import RefProse from "./ref_prose.lg".
+Import Reference from "./reference.lg".
+Import Verifier from "./verifier.lg".
+Import LocalRun from "./local_run.lg".
+
+The verifier roles: a submission judged against a statement, a statement
+checked well-formed, and the kernel reference checked against the kernel — every
+positive example must check, every failure example be refused with its error,
+every promised prelude name be bound.
+
+## To runJudge (statementPath: Text, goal: Text, submissionPath: Text) -> Outcome:
+    Inspect readText(statementPath):
+        When Err (e):
+            Return failed("cannot read the statement: " + e).
+        When Ok (statement):
+            Inspect readText(submissionPath):
+                When Err (e):
+                    Return failed("cannot read the submission: " + e).
+                When Ok (submission):
+                    Let v be judgeSubmission(defaultToolchain(), statement, goal, submission).
+                    If v's kind is equal to "verified":
+                        Return done(toJson_Verdict(v)).
+                    Return failed(toJson_Verdict(v)).
+    Return failed("unreachable").
+
+## To runStatementCheck (statementPath: Text, goal: Text) -> Outcome:
+    Inspect readText(statementPath):
+        When Err (e):
+            Return failed("cannot read the statement: " + e).
+        When Ok (statement):
+            Let v be judgeStatement(defaultToolchain(), statement, goal).
+            If v's kind is equal to "verified":
+                Return done(toJson_Verdict(v)).
+            Return failed(toJson_Verdict(v)).
+    Return failed("unreachable").
+
+## Note
+Everything wrong with the kernel reference, by the kernel's own answer.
+
+## To referenceProblems (tc: Toolchain) -> Seq of Text:
+    Let mutable out be a new Seq of Text.
+    Let mutable checks be a new Seq of Text.
+    Repeat for name in referenceNames():
+        Push "Check " + name + "." to checks.
+    Let names be positiveExample("prelude_names", "", join(checks, "\n\n")).
+    Repeat for e in allExamples() + [names]:
+        Inspect kernelRun(tc, e's document):
+            When Err (why):
+                Push "{e's name}: " + why to out.
+            When Ok (run):
+                Inspect parseKernelReport(run's stdout):
+                    When Err (why):
+                        Push "{e's name}: " + why to out.
+                    When Ok (r):
+                        If e's expectError is equal to "" and r's checked is equal to false:
+                            Push "{e's name}: does not check: " + r's error to out.
+                        If e's expectError is not equal to "" and (r's checked or (r's error contains e's expectError) is equal to false):
+                            Push "{e's name}: is not refused with `{e's expectError}`" to out.
+    Return out.
+
+## To runReferenceCheck () -> Outcome:
+    Let problems be referenceProblems(defaultToolchain()).
+    If length of problems is equal to 0:
+        Return done("all {length of allExamples()} reference examples are what the kernel says, and every promised prelude name is bound").
+    Return failed(join(problems, "\n")).

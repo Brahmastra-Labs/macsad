@@ -1,0 +1,114 @@
+# Node record
+
+The atlas graph and the formal statements its problems get. Node ids are built
+here, once, so every source places its problems in the same tree:
+`cohort:<c>`, `collection:<c>/<k>`, `category:<c>/<k>/<g>` and `problem:<id>`.
+The vocabularies match the coordinator's schema
+(`database/migrations/0004_factory.sql`), which enforces them.
+
+## Note
+One node: `parentId` is `none` at a root, `problemId` names the problem of a
+problem, statement or lemma node, `stage` is where it stands and `rank` its
+scheduling priority in basis points.
+
+## A Node has:
+    an id, which is Text.
+    a parentId, which is Option of Text.
+    a problemId, which is Option of Text.
+    a kind, which is Text.
+    a label, which is Text.
+    a stage, which is Text.
+    a rank, which is Int.
+
+## Note
+A formal statement: a kernel-vernacular document defining `goalName` as a `Prop`.
+A proof is accepted only as a theorem of exactly that type, checked after this
+document byte for byte; `sha256` is what a result is bound to. `route` is `A`
+(translated from Lean), `B` (an informal problem given a Lean statement first) or
+`C` (written directly in the vernacular).
+
+## A Statement has:
+    an id, which is Text.
+    a problemId, which is Text.
+    a document, which is Text.
+    a sha256, which is Text.
+    a goalName, which is Text.
+    a route, which is Text.
+    a reviewState, which is Text.
+    an author, which is Text.
+    a model, which is Text.
+    a createdAt, which is Int.
+
+## Note
+The node kinds, stages and review states the schema allows.
+
+## To nodeKinds () -> Seq of Text:
+    Return ["root", "cohort", "collection", "category", "problem", "statement", "lemma"].
+
+## Note
+A node's stage: ranked, being formalized, formalized, worked on, then settled.
+
+## To nodeStages () -> Seq of Text:
+    Return ["ranked", "formalizing", "formalized", "in_progress", "partial", "solved", "refuted", "invalid_formalization"].
+
+## Note
+A statement's review: written, under review, accepted (one per problem), rejected, replaced.
+
+## To reviewStates () -> Seq of Text:
+    Return ["draft", "reviewing", "accepted", "rejected", "superseded"].
+
+## Note
+The ids of the graph's levels: a cohort, a collection in it, a category in that,
+and a problem.
+
+## To cohortNodeId (cohort: Text) -> Text:
+    Return "cohort:" + cohort.
+
+## To collectionNodeId (cohort: Text, collection: Text) -> Text:
+    Return "collection:" + cohort + "/" + collection.
+
+## To categoryNodeId (cohort: Text, collection: Text, category: Text) -> Text:
+    Return "category:" + cohort + "/" + collection + "/" + category.
+
+## To problemNodeId (problemId: Text) -> Text:
+    Return "problem:" + problemId.
+
+## Note
+A node that has just been ranked.
+
+## To rankedNode (id: Text, parent: Option of Text, problem: Option of Text, kind: Text, label: Text, rank: Int) -> Node:
+    Return a new Node with id id and parentId parent and problemId problem and kind kind and label label and stage "ranked" and rank rank.
+
+## Test: a node and a statement round-trip through their derived codecs
+
+Let n be rankedNode(categoryNodeId("U", "green", "comb"), some collectionNodeId("U", "green"), none, "category", "Combinatorics", 4200).
+Expect that fromJson_Node(toJson_Node(n)) is equal to a new Ok with value n.
+Let mutable s be a new Statement with id "stmt:ab" and problemId "opdp:116" and document "Definition goal : Prop := True." and sha256 "ab".
+Set s's goalName to "goal".
+Set s's route to "C".
+Set s's reviewState to "draft".
+Set s's author to "c1".
+Set s's model to "m".
+Set s's createdAt to 5.
+Expect that fromJson_Statement(toJson_Statement(s)) is equal to a new Ok with value s.
+
+## Test: node ids name their level and place
+
+Expect that cohortNodeId("UnsolvedMath") is equal to "cohort:UnsolvedMath".
+Expect that categoryNodeId("U", "green", "comb") is equal to "category:U/green/comb".
+Expect that problemNodeId("opdp:116") is equal to "problem:opdp:116".
+Expect that (rankedNode("x", none, none, "cohort", "X", 7))'s stage is equal to "ranked".
+
+## Test: the graph's vocabularies are the schema's
+
+Expect that length of nodeKinds() is equal to 7.
+Expect that nodeStages() contains "invalid_formalization".
+Expect that reviewStates() contains "accepted".
+
+## Test: a ranked node keeps its kind whether or not it belongs to a problem
+
+For all booleans owned:
+    Let mutable problem: Option of Text be none.
+    If owned:
+        Set problem to some "opdp:1".
+    Expect that (rankedNode("n", none, problem, "problem", "P", 1))'s kind is equal to "problem".

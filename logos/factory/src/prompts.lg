@@ -1,0 +1,83 @@
+# Prompts
+
+Import ProblemRecord from "./problem_record.lg".
+Import AttemptRecord from "./attempt_record.lg".
+Import WorkRecord from "./work_record.lg".
+Import ChatRequest from "./chat_request.lg".
+Import VernacularCommand from "./vernacular_command.lg".
+Import PromptTasks from "./prompt_tasks.lg".
+Import PromptRoles from "./prompt_roles.lg".
+Import Reference from "./reference.lg".
+
+What a model is asked. Every prompt has the same parts in the same place: a
+SYSTEM message with the role and the whole kernel reference, and a USER message
+with the problem, the accepted statement (when there is one), the trail digest,
+the verified lemmas it may cite, the strategy's playbook, the task, and the
+answer contract. The playbook and the sampling budget are the strategy's; the
+reference, the contract and the acceptance rules are not.
+
+## Note
+Everything a prompt draws on; `previous`, `diagnostics` and `failedBlock` are
+the last submission, the kernel's error and the refused block, for a repair.
+
+## A PromptContext has:
+    a problem, which is Problem.
+    a statement, which is Text.
+    a goalName, which is Text.
+    a trailDigest, which is Text.
+    a lemmas, which is Seq of Lemma.
+    a playbook, which is Text.
+    a previous, which is Text.
+    a diagnostics, which is Text.
+    a failedBlock, which is Text.
+
+## A Prompt has:
+    a kind, which is Text.
+    a system, which is Text.
+    a user, which is Text.
+
+## Note
+The problem as the model reads it.
+
+## To problemSection (p: Problem) -> Text:
+    Let mutable out be "## The problem\n\n" + p's id + " — " + p's title + "\nSource: " + p's source + ", collection " + p's collection + ".".
+    If p's statementInformal is not equal to "":
+        Set out to out + "\n\n" + p's statementInformal.
+    Inspect p's leanStatement:
+        When Some (lean):
+            Return out + "\n\nThe Lean statement:\n\n```lean\n" + lean + "\n```".
+        When None:
+            Return out + "\n\nThere is no formal statement yet.".
+    Return out.
+
+## Note
+The sections after the problem, each only when it has something in it.
+
+## To contextSections (c: PromptContext) -> Seq of Text:
+    Let mutable out be a new Seq of Text.
+    If c's statement is not equal to "":
+        Push "## The statement\n\nThis document is checked first, exactly as written. It defines `" + c's goalName + "`.\n\n```logos-kernel\n" + c's statement + "\n```" to out.
+    Push "## What has been tried\n\n" + c's trailDigest to out.
+    If length of c's lemmas is greater than 0:
+        Let mutable ls be a new Seq of Text.
+        Repeat for l in c's lemmas:
+            Push "- `" + l's name + "`: " + l's statement to ls.
+        Push "## Verified lemmas\n\nThese are proved; to use one, include it in your block under a new name.\n\n" + join(ls, "\n") to out.
+    If c's playbook is not equal to "":
+        Push "## Playbook\n\n" + c's playbook to out.
+    Return out.
+
+## Note
+The prompt for a unit of `kind` in context `c`.
+
+## To buildPrompt (kind: Text, c: PromptContext) -> Prompt:
+    Let task be taskText(kind, c's goalName, proofNameFor(c's goalName), c's previous, c's failedBlock, c's diagnostics).
+    Let user be join([problemSection(c's problem)] + contextSections(c) + [task, contractText(kind)], "\n\n").
+    Return a new Prompt with kind kind and system (roleText(kind) + "\n\n" + kernelReference()) and user user.
+
+## Note
+A prompt as the request a strategy sends.
+
+## To promptRequest (p: Prompt, s: Strategy) -> ChatRequest:
+    Let messages be [a new ChatMessage with role "system" and content p's system, a new ChatMessage with role "user" and content p's user].
+    Return a new ChatRequest with model s's model and messages messages and maxTokens s's maxTokens and temperatureBp s's temperatureBp.

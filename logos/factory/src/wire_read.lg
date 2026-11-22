@@ -1,0 +1,120 @@
+# Wire read
+
+Total readers of JSON fields, called after a shape check has established what
+they read, so none of them can fail: an absent or wrongly typed field reads as
+the empty value of its type. The one strict door in is `parseStrict`, which
+refuses a duplicated key instead of keeping either value silently.
+
+## Note
+The text under `key`, or the empty text.
+
+## To textAt (v: Json, key: Text) -> Text:
+    Inspect jsonGet(v, key):
+        When JStr (s):
+            Return s.
+        Otherwise:
+            Return "".
+    Return "".
+
+## Note
+The integer under `key`, or `0`.
+
+## To intAt (v: Json, key: Text) -> Int:
+    Inspect jsonGet(v, key):
+        When JNum (n):
+            Return n.
+        Otherwise:
+            Return 0.
+    Return 0.
+
+## Note
+The boolean under `key`, or `false`.
+
+## To boolAt (v: Json, key: Text) -> Bool:
+    Inspect jsonGet(v, key):
+        When JBool (b):
+            Return b.
+        Otherwise:
+            Return false.
+    Return false.
+
+## Note
+The strings of the array under `key`, in order, other elements skipped.
+
+## To textsAt (v: Json, key: Text) -> Seq of Text:
+    Let mutable out be a new Seq of Text.
+    Inspect jsonGet(v, key):
+        When JArr (elems):
+            Repeat for e in elems:
+                Inspect e:
+                    When JStr (s):
+                        Push s to out.
+                    Otherwise:
+                        Let ignored be e.
+        Otherwise:
+            Return out.
+    Return out.
+
+## Note
+The text under `key` when it is a string, `none` when it is `null` or absent: a
+missing value is kept apart from an empty one.
+
+## To optTextAt (v: Json, key: Text) -> Option of Text:
+    Inspect jsonGet(v, key):
+        When JStr (s):
+            Return some s.
+        Otherwise:
+            Return none.
+    Return none.
+
+## Note
+The value at a dotted path through nested objects, or `JNull`.
+
+## To jsonPath (v: Json, path: Text) -> Json:
+    Let mutable here be v.
+    Repeat for step in split(path, "."):
+        Set here to jsonGet(here, step).
+    Return here.
+
+## Note
+A document parsed strictly, as a `Result` that composes with the rest of a decoder.
+
+## To parseStrict (text: Text) -> Result of Json and Text:
+    Inspect jsonParseStrict(text):
+        When JOk (v):
+            Return a new Ok with value v.
+        When JErr (m):
+            Return a new Err with error m.
+    Return a new Err with error "unparsed".
+
+## Test: total readers read what is there and the empty value otherwise
+
+Let v be jsonParse("{{\"a\": \"x\", \"n\": -4, \"ok\": true, \"tags\": [\"p\", 7, \"q\"], \"m\": null}}").
+Expect that textAt(v, "a") is equal to "x".
+Expect that intAt(v, "n") is equal to -4.
+Expect that boolAt(v, "ok") is equal to true.
+Expect that textsAt(v, "tags") is equal to ["p", "q"].
+Expect that optTextAt(v, "m") is none.
+Expect that optTextAt(v, "a") is equal to some "x".
+Expect that textAt(v, "missing") is equal to "".
+Expect that intAt(v, "a") is equal to 0.
+
+## Test: a dotted path walks nested objects
+
+Let v be jsonParse("{{\"t\": {{\"p\": {{\"low\": 0.4}}}}}}").
+Expect that jsonSerialize(jsonPath(v, "t.p.low")) is equal to "0.4".
+Expect that jsonIsNull(jsonPath(v, "t.q.low")) is equal to true.
+
+## Test: a strict parse refuses a duplicated key
+
+Inspect parseStrict("{{\"a\": 1, \"a\": 2}}"):
+    When Ok (v):
+        Expect that jsonSerialize(v) is equal to "refused".
+    When Err (e):
+        Expect that e contains "duplicate".
+
+## Test: a boolean field reads back as itself
+
+For all booleans b:
+    Let v be a new JObj with entries [a new JEntry with key "ok" and val (a new JBool with b b)].
+    Expect that boolAt(v, "ok") is equal to b.

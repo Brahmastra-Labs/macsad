@@ -1,0 +1,78 @@
+# Ref tactics basic
+
+Import RefExample from "./ref_example.lg".
+
+The tactics that introduce, apply and take apart. Every document here is checked
+by the kernel in `factory selftest --live`.
+
+## To exampleIntroExact () -> RefExample:
+    Let lead be "`intro` names the hypotheses of a `forall` or an `->`, one name each; `exact t` closes the goal with a term of its type:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem id_prop : forall (P : Prop), P -> P := by intro P h; exact h." to doc.
+    Return positiveExample("intro_exact", lead, join(doc, "\n")).
+
+## To exampleAssumption () -> RefExample:
+    Let lead be "`assumption` closes the goal with a hypothesis that has exactly its type:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem keep : forall (P : Prop), forall (Q : Prop), P -> Q -> P := by intro P Q p q; assumption." to doc.
+    Return positiveExample("assumption", lead, join(doc, "\n")).
+
+## To exampleApply () -> RefExample:
+    Let lead be "`apply f` reduces the goal `Q` to `P` when `f : P -> Q`:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem modus_ponens : forall (P : Prop), forall (Q : Prop), (P -> Q) -> P -> Q := by intro P Q f p; apply f;" to doc.
+    Push "  exact p." to doc.
+    Return positiveExample("apply", lead, join(doc, "\n")).
+
+## To exampleConstructor () -> RefExample:
+    Let lead be "`constructor` splits `And P Q` (and `Iff P Q`) into one goal per part:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem and_intro : forall (P : Prop), forall (Q : Prop), P -> Q -> And P Q := by intro P Q p q; constructor;" to doc.
+    Push "  exact p; exact q." to doc.
+    Return positiveExample("constructor", lead, join(doc, "\n")).
+
+## To exampleCasesAnd () -> RefExample:
+    Let lead be "`cases h as [p q]` takes a hypothesis apart; the names in brackets are each constructor's arguments, cases separated by `|`:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem and_swap : forall (P : Prop), forall (Q : Prop), And P Q -> And Q P := by intro P Q h; cases h as [p" to doc.
+    Push "  q]; constructor; exact q; exact p." to doc.
+    Return positiveExample("cases_and", lead, join(doc, "\n")).
+
+## To exampleLeftRight () -> RefExample:
+    Let lead be "`left` and `right` choose a side of `Or`; `cases` on an `Or` gives one goal per side:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem or_swap : forall (P : Prop), forall (Q : Prop), Or P Q -> Or Q P := by intro P Q h; cases h as [p |" to doc.
+    Push "  q]; right; exact p; left; exact q." to doc.
+    Return positiveExample("left_right", lead, join(doc, "\n")).
+
+## To exampleExists () -> RefExample:
+    Let lead be "`exists t` gives the witness of an `Ex`; `cases` on an `Ex` names the witness and its proof:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem ex_succ : Ex Nat (fun (n : Nat) => Eq Nat n Zero) -> Ex Nat (fun (m : Nat) => Eq Nat m (Succ Zero)) :=" to doc.
+    Push "  by intro h; cases h as [n e]; exists (Succ n); rw [e]; rfl." to doc.
+    Return positiveExample("exists", lead, join(doc, "\n")).
+
+## To exampleExfalso () -> RefExample:
+    Let lead be "`exfalso` turns any goal into `False`:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem from_false : forall (P : Prop), False -> P := by intro P f; exfalso; exact f." to doc.
+    Return positiveExample("exfalso", lead, join(doc, "\n")).
+
+## To exampleNot () -> RefExample:
+    Let lead be "`Not P` is `P -> False`, so `intro` takes its hypothesis:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem not_not_intro : forall (P : Prop), P -> Not (Not P) := by intro P p np; exact (np p)." to doc.
+    Return positiveExample("not", lead, join(doc, "\n")).
+
+## To exampleHave () -> RefExample:
+    Let lead be "`have h : T` opens `T` as the next goal, then makes `h` available for the rest:".
+    Let mutable doc be a new Seq of Text.
+    Push "Theorem chain : forall (P : Prop), forall (Q : Prop), forall (R : Prop), (P -> Q) -> (Q -> R) -> P -> R := by" to doc.
+    Push "  intro P Q R f g p; have q : Q; exact (f p); exact (g q)." to doc.
+    Return positiveExample("have", lead, join(doc, "\n")).
+
+## Note
+This file's examples, in the order the reference shows them.
+
+## To basicTacticExamples () -> Seq of RefExample:
+    Return [exampleIntroExact(), exampleAssumption(), exampleApply(), exampleConstructor(), exampleCasesAnd(), exampleLeftRight(), exampleExists(), exampleExfalso(), exampleNot(), exampleHave()].

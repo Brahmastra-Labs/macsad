@@ -1,0 +1,70 @@
+# Host tools
+
+Import Conventions from "./conventions.lg".
+Import HostFiles from "./host_files.lg".
+
+The edge where other programs and the network come in: `largo` and the other
+tools the factory drives, and HTTP. A sealed test world starts no process and
+opens no connection, so these are exercised by `factory selftest --live`.
+
+## Note
+Where the factory finds `largo` (`MACSAD_LARGO`, else `largo` on the `PATH`),
+how long one kernel run may take, how much output it keeps, and where the
+documents it checks are written (`MACSAD_WORK`, else `.macsad-work`).
+
+## A Toolchain has:
+    a largo, which is Text.
+    a kernelTimeoutMs, which is Int.
+    a maxOutput, which is Int.
+    a workDir, which is Text.
+
+## To defaultToolchain () -> Toolchain:
+    Return a new Toolchain with largo envOr("MACSAD_LARGO", "largo") and kernelTimeoutMs 120000 and maxOutput 4194304 and workDir envOr("MACSAD_WORK", ".macsad-work").
+
+## Note
+A program run with `arguments`, bounded by a deadline and an output cap.
+
+## To runTool (program: Text, arguments: Seq of Text, timeoutMs: Int, maxOutput: Int) -> Result of ProcessResult and Text:
+    Return runProcess(program, arguments, "", a new Map of Text to Text, timeoutMs, maxOutput).
+
+## Note
+What one kernel run answered: the three things a verdict reads.
+
+## A KernelRun has:
+    an exitCode, which is Int.
+    a stdout, which is Text.
+    a timedOut, which is Bool.
+
+## Note
+`document` checked by the kernel: written into the work directory under its own
+hash, as a `.kernel` file (never a `.lg` module), then `largo prove --kernel
+<file> --json`.
+
+## To kernelRun (tc: Toolchain, document: Text) -> Result of KernelRun and Text:
+    Inspect ensureDir(tc's workDir):
+        When Err (e):
+            Return a new Err with error "cannot make the work directory: " + e.
+        When Ok (made):
+            Let path be tc's workDir + "/" + sha256Hex(document) + ".kernel".
+            Inspect writeText(path, document):
+                When Err (e):
+                    Return a new Err with error "cannot write the document: " + e.
+                When Ok (written):
+                    Inspect runTool(tc's largo, ["prove", "--kernel", path, "--json"], tc's kernelTimeoutMs, tc's maxOutput):
+                        When Err (e):
+                            Return a new Err with error "cannot run largo: " + e.
+                        When Ok (r):
+                            Return a new Ok with value (a new KernelRun with exitCode r's exitCode and stdout r's stdout and timedOut r's timedOut).
+    Return a new Err with error "unrun".
+
+## Note
+The key a worker calls OpenRouter with, read at the moment of the call.
+
+## To openRouterKey () -> Option of Text:
+    Return get("OPENROUTER_API_KEY").
+
+## Note
+One HTTP exchange.
+
+## To httpCall (method: Text, url: Text, headers: Map of Text to Text, body: Text, timeoutMs: Int) -> Result of HttpReply and Text:
+    Return httpRequest(method, url, headers, body, timeoutMs).

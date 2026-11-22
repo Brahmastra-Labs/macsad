@@ -1,0 +1,47 @@
+# Ref example
+
+One example of the kernel reference: a name, the line that introduces it, and a
+whole kernel document. No model was trained on the LOGOS kernel vernacular, so
+the reference given with every prompt is held to one rule — nothing in it is
+unchecked: a positive example must check, and a failure example must be refused
+with the error it is shown with.
+
+## A RefExample has:
+    a name, which is Text.
+    a lead, which is Text.
+    a document, which is Text.
+    an expectError, which is Text.
+
+## To positiveExample (name: Text, lead: Text, document: Text) -> RefExample:
+    Return a new RefExample with name name and lead lead and document document and expectError "".
+
+## To failureExample (name: Text, lead: Text, document: Text, expectError: Text) -> RefExample:
+    Return a new RefExample with name name and lead lead and document document and expectError expectError.
+
+## Note
+An example as the reference shows it: the lead, the document in a fence, and for a
+failure the error the kernel gives.
+
+## To renderExample (e: RefExample) -> Text:
+    Let mutable out be e's lead + "\n\n```logos-kernel\n" + e's document + "\n```".
+    If e's expectError is not equal to "":
+        Set out to out + "\nThe kernel answers: … " + e's expectError + " …".
+    Return out.
+
+## Test: a positive example renders as its lead and a fenced document
+
+Let e be positiveExample("id", "`exact` closes a goal:", "Theorem id_prop : forall (P : Prop), P -> P := by intro P h; exact h.").
+Expect that renderExample(e) is equal to "`exact` closes a goal:\n\n```logos-kernel\nTheorem id_prop : forall (P : Prop), P -> P := by intro P h; exact h.\n```".
+
+## Test: a failure example also shows what the kernel answers
+
+Let e be failureExample("x", "A missing tactic:", "Theorem t : True := by omega.", "is not supported").
+Expect that renderExample(e) contains "The kernel answers: … is not supported …".
+
+## Test: only a failure example says what the kernel answers
+
+For all booleans refused:
+    Let mutable e be positiveExample("x", "Lead:", "Check Zero.").
+    If refused:
+        Set e to failureExample("x", "Lead:", "Check zero.", "Unbound variable").
+    Expect that (renderExample(e) contains "The kernel answers") is equal to refused.

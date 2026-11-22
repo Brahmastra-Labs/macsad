@@ -1,0 +1,75 @@
+# Conventions
+
+The three conventions every part of the factory shares, so a worker, the
+coordinator, the verifier and the website compute the same numbers.
+
+Money is an `Int` of MICRO-DOLLARS: one dollar is 1,000,000, so a budget check is
+integer comparison and a ledger sums exactly. Scores are `Int`s in BASIS POINTS
+of their scale: 10,000 is the top, a probability of 0.4 is 4,000 and a score of
+5.4 out of 10 is 5,400. Time is an `Int` of Unix milliseconds, what `now()`
+answers. And every hash is `sha256Hex`, so hashes agree by construction.
+
+## Note
+The lowercase hex SHA-256 of a text's UTF-8 bytes.
+
+## To sha256Hex (t: Text) -> Text:
+    Return bytesToHex(sha256(text_bytes(t))).
+
+## Note
+Micro-dollars as a reader expects money, all six decimals kept: a cost rounded
+for display is a cost that no longer adds up.
+
+## To formatMicros (micros: Int) -> Text:
+    Let mutable sign be "".
+    Let mutable n be micros.
+    If micros is less than 0:
+        Set sign to "-".
+        Set n to 0 - micros.
+    Return sign + "$" + "{n / 1000000}" + "." + zfill("{n % 1000000}", 6).
+
+## Note
+Lines joined into one text, one element a line. A multi-line literal inside an
+indented block is misread once a program reaches `crypto.lg` (see
+`LOGOS_ISSUES.md`, issue 7), so a text of several lines is written as its lines.
+
+## To joinLines (xs: Seq of Text) -> Text:
+    Return join(xs, "\n").
+
+## Note
+A text safe as one path segment: the factory's ids hold colons and slashes.
+
+## To slugOf (id: Text) -> Text:
+    Return replace(replace(id, ":", "_"), "/", "_").
+
+## Test: SHA-256 of abc is the FIPS vector
+
+Expect that sha256Hex("abc") is equal to "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad".
+Expect that length of sha256Hex("") is equal to 64.
+
+## Test: money prints with all six decimals
+
+For each of these cases:
+
+| micros  | shown        |
+|---------|--------------|
+| 0       | "$0.000000"  |
+| 1250    | "$0.001250"  |
+| 5000000 | "$5.000000"  |
+| 1234567 | "$1.234567"  |
+| -42     | "-$0.000042" |
+
+Expect that formatMicros(micros) is equal to shown.
+
+## Test: lines join with newlines and ids become path segments
+
+Expect that joinLines(["a", "", "b"]) is equal to "a\n\nb".
+Expect that slugOf("op:OP022") is equal to "op_OP022".
+Expect that slugOf("fc:Arxiv/0912.2382/Curling") is equal to "fc_Arxiv_0912.2382_Curling".
+
+## Test: a cost and its negation print the same digits
+
+For all booleans b:
+    Let mutable n be 1250.
+    If b:
+        Set n to 5000000.
+    Expect that formatMicros(0 - n) is equal to "-" + formatMicros(n).

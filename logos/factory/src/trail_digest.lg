@@ -1,0 +1,70 @@
+# Trail digest
+
+Import Conventions from "./conventions.lg".
+Import TrailRecord from "./trail_record.lg".
+Import TrailMemory from "./trail_memory.lg".
+
+What a model reads about a problem's past before attempting it: the tally, the
+last few attempts newest first with what the kernel said, every distinct failure
+reason with how often it recurred — the walls, not just the latest — and the
+suggestions earlier attempts left, once each. An empty trail says so.
+
+## Note
+How many attempts ended in each verdict, and what the trail cost.
+
+## To trailTally (trail: Seq of TrailEntry) -> Text:
+    Let mutable counts be [0, 0, 0, 0, 0, 0].
+    Repeat for e in trail:
+        Set item 1 of counts to item 1 of counts + e's costMicros.
+        If isAttemptEntry(e):
+            Set item 2 of counts to item 2 of counts + 1.
+        Repeat for k from 3 to 6:
+            If e's verdict is equal to item k of ["", "", "verified", "rejected", "admitted_axiom", "infrastructure"]:
+                Set item k of counts to item k of counts + 1.
+    Let head be "{length of trail} entries · {item 2 of counts} attempts · {item 3 of counts} verified · {item 4 of counts} rejected".
+    Return head + " · {item 5 of counts} admitted an axiom · {item 6 of counts} infrastructure · spent " + formatMicros(item 1 of counts).
+
+## Note
+One attempt as the digest shows it.
+
+## To digestLine (e: TrailEntry) -> Text:
+    Let mutable line be "- #{e's seq} {e's kind}, strategy {e's strategyId}, model {e's model}: {e's verdict}".
+    If e's verdict is not equal to "verified" and e's diagnostics is not equal to "":
+        Set line to line + " — " + failureReason(e).
+    If e's summary is not equal to "":
+        Set line to line + "\n  summary: " + shortenText(e's summary, 400).
+    Return line.
+
+## Note
+The suggestions a trail's entries left, each once, in order.
+
+## To trailSuggestions (trail: Seq of TrailEntry) -> Seq of Text:
+    Let mutable out be a new Seq of Text.
+    Repeat for e in trail:
+        Repeat for s in e's nextSuggestions:
+            If out contains s is equal to false:
+                Push s to out.
+    Return out.
+
+## Note
+The digest of a problem's trail, with its last `lastN` attempts.
+
+## To trailDigest (problemId: Text, trail: Seq of TrailEntry, lastN: Int) -> Text:
+    Let mutable out be "Trail of {problemId}: " + trailTally(trail) + ".".
+    If length of trail is equal to 0:
+        Return out + "\nNo attempt has been made yet.".
+    Let mutable recent be a new Seq of Text.
+    Let mutable i be length of trail.
+    While i is at least 1 and length of recent is less than lastN:
+        If isAttemptEntry(item i of trail):
+            Push digestLine(item i of trail) to recent.
+        Set i to i - 1.
+    If length of recent is greater than 0:
+        Set out to out + "\n\nLast {length of recent} attempts, newest first:\n" + join(recent, "\n").
+    Let reasons be failureCounts(trail).
+    If length of reasons is greater than 0:
+        Set out to out + "\n\nDistinct failure reasons (times seen):\n- " + join(reasons, "\n- ").
+    Let suggestions be trailSuggestions(trail).
+    If length of suggestions is greater than 0:
+        Set out to out + "\n\nSuggestions left by earlier attempts:\n- " + join(suggestions, "\n- ").
+    Return out.
