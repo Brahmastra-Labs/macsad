@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Build the factory's two binaries and pin them.
+# Build largo, stage the factory source, and pin both.
 #
 #   largo    — the LOGOS toolchain, built from the PUBLIC logicaffeine repository at the revision
 #              ops/factory/logos.pin names (the kernel, the provers and the std the factory needs:
 #              process.lg, httpclient.lg, s3.lg and the file natives);
-#   factory  — macsad/logos/factory compiled by that largo (coordinator, worker, verifier, local).
+#   factory  — macsad/logos/factory's LOGOS source, run by that largo with `largo run --interpret`
+#              (coordinator, worker, verifier, local). The image runs the source on the interpreter
+#              until LOGOS compiles the factory (logos/factory/LOGOS_ISSUES.md §16).
 #
 # Mechanical only: this script fetches, builds, copies and hashes. Every decision the factory makes
 # lives in its LOGOS source. The receipt records exactly what was built — the binaries' SHA-256, the
@@ -57,12 +59,17 @@ printf '==> building largo\n'
 (cd "${LOGOS}" && CARGO_TARGET_DIR="${TARGET}" cargo build --release -p logicaffeine-cli --bin largo)
 install -m 0755 "${TARGET}/release/largo" "${OUT}/largo"
 
-printf '==> building the factory with that largo\n'
-(cd "${MACSAD}/logos/factory" && LOGOS_WORKSPACE="${LOGOS}" CARGO_TARGET_DIR="${TARGET}/factory" \
-  "${OUT}/largo" build --release)
-factory_bin="$(find "${MACSAD}/logos/factory/target/release" -maxdepth 1 -type f -name factory -perm -u+x 2>/dev/null | head -1)"
-[[ -n "${factory_bin}" ]] || die 'largo build produced no factory binary'
-install -m 0755 "${factory_bin}" "${OUT}/factory"
+printf '==> staging the factory source\n'
+rm -rf "${OUT}/factory"
+mkdir -p "${OUT}/factory"
+cp -R "${MACSAD}/logos/factory/Largo.toml" "${MACSAD}/logos/factory/src" "${OUT}/factory/"
+if [[ -d "${MACSAD}/logos/factory/pages" ]]; then cp -R "${MACSAD}/logos/factory/pages" "${OUT}/factory/"; fi
+if [[ -d "${MACSAD}/logos/factory/static" ]]; then cp -R "${MACSAD}/logos/factory/static" "${OUT}/factory/"; fi
+# The recorded fixtures `factory selftest` judges and replays.
+mkdir -p "${OUT}/factory/tests"
+cp -R "${MACSAD}/logos/factory/tests/fixtures" "${OUT}/factory/tests/"
+printf '==> checking the factory with that largo\n'
+(cd "${OUT}/factory" && "${OUT}/largo" check --quiet) || die 'largo check refused the factory source'
 
 source_digest() {
   (cd "$1" && find "${@:2}" -type f \( -name '*.rs' -o -name '*.lg' -o -name '*.toml' -o -name '*.lock' \) \
@@ -79,7 +86,7 @@ cat >"${OUT}/toolchain.receipt.json" <<JSON
   "logos_source_sha256": "$(source_digest "${LOGOS}" crates apps Cargo.toml Cargo.lock)",
   "largo_sha256": "$(sha256sum "${OUT}/largo" | cut -d' ' -f1)",
   "largo_version": "$("${OUT}/largo" --version | tr -d '\n')",
-  "factory_sha256": "$(sha256sum "${OUT}/factory" | cut -d' ' -f1)",
+  "factory_runtime": "largo run --interpret",
   "factory_source_sha256": "$(source_digest "${MACSAD}/logos/factory" .)"
 }
 JSON
