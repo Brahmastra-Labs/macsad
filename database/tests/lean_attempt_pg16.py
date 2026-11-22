@@ -56,6 +56,8 @@ INPUTS = [
     'database/tests/lean_admission_expiry.py', 'database/tests/lean_admission_expiry_setup.sql',
     'database/migrations/0003_lean_admission_deadlines.sql',
     'database/tests/lean_recovery_v3_pg16.py',
+    'database/migrations/0004_factory.sql',
+    'database/tests/0004_factory_invariants.sql',
 ]
 PSQL = ['psql', '--no-psqlrc', '--quiet', '--tuples-only', '--no-align',
         '--set=ON_ERROR_STOP=1', '--set=VERBOSITY=verbose']
@@ -70,7 +72,8 @@ MIGRATIONS = ('database/migrations/0001_initial_schema.sql',
 
 
 FORWARD_MIGRATION = 'database/migrations/0003_lean_admission_deadlines.sql'
-CURRENT_MIGRATIONS = MIGRATIONS + (FORWARD_MIGRATION,)
+FACTORY_MIGRATION = 'database/migrations/0004_factory.sql'
+CURRENT_MIGRATIONS = MIGRATIONS + (FORWARD_MIGRATION, FACTORY_MIGRATION)
 
 
 def source_manifest(root, expected_migrations=MIGRATIONS):
@@ -282,6 +285,21 @@ def main():
                 h.run(PSQL + ['--file', str(staged/'database/tests/0001_invariants.sql')], current)
                 h.results['unchanged_invariants_on_fresh_v3'] = 'passed'
                 recovery_v3(h, staged, current, 'v3_fresh_recovery')
+                # The factory schema arrives as one more forward migration: the upgraded (seeded) v3
+                # database takes it twice without touching v1-v3 provenance and holds every factory
+                # invariant; a fresh v4 database holds the original 0001 invariants and the factory's.
+                v3_ledger = json.loads(h.ledger(upgrade))
+                copy_pinned(root, staged, FACTORY_MIGRATION, sources)
+                h.migrate_twice(staged, upgrade, 'v3_to_v4_factory_upgrade_repeat')
+                if json.loads(h.ledger(upgrade))[:3] != v3_ledger:
+                    raise AssertionError('factory upgrade changed historical v1-v3 ledger provenance')
+                h.run(PSQL + ['--file', str(staged/'database/tests/0004_factory_invariants.sql')], upgrade)
+                h.results['factory_invariants_on_upgraded_v4'] = 'passed'
+                factory_fresh = h.create('fresh')
+                h.migrate_twice(staged, factory_fresh, 'v4_fresh_repeat')
+                h.run(PSQL + ['--file', str(staged/'database/tests/0001_invariants.sql')], factory_fresh)
+                h.run(PSQL + ['--file', str(staged/'database/tests/0004_factory_invariants.sql')], factory_fresh)
+                h.results['factory_invariants_on_fresh_v4'] = 'passed'
         if any(digest(root / relative) != expected for relative, expected in sources.items()):
             raise AssertionError('test source changed during execution')
         outcome['passed'] = True

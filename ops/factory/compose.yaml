@@ -1,0 +1,176 @@
+# The math factory stack.
+#
+#   docker compose -f ops/factory/compose.yaml up -d                      # coordinator + verifier + database
+#   docker compose -f ops/factory/compose.yaml --profile public up -d     # … and the macsad.com tunnel
+#   docker compose -f ops/factory/compose.yaml --profile contribute up    # … and a local worker
+#
+# Prepare once: `ops/factory/build.sh` (binaries) and `ops/factory/secrets.sh` (credentials, never printed).
+#
+# Boundaries, as the rest of MaCSad keeps them: PostgreSQL is reachable only on the internal `data`
+# network and is never published to the host; the coordinator is published only on the loopback
+# address for local use, and reaches the internet only through Cloudflare's tunnel; every service runs
+# read-only, unprivileged, with every capability dropped. A worker holds the contributor's OpenRouter
+# key and nothing else — no database credential reaches it.
+name: macsad-factory
+
+x-hardened: &hardened
+  read_only: true
+  init: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+
+x-factory-image: &factory-image
+  image: "macsad/factory:${MACSAD_FACTORY_TAG:-local}"
+  build:
+    context: .
+    dockerfile: factory.Dockerfile
+
+services:
+  postgres:
+    image: postgres:16@sha256:3950ad7c3148ca2175ef1b6c36c9efbf78957ae8fbe8b3a5d7c35af50500382f
+    restart: unless-stopped
+    shm_size: 256mb
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_superuser_password
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256 --encoding=UTF8"
+    secrets:
+      - postgres_superuser_password
+      - macsad_deployer_password
+      - macsad_runtime_password
+      - macsad_viewer_password
+    volumes:
+      - factory_postgres:/var/lib/postgresql/data
+      - ../compose/postgres/010-bootstrap-macsad.sh:/docker-entrypoint-initdb.d/010-bootstrap-macsad.sh:ro
+      - ../compose/postgres/010-bootstrap-macsad.sql:/opt/macsad/bootstrap/010-bootstrap-macsad.sql:ro
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready --host=127.0.0.1 --username=postgres --dbname=postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    stop_grace_period: 1m
+
+  migrate:
+    image: postgres:16@sha256:3950ad7c3148ca2175ef1b6c36c9efbf78957ae8fbe8b3a5d7c35af50500382f
+    <<: *hardened
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["bash", "/opt/macsad/run-migrations.sh"]
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: macsad
+      PGUSER: macsad_deployer
+    secrets: [macsad_deployer_password]
+    volumes:
+      - ../../database:/opt/macsad/database:ro
+      - ../compose/run-migrations.sh:/opt/macsad/run-migrations.sh:ro
+    networks: [data]
+
+  coordinator:
+    <<: [*factory-image, *hardened]
+    restart: unless-stopped
+    command: ["coordinator"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      MACSAD_DATABASE_HOST: postgres
+      MACSAD_DATABASE_PORT: "5432"
+      MACSAD_DATABASE_NAME: macsad
+      MACSAD_DATABASE_USER: macsad_runtime
+      MACSAD_DATABASE_PASSWORD_FILE: /run/secrets/macsad_runtime_password
+      MACSAD_R2_ENDPOINT: "${MACSAD_R2_ENDPOINT:-}"
+      MACSAD_R2_BUCKET: "${MACSAD_R2_BUCKET:-}"
+      MACSAD_R2_CREDENTIALS_FILE: /run/secrets/macsad_r2_credentials
+      LOGOS_HOST: 0.0.0.0
+      PORT: "8080"
+      LOGOS_MAX_BODY: "8388608"
+      LOGOS_REQUEST_TIMEOUT_MS: "30000"
+      LOGOS_HEALTH_PATH: /api/v1/health
+    secrets: [macsad_runtime_password, macsad_r2_credentials]
+    volumes:
+      - factory_state:/var/lib/macsad
+    ports:
+      - "127.0.0.1:${MACSAD_FACTORY_PORT:-18090}:8080"
+    networks: [data, edge]
+
+  verifier:
+    <<: [*factory-image, *hardened]
+    restart: unless-stopped
+    command: ["verifier"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      MACSAD_COORDINATOR: http://coordinator:8080
+      MACSAD_DATABASE_HOST: postgres
+      MACSAD_DATABASE_PORT: "5432"
+      MACSAD_DATABASE_NAME: macsad
+      MACSAD_DATABASE_USER: macsad_runtime
+      MACSAD_DATABASE_PASSWORD_FILE: /run/secrets/macsad_runtime_password
+      MACSAD_VERIFIER_KEY_FILE: /run/secrets/macsad_verifier_key
+    secrets: [macsad_runtime_password, macsad_verifier_key]
+    volumes:
+      - factory_verifier:/var/lib/macsad
+    networks: [data, edge]
+
+  worker:
+    <<: [*factory-image, *hardened]
+    profiles: [contribute]
+    restart: "no"
+    command: ["worker"]
+    environment:
+      MACSAD_COORDINATOR: "${MACSAD_COORDINATOR:-http://coordinator:8080}"
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
+      MACSAD_BUDGET_USD: "${MACSAD_BUDGET_USD:-1}"
+      MACSAD_FOCUS: "${MACSAD_FOCUS:-}"
+      MACSAD_MODEL: "${MACSAD_MODEL:-}"
+      MACSAD_CONTRIBUTOR: "${MACSAD_CONTRIBUTOR:-local}"
+    volumes:
+      - factory_worker:/var/lib/macsad
+    networks: [edge]
+
+  cloudflared:
+    image: cloudflare/cloudflared:2025.11.1@sha256:89ee50efb1e9cb2ae30281a8a404fed95eb8f02f0a972617526f8c5b417acae2
+    <<: *hardened
+    profiles: [public]
+    restart: unless-stopped
+    depends_on: [coordinator]
+    command: ["tunnel", "--no-autoupdate", "run", "--token-file", "/run/secrets/cloudflare_tunnel_token"]
+    secrets: [cloudflare_tunnel_token]
+    networks: [edge]
+
+networks:
+  data:
+    internal: true
+  edge: {}
+
+volumes:
+  factory_postgres: {}
+  factory_state: {}
+  factory_verifier: {}
+  factory_worker: {}
+
+secrets:
+  postgres_superuser_password:
+    file: ../../.runtime/factory/secrets/postgres_superuser_password
+  macsad_deployer_password:
+    file: ../../.runtime/factory/secrets/macsad_deployer_password
+  macsad_runtime_password:
+    file: ../../.runtime/factory/secrets/macsad_runtime_password
+  macsad_viewer_password:
+    file: ../../.runtime/factory/secrets/macsad_viewer_password
+  macsad_verifier_key:
+    file: ../../.runtime/factory/secrets/macsad_verifier_key
+  macsad_r2_credentials:
+    file: ../../.runtime/factory/secrets/macsad_r2_credentials
+  cloudflare_tunnel_token:
+    file: ../../.runtime/factory/secrets/cloudflare_tunnel_token
