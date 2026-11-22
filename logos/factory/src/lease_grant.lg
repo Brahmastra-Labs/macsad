@@ -1,15 +1,15 @@
 # Granting a lease
 
-Import WorkRecord from "./work_record.lg".
-Import TrailDigest from "./trail_digest.lg".
 Import CoordinatorDb from "./coordinator_db.lg".
 Import CoordinatorWire from "./coordinator_wire.lg".
 Import DbGrant from "./db_grant.lg".
 Import DbTrail from "./db_trail.lg".
-Import StageRules from "./stage_rules.lg".
 Import LeaseSecret from "./lease_secret.lg".
-Import OpdpImportRules from "./opdp_import_rules.lg".
 Import LoadRules from "./load_rules.lg".
+Import OpdpImportRules from "./opdp_import_rules.lg".
+Import StageRules from "./stage_rules.lg".
+Import TrailDigest from "./trail_digest.lg".
+Import WorkRecord from "./work_record.lg".
 
 A claimed unit made into the grant a worker receives: the records, the trail
 digest the model will read, the head the attempt's entry will chain from, and the

@@ -1,8 +1,8 @@
 # Problem profile
 
-Import WebProblem from "./web_problem.lg".
-Import WebFormat from "./web_format.lg".
 Import UiStage from "./ui_stage.lg".
+Import WebFormat from "./web_format.lg".
+Import WebProblem from "./web_problem.lg".
 
 The head of a problem's page: where it comes from and stands, its statement as
 the source gives it, and the OPDP atlas's profile of it when the atlas covers it.

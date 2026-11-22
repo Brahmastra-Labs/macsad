@@ -1,0 +1,65 @@
+# Verifier judge
+
+Import Attestation from "./attestation.lg".
+Import HostFiles from "./host_files.lg".
+Import HostTools from "./host_tools.lg".
+Import ProofDocument from "./proof_document.lg".
+Import VerdictRecord from "./verdict_record.lg".
+Import Verifier from "./verifier.lg".
+Import VerifierDb from "./verifier_db.lg".
+Import VernacularCommand from "./vernacular_command.lg".
+Import WorkerClient from "./worker_client.lg".
+
+Who the verifier is and what it finds. Its identity is its ML-DSA key: the seed in
+`MACSAD_VERIFIER_KEY_FILE`, and the public key's SHA-256, which names it on the
+board and in every attestation; the toolchain it attests is the SHA-256 of the
+`largo` it runs. What it finds it finds itself: the statement under review is
+checked as a statement, and a claimed proof is re-judged from the document the
+attempt names, fetched from the coordinator by hash and taken apart against the
+accepted statement the database holds, so nothing a worker wrote is trusted.
+
+## A VerifierId has:
+    a seed, which is Seq of Int.
+    a holder, which is Text.
+    a publicKeySha, which is Text.
+    a toolchainSha, which is Text.
+
+## To verifierId (tc: Toolchain) -> Result of VerifierId and Text:
+    Inspect readText(envOr("MACSAD_VERIFIER_KEY_FILE", "/run/secrets/macsad_verifier_key")):
+        When Err (e):
+            Return a new Err with error "the verifier key file cannot be read".
+        When Ok (content):
+            Inspect seedOf(content):
+                When Err (e):
+                    Return a new Err with error e.
+                When Ok (seed):
+                    Inspect runTool("sha256sum", [tc's largo], 60000, 4096):
+                        When Err (e):
+                            Return a new Err with error "the toolchain cannot be hashed: " + e.
+                        When Ok (r):
+                            Let sha be lower(trim(item 1 of split(trim(r's stdout) + " ", " "))).
+                            If r's exitCode is not equal to 0 or length of sha is not equal to 64:
+                                Return a new Err with error "the toolchain cannot be hashed: " + r's stderr.
+                            Let pk be publicKeySha(seed).
+                            Return a new Ok with value (a new VerifierId with seed seed and holder "verifier-" + text_from_bytes(items 1 through 12 of text_bytes(pk)) and publicKeySha pk and toolchainSha sha).
+    Return a new Err with error "no key".
+
+## Note
+The verdict on what a unit asks, and what the attestation is about.
+
+## To judgeSubject (tc: Toolchain, base: Text, s: VerifySubject) -> (Verdict, Text, Text, Text):
+    If s's parentKind is equal to "review" and s's statementId is not equal to "":
+        Return (judgeStatement(tc, s's document, s's goalName), "statement", s's statementId, s's statementSha).
+    If s's attemptId is equal to "" or s's documentSha is equal to "":
+        Return (infrastructureVerdict("the unit names no statement under review and no attempt that claimed a proof"), "attempt", "", "").
+    Inspect fetchArtifact(base, s's documentSha):
+        When Err (e):
+            Return (infrastructureVerdict(e), "attempt", s's attemptId, s's documentSha).
+        When Ok (doc):
+            Inspect submissionOfDocument(doc, s's document, proofNameFor(s's goalName)):
+                When None:
+                    Let v be newVerdict("rejected", 0, "the document is not the accepted statement followed by a submission", [], "refused before the kernel ran").
+                    Return (v, "attempt", s's attemptId, s's documentSha).
+                When Some (submission):
+                    Return (judgeSubmission(tc, s's document, s's goalName, submission), "attempt", s's attemptId, s's documentSha).
+    Return (infrastructureVerdict("unjudged"), "attempt", "", "").

@@ -1,19 +1,20 @@
 # Local attempt
 
+Import AttemptRecord from "./attempt_record.lg".
 Import Conventions from "./conventions.lg".
+Import Extraction from "./extraction.lg".
 Import HostFiles from "./host_files.lg".
 Import HostTools from "./host_tools.lg".
-Import NodeRecord from "./node_record.lg".
-Import WorkRecord from "./work_record.lg".
-Import VerdictRecord from "./verdict_record.lg".
-Import TrailRecord from "./trail_record.lg".
-Import TrailMemory from "./trail_memory.lg".
-Import AttemptRecord from "./attempt_record.lg".
-Import Extraction from "./extraction.lg".
-Import VernacularCommand from "./vernacular_command.lg".
-Import SubmissionPolicy from "./submission_policy.lg".
-Import Verifier from "./verifier.lg".
 Import LocalStore from "./local_store.lg".
+Import NodeRecord from "./node_record.lg".
+Import ProofDocument from "./proof_document.lg".
+Import SubmissionPolicy from "./submission_policy.lg".
+Import TrailMemory from "./trail_memory.lg".
+Import TrailRecord from "./trail_record.lg".
+Import VerdictRecord from "./verdict_record.lg".
+Import Verifier from "./verifier.lg".
+Import VernacularCommand from "./vernacular_command.lg".
+Import WorkRecord from "./work_record.lg".
 
 What one answer comes to: the submission taken out of it, the approach it takes,
 the kernel's verdict — skipped when the same approach already failed on this

@@ -1,8 +1,8 @@
 # Contribute
 
+Import UiSite from "../src/ui_site.lg".
 Import WebBoard from "../src/web_board.lg".
 Import WebFormat from "../src/web_format.lg".
-Import UiSite from "../src/ui_site.lg".
 
 How to lend the factory a model, `/contribute`: one container, the contributor's
 own OpenRouter key and budget, and an optional focus. The page builds the exact

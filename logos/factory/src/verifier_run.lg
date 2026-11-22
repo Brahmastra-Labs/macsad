@@ -1,0 +1,119 @@
+# Verifier
+
+Import Attestation from "./attestation.lg".
+Import CoordinatorDb from "./coordinator_db.lg".
+Import HostFiles from "./host_files.lg".
+Import HostTools from "./host_tools.lg".
+Import LocalAttempt from "./local_attempt.lg".
+Import LocalRun from "./local_run.lg".
+Import TrailRecord from "./trail_record.lg".
+Import VerifierDb from "./verifier_db.lg".
+Import VerifierJudge from "./verifier_judge.lg".
+Import WireRead from "./wire_read.lg".
+
+`factory verifier` is the one process whose word settles a problem. It takes the
+`verify` units the coordinator queues straight from the database, judges each
+with the kernel, signs what it found, and writes it with its trail entry.
+
+## Note
+One claimed unit verified and written down; the line says what was found.
+
+## To verifyClaimed (c: PgConn, tc: Toolchain, id: VerifierId, base: Text, unitId: Text, token: Int) -> Text:
+    Inspect dbCellOn(c, subjectSql(), [unitId]):
+        When Err (e):
+            Return "verify {unitId}: the unit cannot be read: " + e.
+        When Ok (text):
+            Inspect fromJson_VerifySubject(text):
+                When Err (e):
+                    Return "verify {unitId}: " + e.
+                When Ok (s):
+                    Let (v, kind, subjectId, documentSha) be judgeSubject(tc, base, s).
+                    Let mutable verdictKind be v's kind.
+                    If verdictKind is equal to "refused_submission":
+                        Set verdictKind to "rejected".
+                    Let mutable e be blankEntry(s's problemId, "verify", verdictKind, verdictDiagnostics(v)).
+                    Set e's ts to clockMs().
+                    Set e's contributor to id's holder.
+                    Set e's model to "kernel " + id's toolchainSha.
+                    Set e's strategyId to "verifier".
+                    Set e's approachFingerprint to s's fingerprint.
+                    Set e's exitCode to verdictExit(v).
+                    Let mutable attestation be none.
+                    Let mutable finish be "failed".
+                    If verdictKind is not equal to "infrastructure":
+                        Let mutable a be a new Attestation with id "" and subjectKind kind and subjectId subjectId and statementSha s's statementSha and documentSha documentSha and verdictKind verdictKind.
+                        Set a's verifier to id's holder.
+                        Set a's toolchainSha to id's toolchainSha.
+                        Let signed be signAttestation(a, id's seed).
+                        Set attestation to some signed.
+                        Set finish to "done".
+                        Set e's artifactShas to [documentSha].
+                        Set e's summary to "the verifier re-checked the " + kind + " with the kernel: " + verdictKind + "; attestation " + signed's id.
+                    Return writeVerdict(c, s, token, attestation, e, finish, kind + " " + subjectId + ": " + verdictKind).
+    Return "verify {unitId}: unread".
+
+## Note
+The verdict written in one transaction, or the reason it was not.
+
+## To writeVerdict (c: PgConn, s: VerifySubject, token: Int, a: Option of Attestation, e: TrailEntry, finish: Text, what: Text) -> Text:
+    Let began be pgBegin(c).
+    Inspect recordVerdictOn(c, s, token, a, e, finish):
+        When Err (m):
+            Let undone be pgRollback(c).
+            Return "verify {s's unitId}: " + what + ", not written: " + m.
+        When Ok (sealed):
+            Inspect pgCommit(c):
+                When Err (m):
+                    Return "verify {s's unitId}: " + what + ", not committed: " + m.
+                When Ok (n):
+                    Return "verify {s's unitId}: " + what + " (trail #{sealed's seq})".
+    Return "verify {s's unitId}: unwritten".
+
+## Note
+The next `verify` unit claimed and verified on a fresh connection; the empty
+text when no unit is waiting.
+
+## To verifyNext (tc: Toolchain, id: VerifierId, base: Text) -> Text:
+    Inspect dbOpen():
+        When Err (e):
+            Return "the database cannot be reached: " + e.
+        When Ok (c):
+            Let mutable line be "".
+            Inspect dbCellOn(c, claimVerifySql(), [id's holder, "900000"]):
+                When Err (e):
+                    Set line to "no claim: " + e.
+                When Ok (claim):
+                    If claim is not equal to "{{}}":
+                        Let v be jsonParse(claim).
+                        Set line to verifyClaimed(c, tc, id, base, textAt(v, "unitId"), intAt(v, "token")).
+            Let closed be pgClose(c).
+            Return line.
+    Return "unclaimed".
+
+## Note
+Every waiting unit verified, then, unless `once`, a poll every ten seconds for
+the next; a database that does not answer is waited for, and ends a `once` run.
+
+## To runVerifier (once: Bool) -> Outcome:
+    Let tc be defaultToolchain().
+    Inspect verifierId(tc):
+        When Err (e):
+            Return failed(e).
+        When Ok (id):
+            Let base be trimChars(envOr("MACSAD_COORDINATOR", "http://coordinator:8080"), "/").
+            Show "verifier " + id's holder + ": public key sha256 " + id's publicKeySha + ", toolchain sha256 " + id's toolchainSha.
+            Let mutable count be 0.
+            Let mutable going be true.
+            While going:
+                Let line be verifyNext(tc, id, base).
+                If line is not equal to "":
+                    Show line.
+                If startsWith(line, "verify "):
+                    Set count to count + 1.
+                Otherwise:
+                    If once:
+                        Set going to false.
+                    Otherwise:
+                        Let waited be runTool("sleep", ["10"], 20000, 1024).
+            Return done("the verifier checked {count} unit(s)").
+    Return failed("unreachable").

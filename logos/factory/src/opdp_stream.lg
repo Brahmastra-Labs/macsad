@@ -1,14 +1,14 @@
 # OPDP stream
 
-Import ProblemRecord from "./problem_record.lg".
+Import AtlasGraph from "./atlas_graph.lg".
+Import LoadRules from "./load_rules.lg".
 Import NodeRecord from "./node_record.lg".
+Import OpdpImportRules from "./opdp_import_rules.lg".
+Import OpdpProfile from "./opdp_profile.lg".
+Import OpdpRow from "./opdp_row.lg".
+Import ProblemRecord from "./problem_record.lg".
 Import RankScore from "./rank_score.lg".
 Import WireRead from "./wire_read.lg".
-Import OpdpRow from "./opdp_row.lg".
-Import AtlasGraph from "./atlas_graph.lg".
-Import OpdpProfile from "./opdp_profile.lg".
-Import OpdpImportRules from "./opdp_import_rules.lg".
-Import LoadRules from "./load_rules.lg".
 
 One atlas record projected once into the rows it adds: the problem and its rank
 through the factory's own `opdp_row.lg` and `atlas_graph.lg`, the nodes of the

@@ -1,20 +1,19 @@
 # Local
 
+Import AttemptRecord from "./attempt_record.lg".
+Import Budget from "./budget.lg".
+Import ChatReply from "./chat_reply.lg".
+Import ChatRequest from "./chat_request.lg".
 Import Conventions from "./conventions.lg".
 Import HostFiles from "./host_files.lg".
-Import NodeRecord from "./node_record.lg".
-Import VerdictRecord from "./verdict_record.lg".
-Import TrailRecord from "./trail_record.lg".
-Import AttemptRecord from "./attempt_record.lg".
-Import ChatRequest from "./chat_request.lg".
-Import ChatReply from "./chat_reply.lg".
-Import Budget from "./budget.lg".
-Import Cost from "./cost.lg".
-Import Replay from "./replay.lg".
+Import LocalAttempt from "./local_attempt.lg".
+Import LocalPlan from "./local_plan.lg".
 Import LocalSettings from "./local_settings.lg".
 Import LocalStore from "./local_store.lg".
-Import LocalPlan from "./local_plan.lg".
-Import LocalAttempt from "./local_attempt.lg".
+Import NodeRecord from "./node_record.lg".
+Import Replay from "./replay.lg".
+Import TrailRecord from "./trail_record.lg".
+Import VerdictRecord from "./verdict_record.lg".
 
 The whole loop on one machine against one problem: read its trail, build the
 prompt its next unit needs, ask the model (a recording, a mock or OpenRouter),

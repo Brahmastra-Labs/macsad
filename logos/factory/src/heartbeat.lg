@@ -1,11 +1,11 @@
 # Heartbeats
 
 Import ApiBounds from "./api_bounds.lg".
-Import HttpAnswers from "./http_answers.lg".
-Import LeaseWire from "./lease_wire.lg".
-Import LeaseSecret from "./lease_secret.lg".
 Import CoordinatorDb from "./coordinator_db.lg".
 Import CoordinatorWire from "./coordinator_wire.lg".
+Import HttpAnswers from "./http_answers.lg".
+Import LeaseSecret from "./lease_secret.lg".
+Import LeaseWire from "./lease_wire.lg".
 
 A heartbeat runs a lease on only when it comes from the lease's holder, under the
 lease's current token, with the lease's secret, before the lease expired: the

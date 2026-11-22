@@ -48,17 +48,11 @@ Expect that length of sha256Hex("") is equal to 64.
 
 ## Test: money prints with all six decimals
 
-For each of these cases:
-
-| micros  | shown        |
-|---------|--------------|
-| 0       | "$0.000000"  |
-| 1250    | "$0.001250"  |
-| 5000000 | "$5.000000"  |
-| 1234567 | "$1.234567"  |
-| -42     | "-$0.000042" |
-
-Expect that formatMicros(micros) is equal to shown.
+Expect that formatMicros(0) is equal to "$0.000000".
+Expect that formatMicros(1250) is equal to "$0.001250".
+Expect that formatMicros(5000000) is equal to "$5.000000".
+Expect that formatMicros(1234567) is equal to "$1.234567".
+Expect that formatMicros(0 - 42) is equal to "-$0.000042".
 
 ## Test: lines join with newlines and ids become path segments
 

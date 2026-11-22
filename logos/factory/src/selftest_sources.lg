@@ -1,17 +1,16 @@
 # Selftest sources
 
-Import HostFiles from "./host_files.lg".
-Import ProblemRecord from "./problem_record.lg".
-Import ChatRequest from "./chat_request.lg".
-Import ChatReply from "./chat_reply.lg".
-Import Budget from "./budget.lg".
-Import ModelPrice from "./model_price.lg".
-Import Cost from "./cost.lg".
-Import Replay from "./replay.lg".
-Import IngestFc from "./ingest_fc.lg".
-Import AtlasScan from "./atlas_scan.lg".
-Import OpdpRow from "./opdp_row.lg".
 Import AtlasGraph from "./atlas_graph.lg".
+Import AtlasScan from "./atlas_scan.lg".
+Import Budget from "./budget.lg".
+Import ChatReply from "./chat_reply.lg".
+Import ChatRequest from "./chat_request.lg".
+Import HostFiles from "./host_files.lg".
+Import IngestFc from "./ingest_fc.lg".
+Import ModelPrice from "./model_price.lg".
+Import OpdpRow from "./opdp_row.lg".
+Import ProblemRecord from "./problem_record.lg".
+Import Replay from "./replay.lg".
 Import SelftestRecords from "./selftest_records.lg".
 
 The sources the factory reads, checked on their real bytes: OpenRouter's public

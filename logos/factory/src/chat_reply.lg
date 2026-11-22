@@ -1,8 +1,8 @@
 # Chat reply
 
-Import WireShape from "./wire_shape.lg".
-Import WireRead from "./wire_read.lg".
 Import WireNumber from "./wire_number.lg".
+Import WireRead from "./wire_read.lg".
+Import WireShape from "./wire_shape.lg".
 
 What a model answered, read: the first choice's text and finish reason, the
 reported token counts, and the reported cost in dollars rounded up to a

@@ -1,11 +1,11 @@
 # A problem
 
-Import WebProblem from "../src/web_problem.lg".
-Import UiSite from "../src/ui_site.lg".
 Import UiProfile from "../src/ui_profile.lg".
-Import UiTrail from "../src/ui_trail.lg".
-Import UiStatements from "../src/ui_statements.lg".
 Import UiResults from "../src/ui_results.lg".
+Import UiSite from "../src/ui_site.lg".
+Import UiStatements from "../src/ui_statements.lg".
+Import UiTrail from "../src/ui_trail.lg".
+Import WebProblem from "../src/web_problem.lg".
 
 One problem's page, `/problem?id=<problem id>`: the problem and its OPDP profile,
 its formal statements, every attempt on its trail with what the kernel said, the

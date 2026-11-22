@@ -4,10 +4,10 @@ Import ApiBounds from "./api_bounds.lg".
 Import ArtifactRules from "./artifact_rules.lg".
 Import AtlasGraph from "./atlas_graph.lg".
 Import AtlasIngest from "./atlas_ingest.lg".
-Import AtlasPrepare from "./atlas_prepare.lg".
 Import AtlasScan from "./atlas_scan.lg".
 Import AttemptRecord from "./attempt_record.lg".
 Import AttemptRules from "./attempt_rules.lg".
+Import Attestation from "./attestation.lg".
 Import Budget from "./budget.lg".
 Import ChatReply from "./chat_reply.lg".
 Import ChatRequest from "./chat_request.lg".
@@ -15,7 +15,6 @@ Import Conventions from "./conventions.lg".
 Import Coordinator from "./coordinator.lg".
 Import CoordinatorDb from "./coordinator_db.lg".
 Import CoordinatorWire from "./coordinator_wire.lg".
-Import Cost from "./cost.lg".
 Import DbBoard from "./db_board.lg".
 Import DbClaim from "./db_claim.lg".
 Import DbConfig from "./db_config.lg".
@@ -65,12 +64,11 @@ Import ProblemRecord from "./problem_record.lg".
 Import PromptRoles from "./prompt_roles.lg".
 Import PromptTasks from "./prompt_tasks.lg".
 Import Prompts from "./prompts.lg".
-Import Rank from "./rank.lg".
+Import ProofDocument from "./proof_document.lg".
 Import RankScore from "./rank_score.lg".
 Import RankTrail from "./rank_trail.lg".
 Import RecordsDecode from "./records_decode.lg".
 Import RefExample from "./ref_example.lg".
-Import RefFailures from "./ref_failures.lg".
 Import RefLanguage from "./ref_language.lg".
 Import RefProse from "./ref_prose.lg".
 Import RefTacticsBasic from "./ref_tactics_basic.lg".
@@ -84,7 +82,6 @@ Import RoutesAttempt from "./routes_attempt.lg".
 Import RoutesLease from "./routes_lease.lg".
 Import RoutesProblem from "./routes_problem.lg".
 Import RoutesRead from "./routes_read.lg".
-Import Selftest from "./selftest.lg".
 Import SelftestLive from "./selftest_live.lg".
 Import SelftestPolicy from "./selftest_policy.lg".
 Import SelftestRecords from "./selftest_records.lg".
@@ -101,6 +98,9 @@ Import TrailMemory from "./trail_memory.lg".
 Import TrailRecord from "./trail_record.lg".
 Import VerdictRecord from "./verdict_record.lg".
 Import Verifier from "./verifier.lg".
+Import VerifierDb from "./verifier_db.lg".
+Import VerifierJudge from "./verifier_judge.lg".
+Import VerifierRun from "./verifier_run.lg".
 Import VernacularCommand from "./vernacular_command.lg".
 Import VernacularNames from "./vernacular_names.lg".
 Import WebBoard from "./web_board.lg".
@@ -110,10 +110,11 @@ Import WireNumber from "./wire_number.lg".
 Import WireRead from "./wire_read.lg".
 Import WireShape from "./wire_shape.lg".
 Import WorkRecord from "./work_record.lg".
+Import WorkerClient from "./worker_client.lg".
+Import WorkerJudge from "./worker_judge.lg".
+Import WorkerPrompt from "./worker_prompt.lg".
+Import WorkerRun from "./worker_run.lg".
+Import WorkerUnit from "./worker_unit.lg".
 
 ## Main
-
-Let outcome be dispatch(programArgs()).
-Show outcome's message.
-If outcome's ok is equal to false:
-    Fail with "the role did not complete".
+Call conclude with dispatch(programArgs()).

@@ -1,0 +1,113 @@
+# Worker unit
+
+Import AttemptRecord from "./attempt_record.lg".
+Import Budget from "./budget.lg".
+Import ChatRequest from "./chat_request.lg".
+Import Conventions from "./conventions.lg".
+Import CoordinatorWire from "./coordinator_wire.lg".
+Import Extraction from "./extraction.lg".
+Import HostFiles from "./host_files.lg".
+Import LocalAttempt from "./local_attempt.lg".
+Import LocalPlan from "./local_plan.lg".
+Import LocalSettings from "./local_settings.lg".
+Import Replay from "./replay.lg".
+Import TrailMemory from "./trail_memory.lg".
+Import TrailRecord from "./trail_record.lg".
+Import VerdictRecord from "./verdict_record.lg".
+Import WorkRecord from "./work_record.lg".
+Import WorkerClient from "./worker_client.lg".
+Import WorkerJudge from "./worker_judge.lg".
+Import WorkerPrompt from "./worker_prompt.lg".
+
+One leased unit worked to its posted attempt: the request built, its worst case
+held against the budget (or the honest stop posted when it does not fit), the
+model asked, the lease kept alive, the answer judged by the kernel here, and the
+attempt posted with its trail entry sealed onto the head the grant named.
+
+## A WorkerSettings has:
+    a base, which is Text.
+    a holder, which is Text.
+    a focus, which is Text.
+    a kinds, which is Text.
+    a ttlMs, which is Int.
+    a workspace, which is Text.
+    a local, which is LocalSettings.
+
+## A UnitStep has:
+    a line, which is Text.
+    a stop, which is Bool.
+
+## Note
+The attempt a judged answer makes, ready to post.
+
+## To submissionOf (ws: WorkerSettings, g: LeaseGrant, u: WorkUnit, token: Int, request: ChatRequest, model: Text, answer: Text, j: WorkJudged, cost: Int, startedAt: Int) -> AttemptSubmission:
+    Let files be workArtifacts(chatRequestJson(request), answer, j).
+    Let strategyId be (grantStrategy(g, u's kind))'s id.
+    Let mutable a be a new Attempt with id "" and unitId u's id and problemId u's problemId and contributor ws's holder and model model and strategyId strategyId.
+    Set a's promptSha to promptSha(request).
+    Set a's responseSha to sha256Hex(answer).
+    If j's document is not equal to "":
+        Set a's documentSha to sha256Hex(j's document).
+    Set a's approachFingerprint to j's fingerprint.
+    Set a's verdict to j's verdict.
+    Set a's costMicros to cost.
+    Set a's startedAt to startedAt.
+    Set a's finishedAt to clockMs().
+    Let mutable e be blankEntry(u's problemId, u's kind, j's verdict's kind, shortenText(verdictDiagnostics(j's verdict), 60000)).
+    Set e's ts to startedAt.
+    Set e's contributor to ws's holder.
+    Set e's model to model.
+    Set e's strategyId to strategyId.
+    Set e's promptSha to a's promptSha.
+    Set e's approachFingerprint to j's fingerprint.
+    Set e's artifactShas to artifactShasOf(files).
+    Set e's exitCode to verdictExit(j's verdict).
+    Set e's costMicros to cost.
+    Set e's summary to shortenText(j's extraction's summary, 4000).
+    Set e's nextSuggestions to j's extraction's suggestions.
+    Let mutable s be a new AttemptSubmission with unitId u's id and token token and holder ws's holder and secret g's secret.
+    Set s's attempt to a.
+    Set s's entry to sealEntry(e, g's trailSeq + 1, g's trailHead).
+    Set s's artifacts to files.
+    Set s's draft to j's draft.
+    Return s.
+
+## Note
+A posted attempt, as one line of the worker's log.
+
+## To postedLine (u: WorkUnit, j: WorkJudged, cost: Int, p: Posted) -> Text:
+    Let head be u's kind + " " + u's id + " on " + u's problemId + ": " + j's verdict's kind + " · " + formatMicros(cost).
+    If p's status is equal to 201:
+        Return head + " · recorded (" + p's receipt's outcome + ")".
+    Return head + " · refused {p's status} " + p's receipt's outcome + ": " + p's receipt's detail.
+
+## Note
+The unit `u`, leased under `token`, worked.
+
+## To workLeased (ws: WorkerSettings, g: LeaseGrant, u: WorkUnit, token: Int, budget: Budget) -> (UnitStep, Budget):
+    Let startedAt be clockMs().
+    Let request be workerRequest(ws's base, g, u's kind, u's problemId).
+    Let strategyId be (grantStrategy(g, u's kind))'s id.
+    Inspect priceFor(ws's workspace, ws's local, request's model):
+        When Err (e):
+            Return (a new UnitStep with line "no price for " + request's model + ": " + e and stop true, budget).
+        When Ok (price):
+            Let held be reservationMicros(price, request).
+            Inspect reserve(budget, held):
+                When Err (stop):
+                    Let j be budgetJudged(u, strategyId, stop).
+                    Let p be postAttempt(ws's base, submissionOf(ws, g, u, token, request, request's model, "", j, 0, startedAt)).
+                    Return (a new UnitStep with line postedLine(u, j, 0, p) and stop true, budget).
+                When Ok (holding):
+                    Inspect askModel(ws's local, request):
+                        When Err (why):
+                            Return (a new UnitStep with line "no answer on " + u's id + ": " + why and stop true, settle(holding, held, 0)).
+                        When Ok (reply):
+                            Let cost be actualCostMicros(price, reply, held).
+                            Let after be settle(holding, held, cost).
+                            If heartbeatLease(ws's base, g, ws's holder, ws's ttlMs) is equal to false:
+                                Return (a new UnitStep with line "the lease on " + u's id + " moved on while the model answered" and stop false, after).
+                            Let j be judgeWork(u's kind, grantStatement(g, u's problemId), strategyId, reply's content, ws's holder + " " + reply's model).
+                            Let p be postAttempt(ws's base, submissionOf(ws, g, u, token, request, reply's model, reply's content, j, cost, startedAt)).
+                            Return (a new UnitStep with line postedLine(u, j, cost, p) and stop (p's status is equal to 0), after).
+    Return (a new UnitStep with line "unworked" and stop true, budget).

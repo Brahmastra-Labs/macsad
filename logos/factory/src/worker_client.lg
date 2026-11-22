@@ -1,0 +1,120 @@
+# Worker client
+
+Import ArtifactRules from "./artifact_rules.lg".
+Import CoordinatorWire from "./coordinator_wire.lg".
+Import DbTrail from "./db_trail.lg".
+Import HostTools from "./host_tools.lg".
+Import LeaseWire from "./lease_wire.lg".
+Import TrailRecord from "./trail_record.lg".
+Import WireRead from "./wire_read.lg".
+
+A worker's side of the coordinator's public API: it leases a unit, keeps the
+lease alive, posts the attempt, and reads the trail and artifacts any visitor can
+read. It holds no database credential and never sees the OpenRouter key; the
+lease's secret is the only credential it sends.
+
+## Note
+One JSON exchange with the coordinator at `base`.
+
+## To coordinatorCall (method: Text, url: Text, body: Text) -> Result of HttpReply and Text:
+    Let mutable headers be a new Map of Text to Text.
+    If body is not equal to "":
+        Set headers at "content-type" to "application/json".
+    Return httpCall(method, url, headers, body, 60000).
+
+## Note
+A lease on a unit, or why none was granted: a refusal, an answer that is not a
+grant, or `granted: false` with the coordinator's reason.
+
+## To leaseUnit (base: Text, r: LeaseRequest) -> Result of LeaseGrant and Text:
+    Inspect coordinatorCall("POST", base + "/api/v1/lease", toJson_LeaseRequest(r)):
+        When Err (e):
+            Return a new Err with error "the coordinator could not be reached: " + e.
+        When Ok (reply):
+            If reply's status is not equal to 200:
+                Return a new Err with error "the lease was answered {reply's status}: " + shortenText(reply's body, 400).
+            Inspect fromJson_LeaseGrant(reply's body):
+                When Err (e):
+                    Return a new Err with error "the grant does not decode: " + e.
+                When Ok (g):
+                    Return a new Ok with value g.
+    Return a new Err with error "no grant".
+
+## Note
+Whether the lease `g` granted is still the worker's after a heartbeat.
+
+## To heartbeatLease (base: Text, g: LeaseGrant, holder: Text, ttlMs: Int) -> Bool:
+    Inspect g's lease:
+        When None:
+            Return false.
+        When Some (l):
+            Let h be a new HeartbeatRequest with unitId l's unitId and token l's token and holder holder and secret g's secret and ttlMs ttlMs.
+            Inspect coordinatorCall("POST", base + "/api/v1/heartbeat", toJson_HeartbeatRequest(h)):
+                When Err (e):
+                    Return false.
+                When Ok (reply):
+                    Inspect fromJson_HeartbeatAnswer(reply's body):
+                        When Ok (a):
+                            Return reply's status is equal to 200 and a's alive.
+                        When Err (e):
+                            Return false.
+    Return false.
+
+## Note
+What became of a posted attempt: the status, and the receipt, or a refusal's code
+and detail in the receipt's `outcome` and `detail`.
+
+## A Posted has:
+    a status, which is Int.
+    a receipt, which is AttemptReceipt.
+
+## To postAttempt (base: Text, s: AttemptSubmission) -> Posted:
+    Inspect coordinatorCall("POST", base + "/api/v1/attempt", toJson_AttemptSubmission(s)):
+        When Err (e):
+            Return a new Posted with status 0 and receipt (a new AttemptReceipt with accepted false and outcome "unreachable" and detail e).
+        When Ok (reply):
+            If reply's status is equal to 201:
+                Inspect fromJson_AttemptReceipt(reply's body):
+                    When Ok (r):
+                        Return a new Posted with status 201 and receipt r.
+                    When Err (e):
+                        Return a new Posted with status 201 and receipt (a new AttemptReceipt with accepted true and outcome "undecodable receipt" and detail e).
+            Let mutable code be "refused".
+            Let mutable detail be shortenText(reply's body, 400).
+            Inspect parseStrict(reply's body):
+                When Ok (v):
+                    Set code to textAt(v, "error").
+                    Set detail to textAt(v, "detail").
+                When Err (e):
+                    Set code to "refused".
+            Return a new Posted with status reply's status and receipt (a new AttemptReceipt with accepted false and outcome code and detail detail).
+    Return a new Posted with status 0 and receipt (a new AttemptReceipt with accepted false and outcome "unposted").
+
+## Note
+An artifact's text, refused unless it hashes to the name it was fetched by: the
+coordinator is not trusted to serve the right bytes.
+
+## To fetchArtifact (base: Text, sha: Text) -> Result of Text and Text:
+    Inspect coordinatorCall("GET", base + "/api/v1/artifact/" + sha, ""):
+        When Err (e):
+            Return a new Err with error "the artifact store could not be reached: " + e.
+        When Ok (reply):
+            If reply's status is not equal to 200:
+                Return a new Err with error "artifact {sha} was answered {reply's status}".
+            If contentSha(reply's body) is not equal to sha:
+                Return a new Err with error "artifact {sha} does not hash to its name".
+            Return a new Ok with value reply's body.
+    Return a new Err with error "no artifact".
+
+## Note
+A problem's trail as the coordinator serves it, oldest entry first.
+
+## To fetchTrail (base: Text, problemId: Text) -> Result of Seq of TrailEntry and Text:
+    Inspect coordinatorCall("GET", base + "/api/v1/trail?problem=" + problemId, ""):
+        When Err (e):
+            Return a new Err with error "the trail could not be read: " + e.
+        When Ok (reply):
+            If reply's status is not equal to 200:
+                Return a new Err with error "the trail was answered {reply's status}".
+            Return entriesOf(reply's body).
+    Return a new Err with error "no trail".

@@ -1,8 +1,10 @@
 # Trail digest
 
 Import Conventions from "./conventions.lg".
-Import TrailRecord from "./trail_record.lg".
+Import RankScore from "./rank_score.lg".
+Import RankTrail from "./rank_trail.lg".
 Import TrailMemory from "./trail_memory.lg".
+Import TrailRecord from "./trail_record.lg".
 
 What a model reads about a problem's past before attempting it: the tally, the
 last few attempts newest first with what the kernel said, every distinct failure
@@ -68,3 +70,17 @@ The digest of a problem's trail, with its last `lastN` attempts.
     If length of suggestions is greater than 0:
         Set out to out + "\n\nSuggestions left by earlier attempts:\n- " + join(suggestions, "\n- ").
     Return out.
+
+## Note
+The scheduler's priority for a problem, in basis points: the base score its atlas
+profile earns (`rank_score.lg`), moved by what its own trail has shown
+(`rank_trail.lg`).
+
+## To priority (r: RankInputs, s: TrailSignals) -> Int:
+    Return scaledPriority(baseScore(r), r's tractable, s).
+
+## Note
+The signals of a trail.
+
+## To trailSignals (trail: Seq of TrailEntry) -> TrailSignals:
+    Return a new TrailSignals with verified verifiedCount(trail) and repeats repeatedFailures(trail).

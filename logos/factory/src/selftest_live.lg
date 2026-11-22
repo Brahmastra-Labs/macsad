@@ -1,19 +1,36 @@
-# Selftest live
+# Selftest
 
 Import HostFiles from "./host_files.lg".
 Import HostTools from "./host_tools.lg".
+Import LocalRun from "./local_run.lg".
+Import LocalStore from "./local_store.lg".
+Import RolesVerify from "./roles_verify.lg".
+Import SelftestPolicy from "./selftest_policy.lg".
+Import SelftestRecords from "./selftest_records.lg".
+Import SelftestSources from "./selftest_sources.lg".
 Import TrailRecord from "./trail_record.lg".
 Import Verifier from "./verifier.lg".
-Import LocalStore from "./local_store.lg".
-Import LocalRun from "./local_run.lg".
-Import SelftestRecords from "./selftest_records.lg".
-Import SelftestPolicy from "./selftest_policy.lg".
 
-The checks that need the real kernel: the recorded submissions judged by
-`largo` itself, a shadowing name caught by its probe, statements checked, and the
-whole local loop — a recorded correct proof verified and filed in the results,
-and a recorded wrong proof refused, repaired from the kernel's own diagnostics
-and verified. Workspaces go under `MACSAD_WORK`.
+`factory selftest` runs, from the project directory, every check that crosses
+modules — the integration the leaf `## Test`s cannot hold. `--live` adds the
+checks that need the real kernel: the recorded submissions judged by `largo`
+itself, a shadowing name caught by its probe, statements checked, the kernel
+reference, and the whole local loop — a recorded correct proof verified and
+filed in the results, and a recorded wrong proof refused, repaired from the
+kernel's own diagnostics and verified. Workspaces go under `MACSAD_WORK`.
+
+## To runSelftest (live: Bool) -> Outcome:
+    Let mutable groups be [recordChecks(), trailChecks(), fixtureChecks(), policyChecks(), openRouterChecks(), manifestChecks(), atlasChecks()].
+    Let mutable count be 7.
+    If live:
+        Set groups to groups + [judgeChecks(), loopChecks(), referenceProblems(defaultToolchain())].
+        Set count to 10.
+    Let mutable failures be a new Seq of Text.
+    Repeat for g in groups:
+        Set failures to failures + g.
+    If length of failures is equal to 0:
+        Return done("selftest passed: {count} groups of checks, nothing failed").
+    Return failed("selftest failed:\n- " + join(failures, "\n- ")).
 
 ## To judgeChecks () -> Seq of Text:
     Let tc be defaultToolchain().

@@ -1,9 +1,9 @@
 # Intake writes
 
 Import AttemptRecord from "./attempt_record.lg".
+Import CoordinatorDb from "./coordinator_db.lg".
 Import TrailRecord from "./trail_record.lg".
 Import VerdictRecord from "./verdict_record.lg".
-Import CoordinatorDb from "./coordinator_db.lg".
 
 The rows an accepted attempt adds, on the connection of its transaction: the
 attempt, its trail entry, the dead end when its approach failed, the

@@ -1,0 +1,98 @@
+# Worker
+
+Import Budget from "./budget.lg".
+Import Conventions from "./conventions.lg".
+Import CoordinatorWire from "./coordinator_wire.lg".
+Import HostFiles from "./host_files.lg".
+Import LeaseWire from "./lease_wire.lg".
+Import LocalRun from "./local_run.lg".
+Import LocalSettings from "./local_settings.lg".
+Import WorkerClient from "./worker_client.lg".
+Import WorkerUnit from "./worker_unit.lg".
+
+`factory worker` is what a contributor runs: it leases a unit from the
+coordinator at `MACSAD_COORDINATOR` for `MACSAD_CONTRIBUTOR`, within
+`MACSAD_FOCUS`, works it with the model `OPENROUTER_API_KEY` pays for (or the
+recordings, under `MACSAD_PROVIDER=replay`), and posts the attempt — until the
+budget `MACSAD_BUDGET_USD` is spent, no unit is offered, or `limit` units are
+done. The key is read only at the moment of a model call and goes only to
+OpenRouter; the coordinator sees the contributor's id, budget and attempts.
+`MACSAD_KINDS` narrows the unit kinds it takes, and `MACSAD_LEASE_MS` asks for
+leases of another length than fifteen minutes.
+
+## To workerKinds () -> Text:
+    Return "formalize,review,prove,repair,decompose".
+
+## Note
+The worker's settings, or what is missing from its environment.
+
+## To workerSettings () -> Result of WorkerSettings and Text:
+    Let base be trimEnd(trimChars(envOr("MACSAD_COORDINATOR", ""), "/")).
+    If base is equal to "":
+        Return a new Err with error "MACSAD_COORDINATOR is not set; it names the coordinator, such as https://macsad.com".
+    Let workspace be envOr("MACSAD_WORK", "/var/lib/macsad/work") + "/worker".
+    Let made be ensureDir(workspace).
+    Inspect localSettings(workspace):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (s):
+            Let mutable ws be a new WorkerSettings with base base and holder s's contributor and focus envOr("MACSAD_FOCUS", "") and kinds envOr("MACSAD_KINDS", workerKinds()).
+            Set ws's ttlMs to 900000.
+            If allDigits(envOr("MACSAD_LEASE_MS", "")) and envOr("MACSAD_LEASE_MS", "") is not equal to "":
+                Set ws's ttlMs to parseInt(envOr("MACSAD_LEASE_MS", "")).
+            Set ws's workspace to workspace.
+            Set ws's local to s.
+            Return a new Ok with value ws.
+    Return a new Err with error "no settings".
+
+## Note
+The unit a grant hands over, worked; a grant without one stops the worker.
+
+## To workUnit (ws: WorkerSettings, g: LeaseGrant, budget: Budget) -> (UnitStep, Budget):
+    Inspect g's unit:
+        When None:
+            Return (a new UnitStep with line "the grant names no unit" and stop true, budget).
+        When Some (u):
+            Inspect g's lease:
+                When None:
+                    Return (a new UnitStep with line "the grant names no lease" and stop true, budget).
+                When Some (l):
+                    Return workLeased(ws, g, u, l's token, budget).
+    Return (a new UnitStep with line "unworked" and stop true, budget).
+
+## Note
+The worker's run, one line per unit, and what it spent.
+
+## To runWorker (limit: Int) -> Outcome:
+    Inspect workerSettings():
+        When Err (e):
+            Return failed(e).
+        When Ok (ws):
+            Let mutable budget be newBudget(ws's local's budgetMicros).
+            Let mutable lines be ["worker " + ws's holder + " at " + ws's base + " (" + ws's local's provider + ", budget " + formatMicros(budget's limitMicros) + ")"].
+            Let mutable going be true.
+            Let mutable worked be 0.
+            Let mutable reached be true.
+            While going and worked is less than limit:
+                Let r be a new LeaseRequest with holder ws's holder and displayName ws's holder and kinds ws's kinds and focus ws's focus and ttlMs ws's ttlMs and budgetMicros budget's limitMicros.
+                Inspect leaseUnit(ws's base, r):
+                    When Err (e):
+                        Push "no lease: " + e to lines.
+                        Set reached to worked is greater than 0.
+                        Set going to false.
+                    When Ok (g):
+                        If g's granted is equal to false:
+                            Push "no unit offered: " + g's reason to lines.
+                            Set going to false.
+                        Otherwise:
+                            Let (step, after) be workUnit(ws, g, budget).
+                            Set budget to after.
+                            Set worked to worked + 1.
+                            Push step's line to lines.
+                            If step's stop:
+                                Set going to false.
+            Push "{worked} unit(s) worked; spent " + formatMicros(budget's spentMicros) + " of " + formatMicros(budget's limitMicros) to lines.
+            If reached is equal to false:
+                Return failed(join(lines, "\n")).
+            Return done(join(lines, "\n")).
+    Return failed("unreachable").

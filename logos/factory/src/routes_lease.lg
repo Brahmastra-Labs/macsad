@@ -1,12 +1,12 @@
 # Lease routes
 
 Import ApiBounds from "./api_bounds.lg".
-Import HttpAnswers from "./http_answers.lg".
-Import LeaseWire from "./lease_wire.lg".
 Import CoordinatorDb from "./coordinator_db.lg".
 Import CoordinatorWire from "./coordinator_wire.lg".
 Import DbClaim from "./db_claim.lg".
+Import HttpAnswers from "./http_answers.lg".
 Import LeaseGrant from "./lease_grant.lg".
+Import LeaseWire from "./lease_wire.lg".
 Import LoadRules from "./load_rules.lg".
 
 `POST /api/v1/lease` takes a `LeaseRequest` and answers a `LeaseGrant`: a unit

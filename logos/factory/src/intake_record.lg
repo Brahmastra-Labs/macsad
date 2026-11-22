@@ -1,14 +1,14 @@
 # Writing an accepted attempt
 
+Import ArtifactRules from "./artifact_rules.lg".
 Import CoordinatorDb from "./coordinator_db.lg".
 Import CoordinatorWire from "./coordinator_wire.lg".
 Import DbIntake from "./db_intake.lg".
 Import IntakeFollow from "./intake_follow.lg".
-Import StageRules from "./stage_rules.lg".
-Import ArtifactRules from "./artifact_rules.lg".
-Import TrailRecord from "./trail_record.lg".
 Import IntakePolicy from "./intake_policy.lg".
 Import IntakeWrite from "./intake_write.lg".
+Import StageRules from "./stage_rules.lg".
+Import TrailRecord from "./trail_record.lg".
 
 An accepted attempt's rows, in their order: the attempt, its trail entry —
 resealed onto the head when it was written against an older one — then the dead

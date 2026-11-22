@@ -81,17 +81,11 @@ Expect that fromJson_Problem(toJson_Problem(p)) is equal to a new Ok with value 
 
 ## Test: source statuses map onto the coordinator's five
 
-For each of these cases:
-
-| source                 | status            |
-|------------------------|-------------------|
-| "source-reported-open" | "open"            |
-| "partially_solved"     | "open"            |
-| "solved"               | "solved_upstream" |
-| "ill_posed"            | "ill_posed"       |
-| "whatever"             | "unknown"         |
-
-Expect that problemStatus(source) is equal to status.
+Expect that problemStatus("source-reported-open") is equal to "open".
+Expect that problemStatus("partially_solved") is equal to "open".
+Expect that problemStatus("solved") is equal to "solved_upstream".
+Expect that problemStatus("ill_posed") is equal to "ill_posed".
+Expect that problemStatus("whatever") is equal to "unknown".
 
 ## Test: a status is one of the coordinator's words whatever the source says
 

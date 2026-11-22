@@ -1,15 +1,20 @@
 # Roles ingest
 
-Import HostFiles from "./host_files.lg".
-Import ProblemRecord from "./problem_record.lg".
-Import NodeRecord from "./node_record.lg".
-Import IngestFc from "./ingest_fc.lg".
 Import AtlasIngest from "./atlas_ingest.lg".
-Import AtlasPrepare from "./atlas_prepare.lg".
+Import HostFiles from "./host_files.lg".
+Import HostTools from "./host_tools.lg".
+Import IngestFc from "./ingest_fc.lg".
 Import LocalRun from "./local_run.lg".
+Import NodeRecord from "./node_record.lg".
+Import ProblemRecord from "./problem_record.lg".
 
 The two ingest roles: the formalization lab's manifest, and the OPDP atlas
 streamed from its release file, each written as `problems.jsonl` and `nodes.jsonl`.
+
+A release is first made into the chunk files the streamed ingest reads: a `.gz`
+copied (the source is never touched) and decompressed with `gzip`, then cut with
+`split -C` into pieces of at most `chunkMb` megabytes that end at line ends — the
+atlas is pretty-printed, so a piece never cuts a character in two.
 
 ## To runIngestFc (manifestPath: Text, out: Text) -> Outcome:
     Inspect readText(manifestPath):
@@ -54,3 +59,41 @@ The atlas, with what each stage took and how many records it held.
                         Return failed(line + "; the atlas declares a different number of records than it holds").
                     Return done(line).
     Return failed("unreachable").
+
+## Note
+One preparation step run; the empty text when it succeeded.
+
+## To runStep (program: Text, arguments: Seq of Text) -> Text:
+    Inspect runTool(program, arguments, 600000, 65536):
+        When Err (e):
+            Return program + ": " + e.
+        When Ok (r):
+            If r's exitCode is not equal to 0:
+                Return program + " failed: " + r's stderr.
+            Return "".
+    Return program + ": unrun".
+
+## Note
+The chunk paths of a release, in order.
+
+## To prepareAtlas (path: Text, workDir: Text, chunkMb: Int) -> Result of Seq of Text and Text:
+    Let made be ensureDir(workDir + "/parts").
+    Let mutable plain be path.
+    If endsWith(path, ".gz"):
+        Let copied be runStep("cp", [path, workDir + "/atlas.json.gz"]).
+        Let unzipped be runStep("gzip", ["-d", "-f", workDir + "/atlas.json.gz"]).
+        If copied + unzipped is not equal to "":
+            Return a new Err with error copied + unzipped.
+        Set plain to workDir + "/atlas.json".
+    Let cut be runStep("split", ["-C", "{chunkMb}M", "-d", "-a", "5", plain, workDir + "/parts/atlas."]).
+    If cut is not equal to "":
+        Return a new Err with error cut.
+    Inspect listNames(workDir + "/parts"):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (names):
+            Let mutable out be a new Seq of Text.
+            Repeat for name in names:
+                Push workDir + "/parts/" + name to out.
+            Return a new Ok with value out.
+    Return a new Err with error "unprepared".

@@ -1,13 +1,13 @@
 # Prompts
 
-Import ProblemRecord from "./problem_record.lg".
 Import AttemptRecord from "./attempt_record.lg".
-Import WorkRecord from "./work_record.lg".
 Import ChatRequest from "./chat_request.lg".
-Import VernacularCommand from "./vernacular_command.lg".
-Import PromptTasks from "./prompt_tasks.lg".
+Import ProblemRecord from "./problem_record.lg".
 Import PromptRoles from "./prompt_roles.lg".
+Import PromptTasks from "./prompt_tasks.lg".
 Import Reference from "./reference.lg".
+Import VernacularCommand from "./vernacular_command.lg".
+Import WorkRecord from "./work_record.lg".
 
 What a model is asked. Every prompt has the same parts in the same place: a
 SYSTEM message with the role and the whole kernel reference, and a USER message
@@ -47,7 +47,7 @@ The problem as the model reads it.
         When Some (lean):
             Return out + "\n\nThe Lean statement:\n\n```lean\n" + lean + "\n```".
         When None:
-            Return out + "\n\nThere is no formal statement yet.".
+            Return out + "\n\nThere is no Lean statement of it.".
     Return out.
 
 ## Note

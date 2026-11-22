@@ -1,11 +1,11 @@
 # OPDP import: writing and planning
 
-Import WireRead from "./wire_read.lg".
 Import CoordinatorDb from "./coordinator_db.lg".
 Import DbLoad from "./db_load.lg".
 Import LoadRules from "./load_rules.lg".
 Import OpdpImportRules from "./opdp_import_rules.lg".
 Import OpdpStream from "./opdp_stream.lg".
+Import WireRead from "./wire_read.lg".
 
 The import's writes. A piece's rows go up in the order the schema's keys need —
 problems, the graph above them, their nodes, their profiles — and the rows are

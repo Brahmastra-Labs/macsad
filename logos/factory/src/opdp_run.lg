@@ -3,8 +3,8 @@
 Import CoordinatorDb from "./coordinator_db.lg".
 Import DbLoad from "./db_load.lg".
 Import OpdpImport from "./opdp_import.lg".
-Import OpdpStream from "./opdp_stream.lg".
 Import OpdpPlan from "./opdp_plan.lg".
+Import OpdpStream from "./opdp_stream.lg".
 
 The import from the pinned release to the checked counts, on one connection.
 

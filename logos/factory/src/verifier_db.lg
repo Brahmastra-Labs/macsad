@@ -1,0 +1,117 @@
+# Verifier database
+
+Import Attestation from "./attestation.lg".
+Import CoordinatorDb from "./coordinator_db.lg".
+Import IntakeWrite from "./intake_write.lg".
+Import TrailRecord from "./trail_record.lg".
+Import WireRead from "./wire_read.lg".
+
+The trusted verifier's door to PostgreSQL. It alone takes `verify` units (no
+worker may lease one), reads what a unit asks it to check — the statement under
+review, or the latest attempt that claimed a proof on the unit before it — and
+writes what it found in one transaction: the signed attestation, what follows
+from it, its own trail entry sealed onto the head under the trail's lock, and the
+end of its lease. Every statement is parameterized.
+
+## A VerifySubject has:
+    a unitId, which is Text.
+    a problemId, which is Text.
+    a parentKind, which is Text.
+    a statementId, which is Text.
+    a document, which is Text.
+    a statementSha, which is Text.
+    a goalName, which is Text.
+    a reviewState, which is Text.
+    an attemptId, which is Text.
+    a documentSha, which is Text.
+    a fingerprint, which is Text.
+
+## To claimVerifySql () -> Text:
+    Let mutable q be ["SELECT coalesce((SELECT json_build_object('unitId', c.unit_id, 'token', c.token)"].
+    Push "FROM factory.claim_unit($1, $2::int, ARRAY['verify']) AS c), '{{}}'::json)::text" to q.
+    Return join(q, " ").
+
+## To subjectSql () -> Text:
+    Let mutable q be ["SELECT json_build_object('unitId', u.id, 'problemId', u.problem_id, 'parentKind', coalesce(p.kind, ''),"].
+    Push "'statementId', coalesce(s.id, ''), 'document', coalesce(s.document, ''), 'statementSha', coalesce(s.sha256::text, '')," to q.
+    Push "'goalName', coalesce(s.goal_name, ''), 'reviewState', coalesce(s.review_state, ''), 'attemptId', coalesce(a.id, '')," to q.
+    Push "'documentSha', coalesce(a.document_sha::text, ''), 'fingerprint', coalesce(a.approach_fingerprint::text, ''))::text" to q.
+    Push "FROM factory.work_unit u LEFT JOIN factory.work_unit p ON p.id = u.parent_unit_id LEFT JOIN factory.statement s ON s.id = u.statement_id" to q.
+    Push "LEFT JOIN LATERAL (SELECT x.id, x.document_sha, x.approach_fingerprint FROM factory.attempt x WHERE x.unit_id = u.parent_unit_id" to q.
+    Push "AND x.verdict_kind = 'verified' ORDER BY x.finished_at DESC LIMIT 1) a ON true WHERE u.id = $1" to q.
+    Return join(q, " ").
+
+## To headSqlOf () -> Text:
+    Let mutable q be ["SELECT json_build_object('seq', coalesce(max(t.seq), 0), 'hash', coalesce((SELECT h.hash::text FROM factory.trail_entry h"].
+    Push "WHERE h.problem_id = $1 ORDER BY h.seq DESC LIMIT 1), repeat('0', 64)))::text FROM factory.trail_entry t WHERE t.problem_id = $1" to q.
+    Return join(q, " ").
+
+## To attestationSql () -> Text:
+    Let mutable q be ["INSERT INTO factory.attestation (id, subject_kind, subject_id, statement_sha, document_sha, verdict_kind, verifier,"].
+    Push "toolchain_sha, public_key_sha, signature) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)" to q.
+    Push "ON CONFLICT (subject_kind, subject_id, verifier) DO NOTHING" to q.
+    Return join(q, " ").
+
+## Note
+What an attestation sets in motion, as statements and their parameters: an
+accepted statement formalizes its problem and a refused one is retired; a
+verified proof of the accepted statement solves the problem, and a rejected one
+is a dead end no worker is paid to try again.
+
+## A Effect has:
+    a sql, which is Text.
+    a params, which is Seq of Text.
+
+## To effectsOf (s: VerifySubject, a: Attestation) -> Seq of Effect:
+    Let ok be a's verdictKind is equal to "verified".
+    If a's subjectKind is equal to "statement" and ok:
+        Let only be " AND NOT EXISTS (SELECT 1 FROM factory.statement o WHERE o.problem_id = s.problem_id AND o.review_state = 'accepted')".
+        Let accept be "UPDATE factory.statement s SET review_state = 'accepted' WHERE s.id = $1 AND s.review_state = 'reviewing'" + only.
+        Let staged be "UPDATE factory.node SET stage = 'formalized' WHERE problem_id = $1 AND kind = 'problem' AND stage IN ('ranked', 'formalizing')".
+        Return [a new Effect with sql accept and params [s's statementId], a new Effect with sql staged and params [s's problemId]].
+    If a's subjectKind is equal to "statement":
+        Return [a new Effect with sql "UPDATE factory.statement SET review_state = 'rejected' WHERE id = $1 AND review_state = 'reviewing'" and params [s's statementId]].
+    If ok and s's reviewState is equal to "accepted":
+        Return [a new Effect with sql "UPDATE factory.node SET stage = 'solved' WHERE problem_id = $1 AND kind = 'problem'" and params [s's problemId]].
+    If a's verdictKind is not equal to "rejected":
+        Return [].
+    Let dead be "INSERT INTO factory.dead_end (problem_id, approach_fingerprint, first_attempt_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING".
+    Return [a new Effect with sql dead and params [s's problemId, s's fingerprint, s's attemptId]].
+
+## Note
+The attestation and everything after it, on a connection inside a transaction;
+`entry` is sealed here onto the head the lock makes current.
+
+## To recordVerdictOn (c: PgConn, s: VerifySubject, token: Int, a: Option of Attestation, entry: TrailEntry, finish: Text) -> Result of TrailEntry and Text:
+    Let mutable effects be a new Seq of Effect.
+    Inspect a:
+        When Some (att):
+            Let row be [att's id, att's subjectKind, att's subjectId, att's statementSha, att's documentSha, att's verdictKind, att's verifier, att's toolchainSha, att's publicKeySha, att's signature].
+            Set effects to [a new Effect with sql attestationSql() and params row] + effectsOf(s, att).
+        When None:
+            Set effects to [].
+    Push a new Effect with sql "SELECT pg_advisory_xact_lock(hashtextextended('factory:trail:' || $1, 0))::text" and params [s's problemId] to effects.
+    Repeat for e in effects:
+        Inspect runOn(c, e's sql, e's params):
+            When Err (m):
+                Return a new Err with error m.
+            When Ok (done):
+                Let ran be done.
+    Inspect dbCellOn(c, headSqlOf(), [s's problemId]):
+        When Err (m):
+            Return a new Err with error m.
+        When Ok (head):
+            Let v be jsonParse(head).
+            Let sealed be sealEntry(entry, intAt(v, "seq") + 1, textAt(v, "hash")).
+            Inspect insertEntry(c, sealed):
+                When Err (m):
+                    Return a new Err with error m.
+                When Ok (stored):
+                    Inspect dbCellOn(c, "SELECT factory.finish_unit($1, $2::bigint, $3)::text", [s's unitId, "{token}", finish]):
+                        When Err (m):
+                            Return a new Err with error m.
+                        When Ok (finished):
+                            If finished is not equal to "true":
+                                Return a new Err with error "the lease on {s's unitId} moved on before the verdict was written".
+                            Return a new Ok with value sealed.
+    Return a new Err with error "unrecorded".

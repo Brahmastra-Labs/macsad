@@ -1,8 +1,8 @@
 # Atlas and contributor queries
 
 Import CoordinatorDb from "./coordinator_db.lg".
-Import WebGraph from "./web_graph.lg".
 Import WebBoard from "./web_board.lg".
+Import WebGraph from "./web_graph.lg".
 
 The children of one node of the atlas, best rank first, one page at a time, each
 with the stage counts of every problem below it. PostgreSQL walks the subtree
