@@ -1,0 +1,78 @@
+# Proof document
+
+The documents the factory hands the kernel, assembled here and nowhere else. A
+proof document is the accepted statement byte for byte, a comment marking the
+submission, the submission, and two closing checks: `Check <proof>.` and `Print
+Axioms <proof>.`. Because the assembly is fixed, a posted document can be taken
+apart again: the trusted verifier reads the submission back out of the document
+an attempt names and assembles it afresh from the statement it trusts.
+
+## To assembleProofDocument (statement: Text, submission: Text, proofName: Text) -> Text:
+    Return submissionHead(statement) + trim(submission) + closingChecks(proofName).
+
+## Note
+The text before a submission, and the closing checks after it.
+
+## To submissionHead (statement: Text) -> Text:
+    Return trimEnd(statement) + "\n\n/-! ## Submission -/\n\n".
+
+## To closingChecks (proofName: Text) -> Text:
+    Return "\n\n/-! ## Closing checks, appended by the factory -/\n\nCheck " + proofName + ".\n\nPrint Axioms " + proofName + ".\n".
+
+## Note
+The submission inside a proof document, when the document is exactly the one the
+assembly makes of `statement` and it; `none` for any other text.
+
+## To submissionOfDocument (document: Text, statement: Text, proofName: Text) -> Option of Text:
+    Let head be submissionHead(statement).
+    Let tail be closingChecks(proofName).
+    If startsWith(document, head) is equal to false or endsWith(document, tail) is equal to false:
+        Return none.
+    Let bytes be text_bytes(document).
+    Let first be length of text_bytes(head) + 1.
+    Let last be length of bytes - length of text_bytes(tail).
+    If last is less than first:
+        Return none.
+    Let middle be text_from_bytes(items first through last of bytes).
+    If assembleProofDocument(statement, middle, proofName) is not equal to document:
+        Return none.
+    Return some middle.
+
+## Note
+The document that checks a statement on its own, ending in `Check <goal>.`.
+
+## To statementCheckDocument (statementDoc: Text, goalName: Text) -> Text:
+    Return trimEnd(statementDoc) + "\n\n/-! ## Closing check, appended by the factory -/\n\nCheck " + goalName + ".\n".
+
+## Note
+The document that asks the kernel whether `name` is already bound after `preamble`.
+
+## To nameProbeDocument (preamble: Text, name: Text) -> Text:
+    If trim(preamble) is equal to "":
+        Return "Check " + name + ".\n".
+    Return trimEnd(preamble) + "\n\nCheck " + name + ".\n".
+
+## Test: a proof document is the statement, the submission and the closing checks
+
+Let doc be assembleProofDocument("Definition goal : Prop := True.\n", "  Theorem proof_of_goal : goal := by exact I.\n", "proof_of_goal").
+Expect that startsWith(doc, "Definition goal : Prop := True.\n\n/-! ## Submission -/\n\nTheorem proof_of_goal : goal := by exact I.\n\n") is equal to true.
+Expect that endsWith(doc, "Check proof_of_goal.\n\nPrint Axioms proof_of_goal.\n") is equal to true.
+Expect that statementCheckDocument("Definition goal : Prop := True.", "goal") contains "\n\nCheck goal.\n".
+Expect that nameProbeDocument("", "Nat") is equal to "Check Nat.\n".
+
+## Test: a document gives back the submission it was assembled from
+
+Let statement be "Definition goal : Prop := True.".
+Let doc be assembleProofDocument(statement, "Theorem proof_of_goal : goal := by exact I.", "proof_of_goal").
+Expect that submissionOfDocument(doc, statement, "proof_of_goal") is equal to some "Theorem proof_of_goal : goal := by exact I.".
+Expect that submissionOfDocument(doc, "Definition goal : Prop := False.", "proof_of_goal") is equal to none.
+Expect that submissionOfDocument(doc, statement, "proof_of_other") is equal to none.
+
+## Test: a document with anything added is not one the factory assembled
+
+For all booleans tampered:
+    Let statement be "Definition goal : Prop := True.".
+    Let mutable doc be assembleProofDocument(statement, "Theorem proof_of_goal : goal := by exact I.", "proof_of_goal").
+    If tampered:
+        Set doc to "Axiom cheat : False.\n" + doc.
+    Expect that (submissionOfDocument(doc, statement, "proof_of_goal") is equal to none) is equal to tampered.

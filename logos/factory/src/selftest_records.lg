@@ -9,7 +9,6 @@ Import AttemptRecord from "./attempt_record.lg".
 Import RecordsDecode from "./records_decode.lg".
 Import RankScore from "./rank_score.lg".
 Import RankTrail from "./rank_trail.lg".
-Import Rank from "./rank.lg".
 
 The checks that cross modules, which the macsad test contract cannot hold as
 `## Test`s (a test-bearing module must import nothing): the hand decoders against

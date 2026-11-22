@@ -92,24 +92,3 @@ and the goal defined once, as a `Prop`.
     If found + mistyped is not equal to 1 or mistyped is equal to 1:
         Push "the statement must define `{goalName}` exactly once, as `Definition {goalName} : Prop := …`" to out.
     Return out.
-
-## Note
-The proof document the kernel checks.
-
-## To assembleProofDocument (statement: Text, submission: Text, proofName: Text) -> Text:
-    Let closing be "\n\n/-! ## Closing checks, appended by the factory -/\n\nCheck " + proofName + ".\n\nPrint Axioms " + proofName + ".\n".
-    Return trimEnd(statement) + "\n\n/-! ## Submission -/\n\n" + trim(submission) + closing.
-
-## Note
-The document that checks a statement on its own, ending in `Check <goal>.`.
-
-## To statementCheckDocument (statementDoc: Text, goalName: Text) -> Text:
-    Return trimEnd(statementDoc) + "\n\n/-! ## Closing check, appended by the factory -/\n\nCheck " + goalName + ".\n".
-
-## Note
-The document that asks the kernel whether `name` is already bound after `preamble`.
-
-## To nameProbeDocument (preamble: Text, name: Text) -> Text:
-    If trim(preamble) is equal to "":
-        Return "Check " + name + ".\n".
-    Return trimEnd(preamble) + "\n\nCheck " + name + ".\n".

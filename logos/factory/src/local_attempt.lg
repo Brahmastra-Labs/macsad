@@ -12,6 +12,7 @@ Import AttemptRecord from "./attempt_record.lg".
 Import Extraction from "./extraction.lg".
 Import VernacularCommand from "./vernacular_command.lg".
 Import SubmissionPolicy from "./submission_policy.lg".
+Import ProofDocument from "./proof_document.lg".
 Import Verifier from "./verifier.lg".
 Import LocalStore from "./local_store.lg".
 

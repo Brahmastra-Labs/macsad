@@ -81,18 +81,12 @@ The theorem a submission must contain to prove the goal `goalName`.
 
 ## Test: a block's command is read past visibility words
 
-For each of these cases:
-
-| block                                   | command      |
-|-----------------------------------------|--------------|
-| "Private Definition x : Nat := Zero."   | "Definition" |
-| "Local Notation \"a ++ b\" := (f a b)." | "Notation"   |
-| "-- note"                               | "comment"    |
-| "## Theorem: T"                         | "literate"   |
-| "A Colour is either Red or Blue."       | "literate"   |
-| "Print Axioms t."                       | "Print"      |
-
-Expect that commandOf(block) is equal to command.
+Expect that commandOf("Private Definition x : Nat := Zero.") is equal to "Definition".
+Expect that commandOf("Local Notation \"a ++ b\" := (f a b).") is equal to "Notation".
+Expect that commandOf("-- note") is equal to "comment".
+Expect that commandOf("## Theorem: T") is equal to "literate".
+Expect that commandOf("A Colour is either Red or Blue.") is equal to "literate".
+Expect that commandOf("Print Axioms t.") is equal to "Print".
 
 ## Test: a theorem's statement, body and skeleton are read
 

@@ -9,7 +9,6 @@ Import AttemptRecord from "./attempt_record.lg".
 Import ChatRequest from "./chat_request.lg".
 Import ChatReply from "./chat_reply.lg".
 Import Budget from "./budget.lg".
-Import Cost from "./cost.lg".
 Import Replay from "./replay.lg".
 Import LocalSettings from "./local_settings.lg".
 Import LocalStore from "./local_store.lg".

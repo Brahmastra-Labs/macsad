@@ -35,6 +35,20 @@ reviewer is never counted as agreeing.
 ## To reviewVerdicts () -> Seq of Text:
     Return ["faithful", "unfaithful", "unsure"].
 
+## Note
+The verdict kind a review attempt is recorded under: `faithful` accepts the
+statement (`verified`), `unfaithful` rejects it, and an unsure, missing or
+unknown verdict counts against it (`refused_submission`): only a reviewer who
+says faithful is counted as agreeing.
+
+## To reviewVerdictKind (verdict: Text) -> Text:
+    Let v be lower(trim(verdict)).
+    If v is equal to "faithful":
+        Return "verified".
+    If v is equal to "unfaithful":
+        Return "rejected".
+    Return "refused_submission".
+
 ## Test: the reviewer and the summarizer have their own roles
 
 Expect that roleText("review") contains "You review formal statements".
@@ -55,3 +69,10 @@ For all booleans reviewing:
         Set kind to "review".
     Expect that (contractText(kind) contains "```review") is equal to reviewing.
     Expect that reviewVerdicts() contains "faithful".
+
+## Test: only a faithful review counts as agreeing
+
+Expect that reviewVerdictKind(" Faithful ") is equal to "verified".
+Expect that reviewVerdictKind("unfaithful") is equal to "rejected".
+Expect that reviewVerdictKind("unsure") is equal to "refused_submission".
+Expect that reviewVerdictKind("") is equal to "refused_submission".

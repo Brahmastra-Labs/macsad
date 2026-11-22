@@ -6,19 +6,24 @@ Import LocalRun from "./local_run.lg".
 Import RolesIngest from "./roles_ingest.lg".
 Import RolesVerify from "./roles_verify.lg".
 Import HostFiles from "./host_files.lg".
-Import Selftest from "./selftest.lg".
+Import SelftestLive from "./selftest_live.lg".
 Import Coordinator from "./coordinator.lg".
+Import WorkerRun from "./worker_run.lg".
+Import VerifierRun from "./verifier_run.lg".
 
 The MaCSad math factory is one program with one role per process; which role
 runs is the first argument. Every role prints what it did and fails when it did
 not do it. `coordinator` serves the coordinator's routes and website over the
-database and runs its import, load, plan and smoke commands; `worker` comes next.
+database and runs its import, load, plan and smoke commands; `worker` is a
+contributor's model working units through the coordinator; `verifier` is the
+kernel's signed word, written straight to the database.
 
 ## To usage () -> Text:
     Let a be ["usage: factory <role> …", "  ingest fc <manifest.json> <out-dir>", "  ingest opdp <atlas.json | atlas.json.gz> <out-dir> [chunk-mb]"].
     Let b be ["  verifier judge <statement.kernel> <goal> <submission.kernel>", "  verifier statement <statement.kernel> <goal>", "  verifier reference"].
     Let c be ["  local seed <workspace>", "  local answer <workspace> <problem-id> <answer-file> [cost-micros]", "  selftest [--live]"].
-    Return joinLines(a + b + c + ["  reference", "  local <workspace> <problem-id> [attempts]", "  coordinator [load <dir> | import-opdp <pin> <atlas> <work> | plan | smoke <url>]", "  worker"]).
+    Let d be ["  reference", "  local <workspace> <problem-id> [attempts]", "  coordinator [load <dir> | import-opdp <pin> <atlas> <work> | plan | smoke <url>]"].
+    Return joinLines(a + b + c + d + ["  worker [units]", "  verifier [--once]"]).
 
 ## Note
 The argument at a position, the program's own name first, or the empty text.
@@ -50,6 +55,14 @@ A recorded answer for the next attempt on a problem, read from a file.
                 When Err (e):
                     Return failed(e).
     Return failed("unreachable").
+
+## Note
+A role's outcome shown, and the program failed when the role did not complete.
+
+## To conclude (o: Outcome):
+    Show o's message.
+    If o's ok is equal to false:
+        Fail with "the role did not complete".
 
 ## Note
 The role the arguments name, run.
@@ -87,5 +100,7 @@ The role the arguments name, run.
             When Err (e):
                 Return failed(e).
     If argAt(xs, 2) is equal to "worker":
-        Return failed("the worker role is not built yet; use `local`.\n" + usage()).
+        Return runWorker(countAt(xs, 3, 1000000)).
+    If role is equal to "verifier " or role is equal to "verifier --once":
+        Return runVerifier(argAt(xs, 3) is equal to "--once").
     Return failed(usage()).

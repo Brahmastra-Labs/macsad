@@ -5,6 +5,7 @@ Import VerdictRecord from "./verdict_record.lg".
 Import KernelVerdict from "./kernel_verdict.lg".
 Import KernelBlocks from "./kernel_blocks.lg".
 Import SubmissionPolicy from "./submission_policy.lg".
+Import ProofDocument from "./proof_document.lg".
 Import SelftestRecords from "./selftest_records.lg".
 
 The acceptance policy checked against what `largo` really printed: every report

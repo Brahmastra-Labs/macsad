@@ -1,0 +1,107 @@
+# Worker judge
+
+Import HostTools from "./host_tools.lg".
+Import NodeRecord from "./node_record.lg".
+Import WorkRecord from "./work_record.lg".
+Import VerdictRecord from "./verdict_record.lg".
+Import TrailMemory from "./trail_memory.lg".
+Import Extraction from "./extraction.lg".
+Import VernacularCommand from "./vernacular_command.lg".
+Import SubmissionPolicy from "./submission_policy.lg".
+Import ProofDocument from "./proof_document.lg".
+Import PromptRoles from "./prompt_roles.lg".
+Import Verifier from "./verifier.lg".
+Import ArtifactRules from "./artifact_rules.lg".
+Import CoordinatorWire from "./coordinator_wire.lg".
+
+A worker judges its own answer with the kernel before it claims anything, as the
+trusted verifier will again: a proof (`prove`, `repair`, `decompose`) is
+assembled onto the statement and checked under the acceptance policy; a
+`formalize` answer is checked as a statement and, when it checks, proposed as a
+draft for review; a `review` answer is read for its verdict, which only
+`faithful` makes an agreement. The approach is fingerprinted from the kind, the
+statement, the strategy and the proof's tactic skeleton.
+
+## A WorkJudged has:
+    a verdict, which is Verdict.
+    a fingerprint, which is Text.
+    an extraction, which is Extraction.
+    a document, which is Text.
+    a draft, which is Option of StatementDraft.
+
+## Note
+A review: its verdict line read, its issues kept as the detail. Its approach is
+the reviewer's own (`reviewer` names the contributor and model), so a second
+independent rejection is never mistaken for a repeat of the first.
+
+## To judgeReview (st: Statement, strategyId: Text, content: Text, reviewer: Text) -> WorkJudged:
+    Let x be extractBlock(content, "review").
+    Let word be lower(fieldLine(x's block, "verdict")).
+    Let mutable detail be "the reviewer says " + word + "; issues: " + fieldLine(x's block, "issues").
+    If x's problem is not equal to "":
+        Set detail to x's problem.
+    Let v be newVerdict(reviewVerdictKind(word), 0, "", [], detail).
+    Let fp be approachFingerprint("review", st's sha256, strategyId, "review " + word + " by " + reviewer).
+    Return a new WorkJudged with verdict v and fingerprint fp and extraction x and document "" and draft none.
+
+## Note
+The answer to a unit of `kind` on `st`, judged.
+
+## To judgeWork (kind: Text, st: Statement, strategyId: Text, content: Text, reviewer: Text) -> WorkJudged:
+    If kind is equal to "review":
+        Return judgeReview(st, strategyId, content, reviewer).
+    Let x be extractSubmission(content).
+    Let mutable subject be st's sha256.
+    If kind is equal to "formalize":
+        Set subject to st's problemId.
+    Let mutable j be a new WorkJudged with verdict refusedSubmissionVerdict([x's problem]) and extraction x and document "" and draft none.
+    Set j's fingerprint to approachFingerprint(kind, subject, strategyId, "no-submission").
+    If x's problem is not equal to "":
+        Return j.
+    Set j's fingerprint to approachFingerprint(kind, subject, strategyId, submissionSkeleton(x's block)).
+    If kind is equal to "formalize":
+        Set j's document to x's block.
+        Set j's verdict to judgeStatement(defaultToolchain(), x's block, st's goalName).
+        If j's verdict's kind is equal to "verified":
+            Set j's draft to some (a new StatementDraft with document x's block and goalName st's goalName and route "C").
+        Return j.
+    Set j's document to assembleProofDocument(st's document, x's block, proofNameFor(st's goalName)).
+    Set j's verdict to judgeSubmission(defaultToolchain(), st's document, st's goalName, x's block).
+    Return j.
+
+## Note
+An artifact under the hash of its text.
+
+## To artifactOfText (name: Text, text: Text) -> ArtifactUpload:
+    Return a new ArtifactUpload with sha256 contentSha(text) and name name and text text.
+
+## Note
+The files an attempt hands over, in the order its trail entry lists them: the
+request, the answer, then — when the answer held a block — the submission and
+the document the kernel checked, then the verdict.
+
+## To workArtifacts (requestJson: Text, answer: Text, j: WorkJudged) -> Seq of ArtifactUpload:
+    Let mutable out be [artifactOfText("prompt.json", requestJson), artifactOfText("answer.txt", answer)].
+    If j's extraction's problem is equal to "" and j's document is not equal to "":
+        Push artifactOfText("submission.lg", j's extraction's block) to out.
+        Push artifactOfText("document.lg", j's document) to out.
+    Push artifactOfText("verdict.json", toJson_Verdict(j's verdict)) to out.
+    Return out.
+
+## Note
+The hashes of a list of artifacts, in order.
+
+## To artifactShasOf (xs: Seq of ArtifactUpload) -> Seq of Text:
+    Let mutable out be a new Seq of Text.
+    Repeat for a in xs:
+        Push a's sha256 to out.
+    Return out.
+
+## Note
+The judgement of a call never made because the budget could not hold it.
+
+## To budgetJudged (u: WorkUnit, strategyId: Text, stop: Text) -> WorkJudged:
+    Let x be a new Extraction with block "" and summary "the budget stopped the call before it was made" and suggestions [] and problem "no answer was bought".
+    Let v be newVerdict("budget_exhausted", 0, stop, [], "the contributor's budget could not hold the call's worst case").
+    Let fp be approachFingerprint(u's kind, u's problemId, strategyId, "budget stop").
+    Return a new WorkJudged with verdict v and fingerprint fp and extraction x and document "" and draft none.

@@ -3,7 +3,7 @@
 Import NodeRecord from "./node_record.lg".
 Import RankScore from "./rank_score.lg".
 Import RankTrail from "./rank_trail.lg".
-Import Rank from "./rank.lg".
+Import TrailDigest from "./trail_digest.lg".
 Import OpdpRow from "./opdp_row.lg".
 
 The atlas graph above the problems, built while rows stream past: each cohort,

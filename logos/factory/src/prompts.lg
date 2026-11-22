@@ -47,7 +47,7 @@ The problem as the model reads it.
         When Some (lean):
             Return out + "\n\nThe Lean statement:\n\n```lean\n" + lean + "\n```".
         When None:
-            Return out + "\n\nThere is no formal statement yet.".
+            Return out + "\n\nThere is no Lean statement of it.".
     Return out.
 
 ## Note

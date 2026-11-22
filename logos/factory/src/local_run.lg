@@ -5,7 +5,6 @@ Import HostFiles from "./host_files.lg".
 Import NodeRecord from "./node_record.lg".
 Import ChatRequest from "./chat_request.lg".
 Import Budget from "./budget.lg".
-Import Cost from "./cost.lg".
 Import Replay from "./replay.lg".
 Import LocalSettings from "./local_settings.lg".
 Import LocalStore from "./local_store.lg".
