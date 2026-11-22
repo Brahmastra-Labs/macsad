@@ -1,0 +1,63 @@
+# Heartbeats
+
+Import ApiBounds from "./api_bounds.lg".
+Import HttpAnswers from "./http_answers.lg".
+Import LeaseWire from "./lease_wire.lg".
+Import LeaseSecret from "./lease_secret.lg".
+Import CoordinatorDb from "./coordinator_db.lg".
+Import CoordinatorWire from "./coordinator_wire.lg".
+
+A heartbeat runs a lease on only when it comes from the lease's holder, under the
+lease's current token, with the lease's secret, before the lease expired: the
+schema's `factory.heartbeat_unit` checks the token and the clock, and the
+coordinator checks the rest first. A lease that has moved on answers `alive:
+false`, and the worker stops: its unit belongs to someone else now.
+
+## To heartbeatSql () -> Text:
+    Let mutable q be ["SELECT CASE WHEN EXISTS (SELECT 1 FROM factory.work_unit WHERE id = $1 AND holder = $4 AND lease_token = $2::bigint)"].
+    Push "THEN factory.heartbeat_unit($1, $2::bigint, $3::int) ELSE false END::text" to q.
+    Return join(q, " ").
+
+## To expirySql () -> Text:
+    Return "SELECT coalesce((SELECT (extract(epoch FROM expires_at) * 1000)::bigint FROM factory.work_unit WHERE id = $1 AND lease_token = $2::bigint), 0)::text".
+
+## Note
+The answer to a heartbeat on an open connection.
+
+## To heartbeatOn (c: PgConn, h: HeartbeatRequest) -> Result of HeartbeatAnswer and Text:
+    Let params be [h's unitId, "{h's token}", "{clampTtl(h's ttlMs)}", h's holder].
+    Inspect dbCellOn(c, heartbeatSql(), params):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (alive):
+            If alive is not equal to "true":
+                Return a new Ok with value (a new HeartbeatAnswer with alive false and expiresAt 0).
+    Inspect dbCellOn(c, expirySql(), [h's unitId, "{h's token}"]):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (at):
+            Return a new Ok with value (a new HeartbeatAnswer with alive true and expiresAt parseInt(at)).
+    Return a new Err with error "no heartbeat".
+
+## Note
+The heartbeat's answer, its secret checked before the database is asked.
+
+## To heartbeatAnswer (h: HeartbeatRequest) -> Response:
+    Inspect coordLeaseKey():
+        When Err (e):
+            Return unavailable(e).
+        When Ok (key):
+            If leaseSecretValid(key, h's unitId, h's token, h's secret) is equal to false:
+                Return json(toJson_HeartbeatAnswer(a new HeartbeatAnswer with alive false and expiresAt 0)).
+            Inspect dbOpen():
+                When Err (e):
+                    Return unavailable(e).
+                When Ok (c):
+                    Let answered be heartbeatOn(c, h).
+                    Let closed be pgClose(c).
+                    Inspect answered:
+                        When Err (e):
+                            Return unavailable(e).
+                        When Ok (a):
+                            Return json(toJson_HeartbeatAnswer(a)).
+    Return unavailable("no answer").

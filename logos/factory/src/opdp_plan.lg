@@ -1,0 +1,120 @@
+# OPDP import: writing and planning
+
+Import WireRead from "./wire_read.lg".
+Import CoordinatorDb from "./coordinator_db.lg".
+Import DbLoad from "./db_load.lg".
+Import LoadRules from "./load_rules.lg".
+Import OpdpImportRules from "./opdp_import_rules.lg".
+Import OpdpStream from "./opdp_stream.lg".
+
+The import's writes. A piece's rows go up in the order the schema's keys need —
+problems, the graph above them, their nodes, their profiles — and the rows are
+dropped before the next piece is read, so memory is one piece, whatever the size
+of the release. Then each open problem without a unit gets one ready `formalize`
+unit; a MathDB excerpt's waits at a quarter of its rank (`opdp_import_rules.lg`).
+
+## To innerInsertSql () -> Text:
+    Let mutable q be ["INSERT INTO factory.node (id, parent_id, kind, label, problem_id, stage, rank) SELECT e->>'id', e->>'parentId',"].
+    Push "e->>'kind', e->>'label', NULL, 'ranked', (e->>'rank')::int FROM jsonb_array_elements($1::jsonb) AS e" to q.
+    Push "ON CONFLICT (id) DO UPDATE SET rank = GREATEST(factory.node.rank, EXCLUDED.rank)" to q.
+    Return join(q, " ").
+
+## To planAllSql () -> Text:
+    Let mutable q be ["INSERT INTO factory.work_unit (id, problem_id, statement_id, kind, priority, state)"].
+    Push "SELECT 'u:' || gen_random_uuid()::text, p.id, NULL, 'formalize', CASE WHEN p.opdp->>'textMode' = 'mathdb_public_list_excerpt'" to q.
+    Push "THEN p.rank / " + "{excerptDivisor()}" + " ELSE p.rank END, 'ready' FROM factory.problem p WHERE p.status = 'open'" to q.
+    Push "AND NOT EXISTS (SELECT 1 FROM factory.work_unit u WHERE u.problem_id = p.id)" to q.
+    Return join(q, " ").
+
+## To countsSql () -> Text:
+    Let mutable q be ["SELECT json_build_object('total', (SELECT count(*) FROM factory.problem WHERE source = 'opdp'),"].
+    Push "'collections', (SELECT count(DISTINCT collection) FROM factory.problem WHERE source = 'opdp')," to q.
+    Push "'cohorts', (SELECT coalesce(json_object_agg(cohort, n), '{{}}') FROM (SELECT cohort, count(*) AS n FROM factory.problem" to q.
+    Push "WHERE source = 'opdp' GROUP BY cohort) x), 'units', (SELECT coalesce(json_object_agg(k, n), '{{}}') FROM (SELECT" to q.
+    Push "CASE WHEN p.opdp->>'textMode' = 'mathdb_public_list_excerpt' THEN 'formalize excerpt' ELSE u.kind END AS k, count(*) AS n" to q.
+    Push "FROM factory.work_unit u JOIN factory.problem p ON p.id = u.problem_id GROUP BY 1) y))::text" to q.
+    Return join(q, " ").
+
+## Note
+What carries from one piece of the release to the next: the record a piece ended
+inside, how many lines it has taken, whether the header is behind, the graph
+nodes already sent, and the counts.
+
+## A PieceCarry has:
+    a buffer, which is Text.
+    a pending, which is Int.
+    a seen, which is Seq of Text.
+    an inRecords, which is Bool.
+    a records, which is Int.
+    an unranked, which is Int.
+
+## Note
+One piece read: header lines skipped, each record's lines joined until the text
+parses (a record still unparsed after sixteen lines is broken, which stops the
+whole run), each record projected, and the piece's rows sent in the order the
+keys need: problems, the graph above them, their nodes, their profiles.
+
+## To importPiece (c: PgConn, text: Text, carry: PieceCarry, labels: Map of Text to Text) -> Result of PieceCarry and Text:
+    Let mutable out be carry.
+    Let mutable buffer be carry's buffer.
+    Let mutable seen be carry's seen.
+    Let mutable problems be a new Seq of Text.
+    Let mutable inner be a new Seq of Text.
+    Let mutable leaves be a new Seq of Text.
+    Let mutable profiles be a new Seq of Text.
+    Repeat for line in lines(text):
+        If out's inRecords is equal to false:
+            If opensRecords(line):
+                Set out's inRecords to true.
+        Otherwise If buffer is not equal to "" or isRecordStart(line):
+            Set buffer to buffer + line.
+            Set out's pending to out's pending + 1.
+            Inspect jsonParseStrict(withoutNul(recordCandidate(buffer))):
+                When JOk (v):
+                    Let rows be projectRecord(v, labels).
+                    Push rows's problem to problems.
+                    Repeat for i from 1 to 3:
+                        If seen contains item i of rows's innerIds is equal to false:
+                            Push item i of rows's innerIds to seen.
+                            Push item i of rows's inner to inner.
+                    Push rows's leaf to leaves.
+                    Push rows's profile to profiles.
+                    Set out's records to out's records + 1.
+                    If rows's ranked is equal to false:
+                        Set out's unranked to out's unranked + 1.
+                    Set buffer to "".
+                    Set out's pending to 0.
+                When JErr (m):
+                    If out's pending is greater than 16:
+                        Return a new Err with error "record {out's records + 1} does not parse: " + m.
+    Let steps be [problemInsertSql(), innerInsertSql(), nodeInsertSql(), profileUpdateSql()].
+    Let batches be [problems, inner, leaves, profiles].
+    Repeat for k from 1 to 4:
+        Inspect sendBatch(c, item k of steps, item k of batches):
+            When Err (e):
+                Return a new Err with error "near record {out's records}: " + e.
+            When Ok (n):
+                Let sent be n.
+    Set out's buffer to buffer.
+    Set out's seen to seen.
+    Return a new Ok with value out.
+
+## Note
+What the database holds of the atlas after the import, set beside what the pin
+says the release holds.
+
+## To countsCheck (counts: Json, pin: Json) -> Text:
+    Let total be intOfJson(jsonGet(counts, "total")).
+    Let collections be intOfJson(jsonGet(counts, "collections")).
+    If total is not equal to intOfJson(jsonGet(pin, "records")) or collections is not equal to intOfJson(jsonGet(pin, "source_collections")):
+        Return "the database holds {total} atlas problems in {collections} collections, not what the pin names".
+    Inspect jsonGet(pin, "cohorts"):
+        When JObj (entries):
+            Repeat for en in entries:
+                Let key be cohortKeyOf(en's key).
+                Let held be intOfJson(jsonGet(jsonGet(counts, "cohorts"), key)).
+                If held is not equal to intOfJson(jsonGet(en's val, "records")):
+                    Return "cohort {key} holds {held} problems, not what the pin names".
+        Otherwise:
+            Return "the pin names no cohorts".
+    Return "".

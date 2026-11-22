@@ -1,0 +1,119 @@
+# Artifact rules
+
+The files an attempt hands the coordinator with its claim: the submitted proof
+document, the kernel report the worker saw, the model's raw answer. The verifier
+re-checks the document named by its hash, so the coordinator keeps every artifact
+under the hash of its content and refuses one whose content does not hash to the
+name it was sent under. Storage is content-addressed, so the same bytes posted
+twice are stored once, and no artifact can be overwritten by another.
+
+## A ArtifactUpload has:
+    a sha256, which is Text.
+    a name, which is Text.
+    a text, which is Text.
+
+## Note
+How many artifacts one attempt may carry, and how large one may be.
+
+## To artifactCountLimit () -> Int:
+    Return 8.
+
+## To artifactBytesLimit () -> Int:
+    Return 4194304.
+
+## Note
+Whether a name is a plain file name the website can show: 1 to 64 of `a-z0-9_.-`,
+not starting with a dot, ending in `.lg`, `.json`, `.txt` or `.md`.
+
+## To isArtifactName (n: Text) -> Bool:
+    If length of n is equal to 0 or length of n is greater than 64 or startsWith(n, "."):
+        Return false.
+    Repeat for b in text_bytes(n):
+        If ((b is at least 97 and b is at most 122) or (b is at least 48 and b is at most 57) or b is equal to 95 or b is equal to 46 or b is equal to 45) is equal to false:
+            Return false.
+    Return endsWith(n, ".lg") or endsWith(n, ".json") or endsWith(n, ".txt") or endsWith(n, ".md").
+
+## Note
+The lowercase hex SHA-256 of a text's bytes: the name an artifact is kept under.
+
+## To contentSha (t: Text) -> Text:
+    Return bytesToHex(sha256(text_bytes(t))).
+
+## Note
+The first thing wrong with an attempt's artifacts, or the empty text.
+
+## To artifactsProblem (xs: Seq of ArtifactUpload) -> Text:
+    If length of xs is greater than artifactCountLimit():
+        Return "an attempt carries at most {artifactCountLimit()} artifacts".
+    Let mutable names be a new Seq of Text.
+    Repeat for a in xs:
+        If isArtifactName(a's name) is equal to false or names contains a's name:
+            Return "artifact name \"{a's name}\" is not a plain file name, or is repeated".
+        Push a's name to names.
+        If length of a's text is greater than artifactBytesLimit():
+            Return "artifact {a's name} is larger than {artifactBytesLimit()} bytes".
+        If contentSha(a's text) is not equal to a's sha256:
+            Return "artifact {a's name} does not hash to the sha256 it was sent under".
+    Return "".
+
+## Note
+Where an artifact lives under a results root: fanned out by its first two hex
+digits, so no directory grows past 256 entries of directories.
+
+## To artifactPath (root: Text, sha: Text) -> Text:
+    Let bytes be text_bytes(sha).
+    Let fan be text_from_bytes([item 1 of bytes, item 2 of bytes]).
+    Return root + "/artifacts/" + fan + "/" + sha.
+
+## Note
+The first thing wrong with a proposed statement, or the empty text: a document
+of at most 4 MiB, a goal named as the schema allows, and route A, B or C.
+
+## To isGoalName (n: Text) -> Bool:
+    If length of n is equal to 0 or length of n is greater than 120:
+        Return false.
+    Let mutable first be true.
+    Repeat for b in text_bytes(n):
+        Let word be (b is at least 97 and b is at most 122) or (b is at least 65 and b is at most 90) or b is equal to 95.
+        If (word or (first is equal to false and ((b is at least 48 and b is at most 57) or b is equal to 46))) is equal to false:
+            Return false.
+        Set first to false.
+    Return true.
+
+## To draftProblem (document: Text, goalName: Text, route: Text) -> Text:
+    If length of document is equal to 0 or length of document is greater than artifactBytesLimit():
+        Return "a statement document is 1 byte to 4 MiB".
+    If isGoalName(goalName) is equal to false:
+        Return "a goal is a letter or underscore, then letters, digits, underscores and dots".
+    If ["A", "B", "C"] contains route is equal to false:
+        Return "a statement's route is A, B or C".
+    Return "".
+
+## Test: artifacts are kept under the hash of their content
+
+Let a be a new ArtifactUpload with sha256 contentSha("Theorem t : True := by exact I.") and name "submission.lg" and text "Theorem t : True := by exact I.".
+Expect that artifactsProblem([a]) is equal to "".
+Expect that contentSha("abc") is equal to "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad".
+Expect that artifactPath("/var/lib/macsad/results", contentSha("abc")) is equal to "/var/lib/macsad/results/artifacts/ba/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad".
+
+## Test: artifacts with a forged hash or an unsafe name are refused
+
+Let forged be a new ArtifactUpload with sha256 contentSha("one") and name "submission.lg" and text "two".
+Expect that artifactsProblem([forged]) contains "does not hash".
+Let unsafe be a new ArtifactUpload with sha256 contentSha("x") and name "../etc.lg" and text "x".
+Expect that artifactsProblem([unsafe]) contains "plain file name".
+Expect that isArtifactName("report.json") is equal to true.
+Expect that isArtifactName(".hidden.lg") is equal to false.
+Expect that isArtifactName("Proof.lg") is equal to false.
+Expect that draftProblem("Definition goal : Prop := True.", "goal", "C") is equal to "".
+Expect that draftProblem("x", "goal", "D") contains "route".
+Expect that draftProblem("x", "9goal", "C") contains "letter".
+
+## Test: artifacts are named once each
+
+For all booleans twice:
+    Let a be a new ArtifactUpload with sha256 contentSha("x") and name "a.txt" and text "x".
+    Let mutable xs be [a].
+    If twice:
+        Push a to xs.
+    Expect that (artifactsProblem(xs) is equal to "") is equal to (twice is equal to false).

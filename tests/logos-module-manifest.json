@@ -798,6 +798,276 @@
           "severity": "warning",
           "file": "src/main.lg",
           "message": "`Import WorkRecord` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import ApiBounds` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import ArtifactRules` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import AttemptRules` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import Coordinator` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import CoordinatorDb` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import CoordinatorWire` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import DbBoard` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import DbClaim` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import DbConfig` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import DbGrant` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import DbGraph` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import DbIntake` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import DbLoad` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import DbProblem` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import DbProblemParts` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import DbTrail` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import Heartbeat` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import HttpAnswers` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import IntakeFollow` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import IntakePolicy` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import IntakeRecord` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import IntakeRun` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import IntakeWrite` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import LeaseGrant` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import LeaseSecret` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import LeaseWire` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import LoadRules` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import OpdpImport` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import OpdpImportRules` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import OpdpPlan` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import OpdpProfile` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import OpdpRun` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import OpdpStream` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import RoutesAttempt` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import RoutesLease` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import RoutesProblem` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import RoutesRead` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import SmokeBuild` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import SmokeHttp` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import SmokeRun` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import StageRules` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import SubmissionRead` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import WebBoard` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import WebGraph` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import WebProblem` is unused \u2014 no name from it is referenced here."
         }
       ],
       "domBundle": false,
@@ -1052,6 +1322,202 @@
           ],
           "minimumProperties": 1,
           "minimumProven": 1
+        },
+        {
+          "path": "src/api_bounds.lg",
+          "expectedTests": [
+            "coordinator bodies are bounded per route",
+            "coordinator lease lengths and pages are clamped",
+            "coordinator digests are lowercase hex of length sixty four",
+            "coordinator text fields are empty only when optional"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/artifact_rules.lg",
+          "expectedTests": [
+            "artifacts are kept under the hash of their content",
+            "artifacts with a forged hash or an unsafe name are refused",
+            "artifacts are named once each"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/attempt_rules.lg",
+          "expectedTests": [
+            "claims consistent with their lease are accepted",
+            "claims are refused field by field",
+            "claims carry one verdict on both records"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/db_config.lg",
+          "expectedTests": [
+            "database passwords come from the first line of their file",
+            "database URLs are built only from checked pieces",
+            "database TLS is required only when asked"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/http_answers.lg",
+          "expectedTests": [
+            "api refusals are one JSON shape",
+            "api outages are retryable and nothing else is",
+            "api details are escaped",
+            "api lists answer even when empty"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/intake_policy.lg",
+          "expectedTests": [
+            "intake records a clean attempt at the head",
+            "intake refuses stale leases, mismatches, unsealed entries and dead ends",
+            "intake reseals an entry written against an older head",
+            "intake never settles a claim and records only with a live lease"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/lease_secret.lg",
+          "expectedTests": [
+            "lease secrets are bound to their unit and token",
+            "lease keys differ from their material",
+            "lease secrets refuse a later token"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/lease_wire.lg",
+          "expectedTests": [
+            "coordinator lease requests are closed records",
+            "coordinator lease rules name what is wrong",
+            "coordinator workers never lease verification"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/load_rules.lg",
+          "expectedTests": [
+            "load rules replace an escaped nul and nothing else",
+            "load rules know the record files",
+            "load rules leave an escaped backslash before u0000 alone",
+            "json cells read what the coordinator built",
+            "json cells answer the empty value for a missing member",
+            "json cells read a boolean as it is"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/opdp_import_rules.lg",
+          "expectedTests": [
+            "opdp import names each dataset version a cohort",
+            "opdp import reads records back from their lines",
+            "opdp import puts excerpts behind full statements"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/opdp_profile.lg",
+          "expectedTests": [
+            "opdp profiles keep the atlas display values",
+            "opdp profiles have no id without an integer problem id",
+            "opdp profiles show an absent field as empty"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/stage_rules.lg",
+          "expectedTests": [
+            "stage rules move a problem forward only while it is open",
+            "stage rules queue the next unit from the verdict",
+            "stage rules need two agreeing reviews",
+            "stage rules settle a problem only on an attestation"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        }
+      ],
+      "pageSuites": [
+        {
+          "path": "pages/app.lg",
+          "expectedTests": [
+            "the atlas opens on the cohorts with their totals",
+            "opening a branch fetches its children and closing it hides them",
+            "an atlas the coordinator cannot serve says why"
+          ],
+          "mountedTests": [
+            "the atlas opens on the cohorts with their totals",
+            "opening a branch fetches its children and closing it hides them",
+            "an atlas the coordinator cannot serve says why"
+          ],
+          "minimumProperties": 0,
+          "minimumProven": 0
+        },
+        {
+          "path": "pages/board.lg",
+          "expectedTests": [
+            "the board draws a lane per stage with its cards",
+            "a board the coordinator cannot serve says why"
+          ],
+          "mountedTests": [
+            "the board draws a lane per stage with its cards",
+            "a board the coordinator cannot serve says why"
+          ],
+          "minimumProperties": 0,
+          "minimumProven": 0
+        },
+        {
+          "path": "pages/contribute.lg",
+          "expectedTests": [
+            "the command carries the budget and the focus chosen",
+            "a budget that is not a whole number of dollars cannot be copied"
+          ],
+          "mountedTests": [
+            "the command carries the budget and the focus chosen",
+            "a budget that is not a whole number of dollars cannot be copied"
+          ],
+          "minimumProperties": 0,
+          "minimumProven": 0
+        },
+        {
+          "path": "pages/leaderboard.lg",
+          "expectedTests": [
+            "contributors are listed with their spend in dollars",
+            "an empty leaderboard invites the first contributor"
+          ],
+          "mountedTests": [
+            "contributors are listed with their spend in dollars",
+            "an empty leaderboard invites the first contributor"
+          ],
+          "minimumProperties": 0,
+          "minimumProven": 0
+        },
+        {
+          "path": "pages/problem.lg",
+          "expectedTests": [
+            "a problem opens with its profile and an empty trail",
+            "an unknown problem says so and draws nothing"
+          ],
+          "mountedTests": [
+            "a problem opens with its profile and an empty trail",
+            "an unknown problem says so and draws nothing"
+          ],
+          "minimumProperties": 0,
+          "minimumProven": 0
         }
       ]
     }

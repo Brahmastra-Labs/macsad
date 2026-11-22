@@ -1,0 +1,100 @@
+# Read routes
+
+Import ApiBounds from "./api_bounds.lg".
+Import HttpAnswers from "./http_answers.lg".
+Import ArtifactRules from "./artifact_rules.lg".
+Import SubmissionRead from "./submission_read.lg".
+Import DbGraph from "./db_graph.lg".
+Import DbBoard from "./db_board.lg".
+Import WebBoard from "./web_board.lg".
+
+`GET /api/v1/graph/children?node=<id>&offset=<n>&limit=<n>` answers one page of a
+node's children with their stage counts; `node=root` (or no `node`) answers the
+cohorts. Node ids hold slashes (`category:UnsolvedMath/green-problems/algebra`),
+and the router decodes a path before it splits it, so the id travels in the query
+string; `GET /api/v1/graph/children/:nodeId` serves the ids without one.
+
+The factory as a whole: `GET /api/v1/board` (a `BoardLane` per stage),
+`GET /api/v1/board/cards?per=<n>` (the best `n` problems of each stage, at most
+24), `GET /api/v1/leaderboard`, `GET /api/v1/focus` (what `MACSAD_FOCUS` may
+name), and `GET /api/v1/health`, which answers `503` with the reason when the
+database does not answer.
+
+## Note
+A query parameter as a whole number, or `fallback` when absent or not a number.
+
+## To queryInt (request: Request, name: Text, fallback: Int) -> Int:
+    Let t be queryOf(request, name).
+    If isIntText(t):
+        Return parseInt(t).
+    Return fallback.
+
+## Note
+The answer for one node, its page bounded by the coordinator.
+
+## To childrenAnswer (nodeId: Text, request: Request) -> Response:
+    If length of nodeId is greater than 400:
+        Return badRequest("a node id is at most 400 bytes").
+    Inspect graphChildren(nodeId, clampLimit(queryInt(request, "limit", 0)), clampOffset(queryInt(request, "offset", 0))):
+        When Err (e):
+            Return unavailable(e).
+        When Ok (text):
+            If text is equal to "":
+                Return missing("node " + nodeId).
+            Return json(text).
+    Return unavailable("no answer").
+
+## Route GET /api/v1/graph/children (request: Request) -> Response:
+    Let mutable node be queryOf(request, "node").
+    If node is equal to "":
+        Set node to "root".
+    Return childrenAnswer(node, request).
+
+## Route GET /api/v1/graph/children/:nodeId (nodeId: Text) and (request: Request) -> Response:
+    Return childrenAnswer(nodeId, request).
+
+## To jsonAnswer (answer: Result of Text and Text) -> Response:
+    Inspect answer:
+        When Err (e):
+            Return unavailable(e).
+        When Ok (text):
+            Return json(text).
+    Return unavailable("no answer").
+
+## Route GET /api/v1/board -> Response:
+    Return jsonAnswer(boardLanes()).
+
+## Route GET /api/v1/board/cards (request: Request) -> Response:
+    Let mutable per be queryInt(request, "per", 8).
+    If per is less than 1 or per is greater than 24:
+        Set per to 8.
+    Return jsonAnswer(boardCards(per)).
+
+## Route GET /api/v1/leaderboard -> Response:
+    Return jsonAnswer(leaderRows()).
+
+## Route GET /api/v1/focus -> Response:
+    Return jsonAnswer(focusOptions()).
+
+## Route GET /api/v1/health -> Response:
+    Let h be healthNow().
+    If h's ok:
+        Return json(toJson_HealthView(h)).
+    Return answerJson(503, toJson_HealthView(h)).
+
+## Note
+`GET /api/v1/artifact/:sha` answers a stored artifact's text, `404` when none is
+kept under that hash. It needs no trust: whoever fetches one re-hashes it.
+
+## Route GET /api/v1/artifact/:sha (sha: Text) -> Response:
+    If isSha256Hex(sha) is equal to false:
+        Return badRequest("an artifact is named by 64 lowercase hex digits").
+    Let path be artifactPath(resultsRoot(), sha).
+    If fileExists(path) is equal to false:
+        Return missing("artifact " + sha).
+    Inspect read(path):
+        When Ok (text):
+            Return plain(text).
+        When Err (e):
+            Return unavailable("the artifact cannot be read: " + e).
+    Return unavailable("no answer").

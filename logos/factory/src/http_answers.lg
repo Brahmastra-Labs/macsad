@@ -1,0 +1,95 @@
+# API answers
+
+How every coordinator route answers: a JSON body with the status it means. A
+refusal is the same small document everywhere, so a worker reads one shape for
+every way a request can fail:
+
+```text
+{"error": "stale_lease", "detail": "the lease on u-17 moved on", "retryable": false}
+```
+
+`error` is a stable code a program branches on; `detail` is for the person
+reading the log; `retryable` says whether the same request may succeed later
+unchanged (a database that is down) or never will (a malformed body).
+
+## Note
+A JSON answer with a status.
+
+## To answerJson (status: Int, body: Text) -> Response:
+    Let mutable r be json(body).
+    Set r's status to status.
+    Return r.
+
+## Note
+The refusal document.
+
+## To errorBody (code: Text, detail: Text, retryable: Bool) -> Text:
+    Let mutable flag be "false".
+    If retryable:
+        Set flag to "true".
+    Return "{{\"error\":" + jsonQuote(code) + ",\"detail\":" + jsonQuote(detail) + ",\"retryable\":" + flag + "}}".
+
+## Note
+A refusal of a request that will never succeed as sent.
+
+## To refuse (status: Int, code: Text, detail: Text) -> Response:
+    Return answerJson(status, errorBody(code, detail, false)).
+
+## Note
+A request the coordinator could not serve right now — its database is
+unreachable or busy. The same request may succeed in a moment.
+
+## To unavailable (detail: Text) -> Response:
+    Return answerJson(503, errorBody("unavailable", detail, true)).
+
+## Note
+The usual refusals, by what was wrong.
+
+## To badRequest (detail: Text) -> Response:
+    Return refuse(400, "bad_request", detail).
+
+## To tooLarge (limit: Int) -> Response:
+    Return refuse(413, "too_large", "the body is larger than this route's {limit} bytes").
+
+## To missing (what: Text) -> Response:
+    Return refuse(404, "not_found", what + " is not known to the coordinator").
+
+## Note
+The status an answer gets when it is a list: an empty list is still an answer.
+Only a missing subject is a 404.
+
+## To listStatus (subjectExists: Bool) -> Int:
+    If subjectExists:
+        Return 200.
+    Return 404.
+
+## Test: api refusals are one JSON shape
+
+Let r be badRequest("holder is missing").
+Expect that r's status is equal to 400.
+Expect that r's contentType is equal to "application/json".
+Expect that r's body is equal to "{{\"error\":\"bad_request\",\"detail\":\"holder is missing\",\"retryable\":false}}".
+Expect that jsonValid(r's body) is equal to true.
+
+## Test: api outages are retryable and nothing else is
+
+Let down be unavailable("the database did not answer").
+Expect that down's status is equal to 503.
+Expect that down's body contains "\"retryable\":true".
+Expect that tooLarge(16)'s status is equal to 413.
+Expect that tooLarge(16)'s body contains "16 bytes".
+Expect that missing("problem opdp:1")'s status is equal to 404.
+
+## Test: api details are escaped
+
+Let r be refuse(409, "dead_end", "a \"quoted\" reason\nover two lines").
+Expect that jsonValid(r's body) is equal to true.
+Expect that answerJson(201, "[]")'s status is equal to 201.
+
+## Test: api lists answer even when empty
+
+For all booleans exists:
+    Let status be listStatus(exists).
+    Expect that (status is equal to 200) is equal to exists.
+    Let flag be errorBody("x", "y", exists).
+    Expect that jsonValid(flag) is equal to true.

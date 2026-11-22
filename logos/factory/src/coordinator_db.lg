@@ -1,0 +1,112 @@
+# Coordinator database access
+
+Import DbConfig from "./db_config.lg".
+Import LeaseSecret from "./lease_secret.lg".
+
+The coordinator's one door to PostgreSQL, through the standard library's
+`postgres.lg`. Every statement is parameterized: user data reaches the database
+as `$n` arguments on the wire, never as SQL text. There is no connection pool in
+this version of LOGOS, so a request opens its own connection, uses it, and closes
+it; a statement that runs away is cut off by the connection's statement timeout.
+
+The coordinator's reads ask PostgreSQL for JSON in the exact shape of the record
+the route answers (`json_build_object` with the record's field names), and the
+route decodes that JSON with the record's derived codec before it encodes the
+answer. A column renamed in the schema or a field added to a record is then a
+loud decode error on the first request, never a silently wrong answer.
+
+## Note
+The environment variable `name`, or the empty text.
+
+## To coordEnv (name: Text) -> Text:
+    Inspect get(name):
+        When Some (v):
+            Return trim(v).
+        When None:
+            Return "".
+    Return "".
+
+## Note
+The connection URL the environment describes. The password is read from its file
+here, kept in memory, and never shown.
+
+## To coordDatabaseUrl () -> Result of Text and Text:
+    Let portText be coordEnv("MACSAD_DATABASE_PORT").
+    Let mutable port be 5432.
+    If portText is not equal to "":
+        If isIntText(portText) is equal to false:
+            Return a new Err with error "MACSAD_DATABASE_PORT is not a number".
+        Set port to parseInt(portText).
+    Let passwordFile be coordEnv("MACSAD_DATABASE_PASSWORD_FILE").
+    If passwordFile is equal to "":
+        Return a new Err with error "MACSAD_DATABASE_PASSWORD_FILE is not set".
+    Inspect read(passwordFile):
+        When Err (e):
+            Return a new Err with error "the database password file cannot be read".
+        When Ok (content):
+            Return databaseUrl(coordEnv("MACSAD_DATABASE_HOST"), port, coordEnv("MACSAD_DATABASE_NAME"), coordEnv("MACSAD_DATABASE_USER"), passwordFromFile(content)).
+    Return a new Err with error "no database configured".
+
+## Note
+The key lease secrets are made under: from `MACSAD_LEASE_KEY_FILE` when set,
+otherwise derived from the database password, which only the coordinator holds.
+
+## To coordLeaseKey () -> Result of Text and Text:
+    Let mutable path be coordEnv("MACSAD_LEASE_KEY_FILE").
+    If path is equal to "":
+        Set path to coordEnv("MACSAD_DATABASE_PASSWORD_FILE").
+    Inspect read(path):
+        When Err (e):
+            Return a new Err with error "the lease key material cannot be read".
+        When Ok (content):
+            If passwordFromFile(content) is equal to "":
+                Return a new Err with error "the lease key material is empty".
+            Return a new Ok with value leaseKeyFrom(passwordFromFile(content)).
+    Return a new Err with error "no lease key".
+
+## Note
+An open connection, with a fifteen-second limit on every statement it runs.
+
+## To dbOpen () -> Result of PgConn and Text:
+    Inspect coordDatabaseUrl():
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (url):
+            Let mutable opened be pgConnect(url).
+            If requiresTls(coordEnv("MACSAD_DATABASE_TLS")):
+                Set opened to pgConnectSecure(url).
+            Inspect opened:
+                When Err (e):
+                    Return a new Err with error "the database did not answer: " + e.
+                When Ok (c):
+                    Let bounded be pgSetStatementTimeout(c, 15000).
+                    Return a new Ok with value c.
+    Return a new Err with error "no connection".
+
+## Note
+The first cell of the first row a statement answers, on an open connection: how
+a JSON read comes back. A statement that answers no row is an error, so a read
+asks for an aggregate that always answers one.
+
+## To dbCellOn (c: PgConn, sql: Text, params: Seq of Text) -> Result of Text and Text:
+    Inspect pgQueryParams(c, sql, params):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (qr):
+            If length of qr's rows is equal to 0:
+                Return a new Err with error "the statement answered no row".
+            Return pgTextAt(qr, 1, 1).
+    Return a new Err with error "no answer".
+
+## Note
+The same on a connection of its own, opened and closed around the statement.
+
+## To dbCell (sql: Text, params: Seq of Text) -> Result of Text and Text:
+    Inspect dbOpen():
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (c):
+            Let answer be dbCellOn(c, sql, params).
+            Let closed be pgClose(c).
+            Return answer.
+    Return a new Err with error "no connection".

@@ -1,0 +1,77 @@
+# Smoke check: HTTP
+
+Import CoordinatorWire from "./coordinator_wire.lg".
+Import LeaseWire from "./lease_wire.lg".
+Import LoadRules from "./load_rules.lg".
+
+The coordinator's end-to-end check speaks to a running coordinator only through
+its public routes, exactly as a worker does, with the standard library's HTTP
+client. Nothing here touches the database.
+
+## A SmokeReply has:
+    a status, which is Int.
+    a body, which is Text.
+
+## Note
+One request; a transport failure is status 0 with the reason as the body.
+
+## To smokeCall (method: Text, url: Text, body: Text) -> SmokeReply:
+    Let mutable headers be a new Map of Text to Text.
+    If body is not equal to "":
+        Set headers at "content-type" to "application/json".
+    Inspect httpRequest(method, url, headers, body, 30000):
+        When Ok (r):
+            Return a new SmokeReply with status r's status and body r's body.
+        When Err (e):
+            Return a new SmokeReply with status 0 and body e.
+    Return a new SmokeReply with status 0 and body "no reply".
+
+## Note
+A lease for `holder` on the smoke problem, for units of `kinds`.
+
+## To smokeLease (base: Text, holder: Text, kinds: Text, focus: Text) -> Result of LeaseGrant and Text:
+    Let r be a new LeaseRequest with holder holder and displayName "Smoke " + holder and kinds kinds and focus focus and ttlMs 120000 and budgetMicros 1000.
+    Let reply be smokeCall("POST", base + "/api/v1/lease", toJson_LeaseRequest(r)).
+    If reply's status is not equal to 200:
+        Return a new Err with error "lease answered {reply's status}: " + reply's body.
+    Inspect fromJson_LeaseGrant(reply's body):
+        When Err (e):
+            Return a new Err with error "the grant does not decode: " + e.
+        When Ok (g):
+            If g's granted is equal to false:
+                Return a new Err with error "no lease granted: " + g's reason.
+            Return a new Ok with value g.
+    Return a new Err with error "no grant".
+
+## Note
+Whether a heartbeat with `secret` keeps the lease alive.
+
+## To smokeHeartbeat (base: Text, g: LeaseGrant, holder: Text, secret: Text) -> Bool:
+    Inspect g's lease:
+        When Some (l):
+            Let h be a new HeartbeatRequest with unitId l's unitId and token l's token and holder holder and secret secret and ttlMs 120000.
+            Let reply be smokeCall("POST", base + "/api/v1/heartbeat", toJson_HeartbeatRequest(h)).
+            Return reply's status is equal to 200 and boolOfJson(jsonGet(jsonParse(reply's body), "alive")).
+        When None:
+            Return false.
+    Return false.
+
+## Note
+A posted attempt's status, with its receipt, or with the refusal's code as the
+receipt's outcome.
+
+## A SmokeOutcome has:
+    a status, which is Int.
+    a receipt, which is AttemptReceipt.
+
+## To smokePost (base: Text, body: Text) -> SmokeOutcome:
+    Let reply be smokeCall("POST", base + "/api/v1/attempt", body).
+    If reply's status is equal to 201:
+        Inspect fromJson_AttemptReceipt(reply's body):
+            When Ok (r):
+                Return a new SmokeOutcome with status 201 and receipt r.
+            When Err (e):
+                Return a new SmokeOutcome with status 0 and receipt (a new AttemptReceipt with outcome "undecodable receipt").
+    Let refused be jsonParse(reply's body).
+    Let r be a new AttemptReceipt with accepted false and outcome textOfJson(jsonGet(refused, "error")) and detail textOfJson(jsonGet(refused, "detail")).
+    Return a new SmokeOutcome with status reply's status and receipt r.

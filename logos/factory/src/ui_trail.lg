@@ -1,0 +1,48 @@
+# Trail timeline
+
+Import WebBoard from "./web_board.lg".
+Import WebFormat from "./web_format.lg".
+
+A problem's trail, newest first, fetched when the section appears: what was tried, by which contributor, model and
+strategy, what the kernel said and why an attempt failed, what it cost, what it
+suggested next, and the hash links that make the history tamper-evident.
+
+## Component TrailSection (pid: Text) and (check: Text)
+
+State:
+    Let rows be a new Seq of TrailRow.
+
+Actions:
+    When this component appears:
+        Get "/api/v1/problem/timeline?id=" + urlEncode(pid) + "&limit=200" as Seq of TrailRow, then arrived.
+
+    To arrived (answer: Result of Seq of TrailRow and HttpError):
+        Inspect answer:
+            When Ok (list):
+                Set rows to list.
+            When Err (e):
+                Set rows to a new Seq of TrailRow.
+
+View:
+    <div class="card">
+      <h2>Trail <span class="chip" id="trail-check">chain {check}</span></h2>
+      <ol class="timeline" id="timeline">
+        {for each t in rows, keyed by t's seq:}
+          <li class="v-{t's verdict} trail-entry">
+            <div class="entry-head">
+              <b>#{t's seq}</b><span class="chip kind">{t's kind}</span>
+              <span class="verdict v-{t's verdict}">{verdictWords(t's verdict)}</span>
+              <span class="entry-meta">{formatStamp(t's ts)} · {t's contributor} · {t's model} · strategy {t's strategyId} · {formatMoney(t's costMicros)}</span>
+            </div>
+            {if t's summary is not equal to "":}<p>{t's summary}</p>{end}
+            {if t's diagnostics is not equal to "":}
+              <details class="diag"><summary>What the kernel said</summary><pre class="doc">{t's diagnostics}</pre></details>
+            {end}
+            {if t's suggestions is not equal to "":}<p class="muted">Next: {t's suggestions}</p>{end}
+            <div class="hash">{shortHash(t's prevHash)} → {shortHash(t's hash)} · {t's artifacts} artifacts</div>
+          </li>
+        {else:}
+          <li class="empty">Nothing has been tried yet. The first attempt will read this empty trail and know it is the first.</li>
+        {end}
+      </ol>
+    </div>

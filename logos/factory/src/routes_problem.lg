@@ -1,0 +1,115 @@
+# Problem routes
+
+Import HttpAnswers from "./http_answers.lg".
+Import DbProblem from "./db_problem.lg".
+Import DbTrail from "./db_trail.lg".
+Import WebProblem from "./web_problem.lg".
+Import ApiBounds from "./api_bounds.lg".
+Import RoutesRead from "./routes_read.lg".
+Import DbProblemParts from "./db_problem_parts.lg".
+Import TrailRecord from "./trail_record.lg".
+
+`GET /api/v1/problem?id=<id>` answers one problem as its page shows it, with
+its trail re-hashed on the way (`trailCheck`), and `GET /api/v1/problem/statements?id=<id>`
+its formal statements. Problem ids may hold slashes (`fc:ErdosProblems/10`), so the
+id travels in the query string; `/api/v1/problem/:id` serves the ids without one.
+
+The lists on a problem's page, each `?id=<problem id>`: `lemmas`, `results` (the
+verifier's verdicts) and `timeline` (the trail newest first, `limit` and `offset`
+paging it). `GET /api/v1/trail?problem=<id>` (and `/api/v1/trail/:id`) answers the
+canonical trail itself, oldest first, as the `TrailEntry` records whose hashes
+chain, for a worker to read before it starts and for anyone to audit.
+
+## Note
+The problem id a request names, or the empty text when it names none that could be
+one (the schema allows 1 to 200 bytes).
+
+## To requestedProblem (request: Request) -> Text:
+    Let id be queryOf(request, "id").
+    If length of id is greater than 200:
+        Return "".
+    Return id.
+
+## Note
+One problem's answer.
+
+## To problemAnswer (id: Text) -> Response:
+    If id is equal to "" or length of id is greater than 200:
+        Return badRequest("a problem id is 1 to 200 bytes, given as ?id=").
+    Inspect problemView(id):
+        When Err (e):
+            Return unavailable(e).
+        When Ok (found):
+            Inspect found:
+                When None:
+                    Return missing("problem " + id).
+                When Some (view):
+                    Let mutable v be view.
+                    Inspect problemTrail(id):
+                        When Err (e):
+                            Set v's trailCheck to "unchecked: " + e.
+                        When Ok (trail):
+                            Set v's trailCheck to trailCheckOf(trail).
+                    Return json(toJson_ProblemView(v)).
+    Return unavailable("no answer").
+
+## Route GET /api/v1/problem (request: Request) -> Response:
+    Return problemAnswer(requestedProblem(request)).
+
+## Route GET /api/v1/problem/:id (id: Text) -> Response:
+    Return problemAnswer(id).
+
+## Note
+A problem's list as JSON, the empty text standing for a problem the coordinator
+does not hold.
+
+## To listAnswer (id: Text, answer: Result of Text and Text) -> Response:
+    If id is equal to "":
+        Return badRequest("a problem id is 1 to 200 bytes, given as ?id=").
+    Inspect answer:
+        When Err (e):
+            Return unavailable(e).
+        When Ok (text):
+            If text is equal to "":
+                Return missing("problem " + id).
+            Return json(text).
+    Return unavailable("no answer").
+
+## Route GET /api/v1/problem/statements (request: Request) -> Response:
+    Let id be requestedProblem(request).
+    Return listAnswer(id, statementRows(id)).
+
+## Route GET /api/v1/problem/lemmas (request: Request) -> Response:
+    Let id be requestedProblem(request).
+    Return listAnswer(id, lemmaRows(id)).
+
+## Route GET /api/v1/problem/results (request: Request) -> Response:
+    Let id be requestedProblem(request).
+    Return listAnswer(id, resultRows(id)).
+
+## Route GET /api/v1/problem/timeline (request: Request) -> Response:
+    Let id be requestedProblem(request).
+    Return listAnswer(id, trailRows(id, clampLimit(queryInt(request, "limit", 0)), clampOffset(queryInt(request, "offset", 0)))).
+
+## Note
+The canonical trail of a problem. An unknown problem has no trail, which reads
+as an empty one: the trail of a problem is whatever has been appended to it.
+
+## To trailAnswer (id: Text) -> Response:
+    If id is equal to "" or length of id is greater than 200:
+        Return badRequest("a problem id is 1 to 200 bytes, given as ?problem=").
+    Inspect problemTrail(id):
+        When Err (e):
+            Return unavailable(e).
+        When Ok (trail):
+            Let mutable parts be a new Seq of Text.
+            Repeat for e in trail:
+                Push toJson_TrailEntry(e) to parts.
+            Return json("[" + join(parts, ",") + "]").
+    Return unavailable("no answer").
+
+## Route GET /api/v1/trail (request: Request) -> Response:
+    Return trailAnswer(queryOf(request, "problem")).
+
+## Route GET /api/v1/trail/:id (id: Text) -> Response:
+    Return trailAnswer(id).

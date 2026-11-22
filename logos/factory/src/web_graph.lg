@@ -1,0 +1,120 @@
+# Atlas graph records
+
+The atlas the website draws: cohorts, collections, categories and problems, and
+below a problem its statements and the lemmas a decomposition left. The page
+holds the visible part of the tree as one list of rows in display order, each
+row a `GraphNode`, and grows or shrinks it as the visitor opens and closes
+branches; children are fetched only when their branch is opened, so a corpus of a
+hundred thousand problems costs the browser only what is on screen.
+
+## Note
+One node as the website sees it. `parentId` and `problemId` are the empty text
+where the graph has none (a cohort has no parent; nothing above a problem has a
+problem), because a page cannot hold an optional field (LOGOS_ISSUES.md 11).
+`depth` counts the node's ancestors, so a cohort is 1. `childCount` is how many
+children it has in all, of which a page may have fetched some. The eight counts
+are the problems below the node in each stage, and `total` is their sum; a
+problem counts itself.
+
+## A GraphNode has:
+    an id, which is Text.
+    a parentId, which is Text.
+    a problemId, which is Text.
+    a kind, which is Text.
+    a label, which is Text.
+    a stage, which is Text.
+    a rankBp, which is Int.
+    a depth, which is Int.
+    a childCount, which is Int.
+    a total, which is Int.
+    a ranked, which is Int.
+    a formalizing, which is Int.
+    a formalized, which is Int.
+    an inProgress, which is Int.
+    a partial, which is Int.
+    a solved, which is Int.
+    a refuted, which is Int.
+    an invalid, which is Int.
+
+## Note
+The rows with `kids` placed under their parent: after the parent and every row
+already below it, in the order they came, skipping any row already shown.
+
+## To withChildren (rows: Seq of GraphNode, parentId: Text, kids: Seq of GraphNode) -> Seq of GraphNode:
+    Let mutable shown be a new Seq of Text.
+    Repeat for r in rows:
+        Push r's id to shown.
+    Let mutable fresh be a new Seq of GraphNode.
+    Repeat for k in kids:
+        If shown contains k's id is equal to false:
+            Push k to fresh.
+    Let mutable out be a new Seq of GraphNode.
+    Let mutable parentDepth be 0.
+    Let mutable inside be parentId is equal to "root".
+    Let mutable placed be false.
+    Repeat for r in rows:
+        If inside and placed is equal to false and r's depth is at most parentDepth:
+            Repeat for k in fresh:
+                Push k to out.
+            Set placed to true.
+        If r's id is equal to parentId:
+            Set inside to true.
+            Set parentDepth to r's depth.
+        Push r to out.
+    If inside and placed is equal to false:
+        Repeat for k in fresh:
+            Push k to out.
+    Return out.
+
+## Note
+The rows with everything below `id` taken away: the rows that follow it and are
+deeper than it, up to the next row that is not.
+
+## To withoutBelow (rows: Seq of GraphNode, id: Text) -> Seq of GraphNode:
+    Let mutable out be a new Seq of GraphNode.
+    Let mutable cutting be false.
+    Let mutable depth be 0.
+    Repeat for r in rows:
+        If cutting and r's depth is at most depth:
+            Set cutting to false.
+        If cutting is equal to false:
+            Push r to out.
+        If r's id is equal to id:
+            Set cutting to true.
+            Set depth to r's depth.
+    Return out.
+
+## Note
+How many children of `id` the rows hold, and so how many are still to fetch.
+## To shownChildren (rows: Seq of GraphNode, id: Text) -> Int:
+    Let mutable n be 0.
+    Repeat for r in rows:
+        If r's parentId is equal to id:
+            Set n to n + 1.
+    Return n.
+
+## To unfetchedChildren (rows: Seq of GraphNode, n: GraphNode) -> Int:
+    Return n's childCount - shownChildren(rows, n's id).
+
+## Note
+The parent a page of children came from: `root` for the cohorts.
+## To parentOrRoot (n: GraphNode) -> Text:
+    If n's parentId is equal to "":
+        Return "root".
+    Return n's parentId.
+
+## Note
+The problems, and the solved ones, under the top of the tree.
+## To sumTotals (rows: Seq of GraphNode) -> Int:
+    Let mutable n be 0.
+    Repeat for r in rows:
+        If r's depth is equal to 1:
+            Set n to n + r's total.
+    Return n.
+
+## To sumSolved (rows: Seq of GraphNode) -> Int:
+    Let mutable n be 0.
+    Repeat for r in rows:
+        If r's depth is equal to 1:
+            Set n to n + r's solved.
+    Return n.

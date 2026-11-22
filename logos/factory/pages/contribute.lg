@@ -1,0 +1,89 @@
+# Contribute
+
+Import WebBoard from "../src/web_board.lg".
+Import WebFormat from "../src/web_format.lg".
+Import UiSite from "../src/ui_site.lg".
+
+How to lend the factory a model, `/contribute`: one container, the contributor's
+own OpenRouter key and budget, and an optional focus. The page builds the exact
+command from the budget and the focus picked, and offers it to copy.
+
+## Page /contribute
+
+Head:
+    <title>MaCSad — contribute a worker</title>
+
+State:
+    Let budget be "5".
+    Let focus be "".
+    Let options be a new Seq of FocusOption.
+    Let command always be workerCommand(budget, focus).
+    Let budgetOk always be isIntText(trim(budget)) and trim(budget) is not equal to "0".
+
+Actions:
+    When the page loads:
+        Get "/api/v1/focus" as Seq of FocusOption, then arrived.
+
+    To arrived (answer: Result of Seq of FocusOption and HttpError):
+        Inspect answer:
+            When Ok (list):
+                Set options to list.
+            When Err (e):
+                Set options to a new Seq of FocusOption.
+
+    To copyCommand:
+        Copy command to the clipboard.
+        Notify "Command copied." as success.
+
+View:
+    {extends Site}
+    {block content:}
+      <PageHead eyebrow="Contribute" title="Lend the factory a model for an evening">
+        <p class="lede">A worker leases one unit of work at a time, asks your model for a LOGOS proof, checks it with the LOGOS kernel
+          on your machine, and reports the attempt. It stops when your budget is spent.</p>
+      </PageHead>
+      <div class="grid-2">
+        <div class="card">
+          <ol class="steps">
+            <li><b>Put your OpenRouter key in your shell.</b> <code>export OPENROUTER_API_KEY=…</code> It stays on your machine:
+              the worker calls OpenRouter directly and reports only what it spent.</li>
+            <li><b>Choose a budget and, if you like, a focus.</b>
+              <div class="form-row">
+                <label>Budget in dollars<input id="budget" bind={budget} inputmode="numeric"></label>
+                <label>Focus<select id="focus" bind={focus}>
+                  <option value="">Anywhere: the best-ranked work</option>
+                  {for each o in options, keyed by o's value:}<option value={o's value}>{o's label} ({formatCount(o's problems)})</option>{end}
+                </select></label>
+              </div>
+              {if budgetOk is equal to false:}<p class="error-banner" id="budget-error">A budget is a whole number of dollars.</p>{end}
+            </li>
+            <li><b>Run the worker.</b>
+              <pre class="command" id="command">{command}</pre>
+              <button class="primary" id="copy" on-click={copyCommand} disabled={budgetOk is equal to false}>Copy the command</button>
+            </li>
+          </ol>
+        </div>
+        <div class="card">
+          <h2>What the worker does</h2>
+          <p>It never writes a result itself. A proof it reports is a claim until the trusted verifier re-checks it with a pinned
+            toolchain and signs it. Every attempt joins the problem's hash-chained trail, so the next contributor starts from what you
+            learned, and an approach that failed is never paid for twice.</p>
+        </div>
+      </div>
+    {end}
+
+## Test: the command carries the budget and the focus chosen
+
+Given that GET "/api/v1/focus" answers 200 with """[{{"value": "erdos-problems", "label": "Erdős Problems", "kind": "collection",
+  "problems": 628}}]""".
+Type "20" into "#budget".
+Choose "erdos-problems" in "#focus".
+Expect that the text of "#command" is equal to "docker run --rm -e OPENROUTER_API_KEY -e MACSAD_BUDGET_USD=20 -e MACSAD_FOCUS=erdos-problems -e MACSAD_COORDINATOR=https://macsad.com macsad/worker".
+Expect that the count of "#focus option" is equal to 2.
+
+## Test: a budget that is not a whole number of dollars cannot be copied
+
+Given that GET "/api/v1/focus" answers 200 with "[]".
+Type "lots" into "#budget".
+Expect that "#budget-error" is visible.
+Expect that "#copy" is disabled.

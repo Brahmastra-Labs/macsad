@@ -1,0 +1,105 @@
+# Problem part queries
+
+Import CoordinatorDb from "./coordinator_db.lg".
+Import WebProblem from "./web_problem.lg".
+Import WebBoard from "./web_board.lg".
+Import DbProblem from "./db_problem.lg".
+
+The parts of a problem's page that are lists: the lemma tree below it, the
+verifier's verdicts on it, and its trail made displayable, newest first.
+
+## Note
+The nodes below a problem's node, depth first, each child ordered by rank, then
+the verified lemmas of the problem's shared library as rows of kind `library`.
+
+## To lemmaRowsSql () -> Text:
+    Let mutable q be ["WITH RECURSIVE t (id, parent_id, kind, label, stage, depth, path) AS ("].
+    Push "SELECT c.id, c.parent_id, c.kind, c.label, c.stage, 1, ARRAY[lpad((99999999 - c.rank)::text, 9, '0') || c.id]" to q.
+    Push "FROM factory.node p JOIN factory.node c ON c.parent_id = p.id WHERE p.problem_id = $1 AND p.kind = 'problem'" to q.
+    Push "UNION ALL SELECT c.id, c.parent_id, c.kind, c.label, c.stage, t.depth + 1, t.path || (lpad((99999999 - c.rank)::text, 9, '0') || c.id)" to q.
+    Push "FROM t JOIN factory.node c ON c.parent_id = t.id WHERE t.depth < 32)" to q.
+    Push "SELECT (coalesce((SELECT json_agg(json_build_object('id', t.id, 'parentId', t.parent_id, 'kind', t.kind, 'label', t.label," to q.
+    Push "'stage', t.stage, 'depth', t.depth) ORDER BY t.path) FROM t), '[]'::json)::jsonb || coalesce((SELECT jsonb_agg(jsonb_build_object(" to q.
+    Push "'id', l.id, 'parentId', '', 'kind', 'library', 'label', l.name || ' : ' || l.statement, 'stage', l.status, 'depth', 1) ORDER BY l.name)" to q.
+    Push "FROM factory.lemma l WHERE l.problem_id = $1), '[]'::jsonb))::text" to q.
+    Return join(q, " ").
+
+## To lemmaRows (id: Text) -> Result of Text and Text:
+    Inspect dbCell(ofKnownProblem(lemmaRowsSql()), [id]):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (text):
+            Return canonLemmaRows(text).
+    Return a new Err with error "no answer".
+
+## To canonLemmaRows (text: Text) -> Result of Text and Text:
+    If text is equal to "":
+        Return a new Ok with value "".
+    Inspect fromJsonSeq_LemmaRow(text):
+        When Err (e):
+            Return a new Err with error "LemmaRow: " + e.
+        When Ok (rows):
+            Return a new Ok with value toJsonSeq_LemmaRow(rows).
+    Return a new Err with error "unread".
+
+## Note
+The verifier's verdicts on the problem's statements, attempts and lemmas.
+
+## To resultRowsSql () -> Text:
+    Let mutable q be ["SELECT coalesce(json_agg(json_build_object('id', a.id, 'subjectKind', a.subject_kind, 'subjectId', a.subject_id,"].
+    Push "'verdictKind', a.verdict_kind, 'verifier', a.verifier, 'statementSha', a.statement_sha, 'documentSha', a.document_sha," to q.
+    Push "'toolchainSha', a.toolchain_sha, 'createdAt', (extract(epoch FROM a.created_at) * 1000)::bigint) ORDER BY a.created_at DESC), '[]')::text" to q.
+    Push "FROM factory.attestation a WHERE (a.subject_kind = 'attempt' AND a.subject_id IN (SELECT id FROM factory.attempt WHERE problem_id = $1))" to q.
+    Push "OR (a.subject_kind = 'statement' AND a.subject_id IN (SELECT id FROM factory.statement WHERE problem_id = $1))" to q.
+    Push "OR (a.subject_kind = 'lemma' AND a.subject_id IN (SELECT id FROM factory.lemma WHERE problem_id = $1))" to q.
+    Return join(q, " ").
+
+## To resultRows (id: Text) -> Result of Text and Text:
+    Inspect dbCell(ofKnownProblem(resultRowsSql()), [id]):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (text):
+            Return canonResultRows(text).
+    Return a new Err with error "no answer".
+
+## To canonResultRows (text: Text) -> Result of Text and Text:
+    If text is equal to "":
+        Return a new Ok with value "".
+    Inspect fromJsonSeq_ResultRow(text):
+        When Err (e):
+            Return a new Err with error "ResultRow: " + e.
+        When Ok (rows):
+            Return a new Ok with value toJsonSeq_ResultRow(rows).
+    Return a new Err with error "unread".
+
+## Note
+A page of the trail, newest first: `$2` entries from offset `$3`. Diagnostics are
+cut to their first 4000 bytes for the page; the full text is in the canonical
+trail.
+
+## To trailRowsSql () -> Text:
+    Let mutable q be ["SELECT coalesce(json_agg(json_build_object('seq', t.seq, 'ts', t.ts, 'stage', t.stage, 'kind', t.kind,"].
+    Push "'contributor', t.contributor, 'model', t.model, 'strategyId', t.strategy_id, 'verdict', t.verdict, 'exitCode', t.exit_code," to q.
+    Push "'diagnostics', left(t.diagnostics, 4000), 'costMicros', t.cost_micros, 'summary', t.summary," to q.
+    Push "'suggestions', array_to_string(t.next_suggestions, ' · '), 'artifacts', cardinality(t.artifact_shas)," to q.
+    Push "'fingerprint', t.approach_fingerprint, 'hash', t.hash, 'prevHash', t.prev_hash) ORDER BY t.seq DESC), '[]')::text" to q.
+    Push "FROM (SELECT * FROM factory.trail_entry WHERE problem_id = $1 ORDER BY seq DESC LIMIT $2::int OFFSET $3::int) t" to q.
+    Return join(q, " ").
+
+## To trailRows (id: Text, limit: Int, offset: Int) -> Result of Text and Text:
+    Inspect dbCell(ofKnownProblem(trailRowsSql()), [id, "{limit}", "{offset}"]):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (text):
+            Return canonTrailRows(text).
+    Return a new Err with error "no answer".
+
+## To canonTrailRows (text: Text) -> Result of Text and Text:
+    If text is equal to "":
+        Return a new Ok with value "".
+    Inspect fromJsonSeq_TrailRow(text):
+        When Err (e):
+            Return a new Err with error "TrailRow: " + e.
+        When Ok (rows):
+            Return a new Ok with value toJsonSeq_TrailRow(rows).
+    Return a new Err with error "unread".

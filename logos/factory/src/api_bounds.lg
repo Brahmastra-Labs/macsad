@@ -1,0 +1,119 @@
+# Coordinator request bounds
+
+Every size and every count the coordinator accepts from the network is bounded
+here, before anything reaches the database. The coordinator is reachable from the
+whole internet through the tunnel, so each limit is a number a stranger cannot
+move: a body larger than its route allows is refused unread, a page of a list is
+never longer than the coordinator chose, and a lease never outlives two hours.
+
+## Note
+The largest body each kind of request may carry, in bytes. An attempt carries the
+submitted proof document, so it may be large; a lease request or a heartbeat is a
+handful of fields.
+
+## To leaseBodyLimit () -> Int:
+    Return 16384.
+
+## To heartbeatBodyLimit () -> Int:
+    Return 4096.
+
+## To attemptBodyLimit () -> Int:
+    Return 6291456.
+
+## Note
+Whether a body fits its route's limit. `length of` a text counts its bytes.
+
+## To bodyFits (body: Text, limit: Int) -> Bool:
+    Return length of body is at most limit.
+
+## Note
+A lease's time to live: fifteen minutes unless the worker asks otherwise — one
+model call and one kernel run — and never under one minute or over two hours.
+
+## To clampTtl (ms: Int) -> Int:
+    If ms is at most 0:
+        Return 900000.
+    If ms is less than 60000:
+        Return 60000.
+    If ms is greater than 7200000:
+        Return 7200000.
+    Return ms.
+
+## Note
+How many rows one page of a list may hold: 200 unless asked, never more than 500.
+
+## To clampLimit (n: Int) -> Int:
+    If n is at most 0:
+        Return 200.
+    If n is greater than 500:
+        Return 500.
+    Return n.
+
+## Note
+Where a page of a list starts. A negative offset is the first row; an offset past
+a million rows is refused as the last row anyone will page to.
+
+## To clampOffset (n: Int) -> Int:
+    If n is less than 0:
+        Return 0.
+    If n is greater than 1000000:
+        Return 1000000.
+    Return n.
+
+## Note
+Whether a text field fits: at most `maxBytes` bytes, and empty only when the field
+is optional.
+
+## To textFits (t: Text, allowEmpty: Bool, maxBytes: Int) -> Bool:
+    If length of t is equal to 0:
+        Return allowEmpty.
+    Return length of t is at most maxBytes.
+
+## Note
+Whether a text is a lowercase hex SHA-256 digest: exactly 64 of `0-9a-f`. Every
+hash the factory stores has this shape (`factory.sha256` in the schema).
+
+## To isSha256Hex (t: Text) -> Bool:
+    If length of t is not equal to 64:
+        Return false.
+    Repeat for b in text_bytes(t):
+        If (b is at least 48 and b is at most 57) or (b is at least 97 and b is at most 102):
+            Let digit be b.
+        Otherwise:
+            Return false.
+    Return true.
+
+## Test: coordinator bodies are bounded per route
+
+Expect that bodyFits("abc", 3) is equal to true.
+Expect that bodyFits("abcd", 3) is equal to false.
+Expect that bodyFits("é", 1) is equal to false.
+Expect that leaseBodyLimit() is less than attemptBodyLimit().
+Expect that attemptBodyLimit() is less than 8388608.
+
+## Test: coordinator lease lengths and pages are clamped
+
+Expect that clampTtl(0) is equal to 900000.
+Expect that clampTtl(5) is equal to 60000.
+Expect that clampTtl(600000) is equal to 600000.
+Expect that clampTtl(99999999) is equal to 7200000.
+Expect that clampLimit(0) is equal to 200.
+Expect that clampLimit(9999) is equal to 500.
+Expect that clampLimit(25) is equal to 25.
+Expect that clampOffset(-3) is equal to 0.
+Expect that clampOffset(2000000) is equal to 1000000.
+
+## Test: coordinator digests are lowercase hex of length sixty four
+
+Expect that isSha256Hex("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad") is equal to true.
+Expect that isSha256Hex("BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD") is equal to false.
+Expect that isSha256Hex("abc") is equal to false.
+Expect that isSha256Hex("") is equal to false.
+
+## Test: coordinator text fields are empty only when optional
+
+For all booleans allowEmpty:
+    Let fits be textFits("", allowEmpty, 10).
+    Expect that fits is equal to allowEmpty.
+    Let longFits be textFits("abcdefghijk", allowEmpty, 10).
+    Expect that longFits is equal to false.

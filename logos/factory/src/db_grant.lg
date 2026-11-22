@@ -1,0 +1,74 @@
+# Lease grants
+
+Import WorkRecord from "./work_record.lg".
+Import ProblemRecord from "./problem_record.lg".
+Import NodeRecord from "./node_record.lg".
+
+What a worker receives with a lease, read in one statement as the JSON of the
+factory's own records: the unit, the lease, the problem, the unit's statement,
+the active strategy for the unit's kind, and how many approaches on the problem
+are known dead ends. A timestamp travels as Unix milliseconds.
+
+## Note
+A timestamp column as Unix milliseconds.
+
+## To msOf (column: Text) -> Text:
+    Return "(extract(epoch FROM " + column + ") * 1000)::bigint".
+
+## To grantSql () -> Text:
+    Let mutable q be ["SELECT json_build_object('unit', json_build_object('id', u.id, 'problemId', u.problem_id, 'statementId', u.statement_id,"].
+    Push "'parentUnitId', u.parent_unit_id, 'kind', u.kind, 'priority', u.priority, 'state', u.state, 'createdAt', " + msOf("u.created_at") + ")," to q.
+    Push "'lease', json_build_object('unitId', u.id, 'holder', u.holder, 'token', u.lease_token, 'grantedAt', " + msOf("u.leased_at") + "," to q.
+    Push "'expiresAt', " + msOf("u.expires_at") + ", 'heartbeatAt', " + msOf("u.heartbeat_at") + ")," to q.
+    Push "'problem', (SELECT json_build_object('id', p.id, 'title', p.title, 'source', p.source, 'cohort', p.cohort, 'collection', p.collection," to q.
+    Push "'category', p.category, 'statementInformal', p.statement_informal, 'leanStatement', p.lean_statement, 'leanModule', p.lean_module," to q.
+    Push "'leanDeclaration', p.lean_declaration, 'externalKey', p.external_key, 'crossRef', p.cross_ref, 'status', p.status)" to q.
+    Push "FROM factory.problem p WHERE p.id = u.problem_id)," to q.
+    Push "'statement', (SELECT json_build_object('id', s.id, 'problemId', s.problem_id, 'document', s.document, 'sha256', s.sha256," to q.
+    Push "'goalName', s.goal_name, 'route', s.route, 'reviewState', s.review_state, 'author', s.author, 'model', s.model," to q.
+    Push "'createdAt', " + msOf("s.created_at") + ") FROM factory.statement s WHERE s.id = u.statement_id)," to q.
+    Push "'strategy', (SELECT json_build_object('id', g.id, 'version', g.version, 'parentId', g.parent_id, 'unitKind', g.unit_kind," to q.
+    Push "'model', g.model, 'temperatureBp', g.temperature_bp, 'maxTokens', g.max_tokens, 'playbook', g.playbook," to q.
+    Push "'contextRules', g.context_rules, 'status', g.status, 'createdAt', " + msOf("g.created_at") + ")" to q.
+    Push "FROM factory.strategy g WHERE g.unit_kind = u.kind AND g.status = 'active' ORDER BY g.version DESC LIMIT 1)," to q.
+    Push "'stage', coalesce((SELECT n.stage FROM factory.node n WHERE n.problem_id = u.problem_id AND n.kind = 'problem'), 'ranked')," to q.
+    Push "'headSeq', (SELECT coalesce(max(t.seq), 0) FROM factory.trail_entry t WHERE t.problem_id = u.problem_id)," to q.
+    Push "'headHash', coalesce((SELECT t.hash FROM factory.trail_entry t WHERE t.problem_id = u.problem_id ORDER BY t.seq DESC LIMIT 1), repeat('0', 64))," to q.
+    Push "'context', CASE WHEN (SELECT p.opdp->>'textMode' FROM factory.problem p WHERE p.id = u.problem_id)" to q.
+    Push "= 'mathdb_public_list_excerpt' THEN $2 ELSE '' END," to q.
+    Push "'deadEnds', (SELECT count(*) FROM factory.dead_end d WHERE d.problem_id = u.problem_id))::text" to q.
+    Push "FROM factory.work_unit u WHERE u.id = $1" to q.
+    Return join(q, " ").
+
+## Note
+A JSON member as one of the records, or `none` when it is `null`.
+
+## To optionalProblem (v: Json) -> Result of Option of Problem and Text:
+    If jsonIsNull(v):
+        Return a new Ok with value none.
+    Inspect fromJson_Problem(jsonSerialize(v)):
+        When Err (e):
+            Return a new Err with error "problem: " + e.
+        When Ok (p):
+            Return a new Ok with value (some p).
+    Return a new Err with error "problem: unreadable".
+
+## To optionalStatement (v: Json) -> Result of Option of Statement and Text:
+    If jsonIsNull(v):
+        Return a new Ok with value none.
+    Inspect fromJson_Statement(jsonSerialize(v)):
+        When Err (e):
+            Return a new Err with error "statement: " + e.
+        When Ok (s):
+            Return a new Ok with value (some s).
+    Return a new Err with error "statement: unreadable".
+
+## To optionalStrategy (v: Json) -> Result of Option of Strategy and Text:
+    If jsonIsNull(v):
+        Return a new Ok with value none.
+    Inspect fromJson_Strategy(jsonSerialize(v)):
+        When Err (e):
+            Return a new Err with error "strategy: " + e.
+        When Ok (s):
+            Return a new Ok with value (some s).
+    Return a new Err with error "strategy: unreadable".

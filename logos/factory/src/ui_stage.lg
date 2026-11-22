@@ -1,0 +1,37 @@
+# Stage marks
+
+Import WebGraph from "./web_graph.lg".
+Import WebFormat from "./web_format.lg".
+
+How a stage looks wherever the website shows one: a colour dot with its name, a
+legend of all eight, and the stacked bar of a node's problems by stage. The bar
+draws the stages in the factory's order with a two-pixel gap between segments;
+a segment is never narrower than four pixels, so a single solved problem among a
+hundred thousand stays visible, and each segment names its stage and count on
+hover. The legend carries identity, so no stage is told by colour alone.
+
+## Component StageMark (stage: Text)
+
+View:
+    <span class="stage-label"><span class="dot s-{stage}"></span>{stageLabel(stage)}</span>
+
+## Component StageLegend
+
+View:
+    <div class="legend" aria-label="Stages">
+      {for each s in stageOrder():}<span><span class="dot s-{s}"></span>{stageLabel(s)}</span>{end}
+    </div>
+
+## Component StageBar (n: GraphNode)
+
+View:
+    <div class="stage-bar" role="img" aria-label="{formatCount(n's total)} problems, {formatCount(n's solved)} solved">
+      {if n's ranked is greater than 0:}<span class="seg s-ranked" style="flex: {n's ranked}" title="Ranked: {formatCount(n's ranked)}"></span>{end}
+      {if n's formalizing is greater than 0:}<span class="seg s-formalizing" style="flex: {n's formalizing}" title="Formalizing: {formatCount(n's formalizing)}"></span>{end}
+      {if n's formalized is greater than 0:}<span class="seg s-formalized" style="flex: {n's formalized}" title="Formalized: {formatCount(n's formalized)}"></span>{end}
+      {if n's inProgress is greater than 0:}<span class="seg s-in_progress" style="flex: {n's inProgress}" title="In progress: {formatCount(n's inProgress)}"></span>{end}
+      {if n's partial is greater than 0:}<span class="seg s-partial" style="flex: {n's partial}" title="Partial: {formatCount(n's partial)}"></span>{end}
+      {if n's solved is greater than 0:}<span class="seg s-solved" style="flex: {n's solved}" title="Solved: {formatCount(n's solved)}"></span>{end}
+      {if n's invalid is greater than 0:}<span class="seg s-invalid_formalization" style="flex: {n's invalid}" title="Invalid statement: {formatCount(n's invalid)}"></span>{end}
+      {if n's refuted is greater than 0:}<span class="seg s-refuted" style="flex: {n's refuted}" title="Refuted: {formatCount(n's refuted)}"></span>{end}
+    </div>

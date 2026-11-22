@@ -1,0 +1,79 @@
+# Intake follow-ups
+
+Import CoordinatorDb from "./coordinator_db.lg".
+Import DbIntake from "./db_intake.lg".
+Import StageRules from "./stage_rules.lg".
+Import LoadRules from "./load_rules.lg".
+
+The units an accepted attempt queues, inside its transaction. A claimed proof
+queues a `verify` unit for the trusted verifier and nothing else. A `formalize`
+attempt whose statement checked queues the statement and a `review` unit. A
+`review` attempt counts the reviews of its statement by distinct contributor and
+model, the author's own excluded: two that agree send it to the verifier once,
+two rejections retire it and queue a fresh `formalize`, and anything else asks
+for one more review unless one is already open. Every other attempt queues what
+`followUpKind` says.
+
+## A Queued has:
+    a verifyUnit, which is Text.
+    a followUnit, which is Text.
+
+## To queueSql () -> Text:
+    Let mutable q be ["INSERT INTO factory.work_unit (id, problem_id, statement_id, parent_unit_id, kind, priority, state)"].
+    Push "VALUES ('u:' || gen_random_uuid()::text, $1, nullif($2, ''), $3, $4, $5::int, 'ready') RETURNING id" to q.
+    Return join(q, " ").
+
+## Note
+One unit queued after `st`'s unit; answers its id.
+
+## To queueOn (c: PgConn, st: IntakeState, statementId: Text, parentUnit: Text, kind: Text) -> Result of Text and Text:
+    Return dbCellOn(c, queueSql(), [st's problemId, statementId, parentUnit, kind, "{st's priority}"]).
+
+## To reviewCountSql () -> Text:
+    Let mutable q be ["SELECT json_build_object('accepts', count(DISTINCT (a.contributor, a.model)) FILTER (WHERE a.verdict_kind = 'verified'),"].
+    Push "'rejects', count(DISTINCT (a.contributor, a.model)) FILTER (WHERE a.verdict_kind IN ('rejected', 'refused_submission'))," to q.
+    Push "'open', (SELECT count(*) FROM factory.work_unit w WHERE w.statement_id = $1 AND w.kind = 'review' AND w.state IN ('ready', 'leased'))," to q.
+    Push "'verifying', (SELECT count(*) FROM factory.work_unit w WHERE w.statement_id = $1 AND w.kind = 'verify'))::text" to q.
+    Push "FROM factory.attempt a JOIN factory.work_unit u ON u.id = a.unit_id JOIN factory.statement s ON s.id = u.statement_id" to q.
+    Push "WHERE u.kind = 'review' AND s.id = $1 AND NOT (a.contributor = s.author AND a.model = s.model)" to q.
+    Return join(q, " ").
+
+## To draftInsertSql () -> Text:
+    Let mutable q be ["INSERT INTO factory.statement (id, problem_id, document, sha256, goal_name, route, review_state, author, model)"].
+    Push "VALUES ('stmt:' || $3, $1, $2, $3, $4, $5, 'reviewing', $6, $7) ON CONFLICT (sha256) DO NOTHING" to q.
+    Return join(q, " ").
+
+## Note
+What the reviews of a statement now say, and the units that follow from it.
+
+## To afterReview (c: PgConn, st: IntakeState, unitId: Text) -> Result of Queued and Text:
+    Inspect dbCellOn(c, reviewCountSql(), [st's statementId]):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (text):
+            Let v be jsonParse(text).
+            Let outcome be reviewOutcome(intOfJson(jsonGet(v, "accepts")), intOfJson(jsonGet(v, "rejects"))).
+            Let mutable next be "review".
+            If intOfJson(jsonGet(v, "open")) is greater than 0:
+                Set next to "".
+            If outcome is equal to "accept":
+                Set next to "verify".
+                If intOfJson(jsonGet(v, "verifying")) is greater than 0:
+                    Set next to "".
+            If outcome is equal to "reject":
+                Set next to "formalize".
+                Inspect dbCellOn(c, "UPDATE factory.statement SET review_state = 'rejected' WHERE id = $1 RETURNING id", [st's statementId]):
+                    When Err (e):
+                        Return a new Err with error e.
+                    When Ok (gone):
+                        Let retired be gone.
+            If next is equal to "":
+                Return a new Ok with value (a new Queued with verifyUnit "" and followUnit "").
+            Inspect queueOn(c, st, st's statementId, unitId, next):
+                When Err (e):
+                    Return a new Err with error e.
+                When Ok (id):
+                    If next is equal to "verify":
+                        Return a new Ok with value (a new Queued with verifyUnit id and followUnit "").
+                    Return a new Ok with value (a new Queued with verifyUnit "" and followUnit id).
+    Return a new Err with error "no review count".

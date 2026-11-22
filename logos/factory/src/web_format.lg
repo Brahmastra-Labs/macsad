@@ -1,0 +1,93 @@
+# Website formatting
+
+How the website writes numbers, money, times and stages. Every page uses these,
+so a count reads the same on the atlas, the board and a problem's page.
+
+## Note
+A count with thousands separated: 102819 is 102,819.
+
+## To formatCount (n: Int) -> Text:
+    If n is less than 0:
+        Return "-" + formatCount(0 - n).
+    If n is less than 1000:
+        Return "{n}".
+    Return formatCount(n / 1000) + "," + zfill("{n % 1000}", 3).
+
+## Note
+Micro-dollars as money, to the tenth of a cent below a dollar: 1250 is $0.0013,
+5000000 is $5.00.
+
+## To formatMoney (micros: Int) -> Text:
+    If micros is at least 1000000:
+        Return "$" + formatCount(micros / 1000000) + "." + zfill("{(micros % 1000000) / 10000}", 2).
+    Return "$0." + zfill("{(micros + 50) / 100}", 4).
+
+## Note
+A Unix-milliseconds time as a UTC date and minute, 2026-11-22 20:55, by the
+civil-from-days algorithm; zero is never.
+
+## To formatStamp (ms: Int) -> Text:
+    If ms is at most 0:
+        Return "never".
+    Let secs be ms / 1000.
+    Let z be secs / 86400 + 719468.
+    Let era be z / 146097.
+    Let doe be z - era * 146097.
+    Let yoe be (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365.
+    Let doy be doe - (365 * yoe + yoe / 4 - yoe / 100).
+    Let mp be (5 * doy + 2) / 153.
+    Let day be doy - (153 * mp + 2) / 5 + 1.
+    Let mutable month be mp + 3.
+    Let mutable year be yoe + era * 400.
+    If month is greater than 12:
+        Set month to month - 12.
+        Set year to year + 1.
+    Let minutes be (secs % 86400) / 60.
+    Return "{year}-" + zfill("{month}", 2) + "-" + zfill("{day}", 2) + " " + zfill("{minutes / 60}", 2) + ":" + zfill("{minutes % 60}", 2).
+
+## Note
+The factory's stages in the order work moves through them, each with the words
+the website uses for it.
+
+## To stageOrder () -> Seq of Text:
+    Return ["ranked", "formalizing", "formalized", "in_progress", "partial", "solved", "refuted", "invalid_formalization"].
+
+## To stageLabel (stage: Text) -> Text:
+    Let labels be ["Ranked", "Formalizing", "Formalized", "In progress", "Partial", "Solved", "Refuted", "Invalid statement"].
+    Let mutable i be 0.
+    Repeat for s in stageOrder():
+        Set i to i + 1.
+        If s is equal to stage:
+            Return item i of labels.
+    Return stage.
+
+## Note
+The first characters of a hash, enough to tell entries apart on screen.
+
+## To shortHash (h: Text) -> Text:
+    Return truncate(h, 13).
+
+## Note
+A trail verdict as the website words it. A worker's `verified` is a claim until
+the trusted verifier attests it, and the timeline says so.
+
+## To verdictWords (verdict: Text) -> Text:
+    If verdict is equal to "verified":
+        Return "claimed proof · awaiting the verifier".
+    If verdict is equal to "admitted_axiom":
+        Return "proof resting on an admitted lemma".
+    If verdict is equal to "infrastructure":
+        Return "the toolchain failed".
+    Return verdict.
+
+## Note
+The command that starts a worker: the contributor's key passed from their own
+shell (so it is in no command line and no history), their budget in dollars, and
+their focus when they chose one.
+
+## To workerCommand (budget: Text, focus: Text) -> Text:
+    Let mutable parts be ["docker run --rm -e OPENROUTER_API_KEY", "-e MACSAD_BUDGET_USD=" + trim(budget)].
+    If trim(focus) is not equal to "":
+        Push "-e MACSAD_FOCUS=" + trim(focus) to parts.
+    Push "-e MACSAD_COORDINATOR=https://macsad.com macsad/worker" to parts.
+    Return join(parts, " ").

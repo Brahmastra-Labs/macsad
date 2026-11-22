@@ -1,0 +1,38 @@
+# Site layout
+
+The shell every page of macsad.com extends: the brand, the four places a visitor
+goes (the atlas, the board, the leaderboard, how to contribute), the page's own
+content, and a footer that says how results are trusted.
+
+## Component Site
+
+View:
+    <header class="site-header">
+      <div class="bar">
+        <a class="brand" href="/"><span class="brand-mark">MaCSad</span><span class="brand-tag">the open math factory</span></a>
+        <nav class="site-nav" aria-label="Site">
+          <a id="nav-atlas" href="/" class:active={routePath() is equal to "/"}>Atlas</a>
+          <a id="nav-board" href="/board" class:active={routePath() is equal to "/board"}>Board</a>
+          <a id="nav-leaderboard" href="/leaderboard" class:active={routePath() is equal to "/leaderboard"}>Leaderboard</a>
+          <a id="nav-contribute" href="/contribute" class:active={routePath() is equal to "/contribute"}>Contribute</a>
+        </nav>
+      </div>
+    </header>
+    <main class="site-main">{block content}</main>
+    <footer class="site-footer">
+      <div class="bar">
+        <span>A proof counts only when the LOGOS kernel checks it and the trusted verifier signs it.</span>
+        <span>Contributors run workers with their own OpenRouter key and budget; the key never leaves their machine.</span>
+      </div>
+    </footer>
+
+## Component PageHead (eyebrow: Text) and (title: Text)
+
+View:
+    <section class="page-head">
+      <div>
+        <div class="eyebrow">{eyebrow}</div>
+        <h1>{title}</h1>
+        {children}
+      </div>
+    </section>

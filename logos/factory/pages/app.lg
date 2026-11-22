@@ -1,0 +1,112 @@
+# The atlas
+
+Import WebGraph from "../src/web_graph.lg".
+Import WebFormat from "../src/web_format.lg".
+Import UiSite from "../src/ui_site.lg".
+Import UiStage from "../src/ui_stage.lg".
+Import UiAtlasRow from "../src/ui_atlas_row.lg".
+
+The front page of macsad.com: every problem the factory holds, as a tree of
+cohorts, collections and categories, each branch coloured by where its problems
+stand. Only the cohorts load with the page; a branch's children are fetched when
+it is opened, two hundred at a time, best ranked first.
+
+## Page /
+
+Head:
+    <title>MaCSad — the atlas of open problems</title>
+    <meta name="description" content="Every open problem the MaCSad factory works on, by stage, with kernel-checked results.">
+
+State:
+    Let rows be a new Seq of GraphNode.
+    Let open be a new Seq of Text.
+    Let waiting be "".
+    Let error be "".
+    Let problems always be sumTotals(rows).
+    Let solved always be sumSolved(rows).
+
+Actions:
+    When the page loads:
+        Get "/api/v1/graph/children?node=root" as Seq of GraphNode, then arrived.
+
+    To arrived (answer: Result of Seq of GraphNode and HttpError):
+        Set waiting to "".
+        Inspect answer:
+            When Ok (kids):
+                If length of kids is greater than 0:
+                    Set rows to withChildren(rows, parentOrRoot(item 1 of kids), kids).
+                Set error to "".
+            When Err (e):
+                Set error to e's message.
+
+    To toggle (id: Text):
+        If open contains id:
+            Set rows to withoutBelow(rows, id).
+            Remove every o from open where o is equal to id.
+        Otherwise:
+            Push id to open.
+            Set waiting to id.
+            Get "/api/v1/graph/children?node=" + urlEncode(id) + "&limit=200" as Seq of GraphNode, then arrived.
+
+    To more (id: Text):
+        Set waiting to id.
+        Get "/api/v1/graph/children?node=" + urlEncode(id) + "&limit=200&offset={shownChildren(rows, id)}" as Seq of GraphNode, then arrived.
+
+View:
+    {extends Site}
+    {block content:}
+      <section class="page-head">
+        <div>
+          <div class="eyebrow">The atlas</div>
+          <h1>Open problems, and how far the factory has got with each</h1>
+          <p class="lede">Problems come from the OPDP difficulty atlas, the formalization lab and formal-conjectures.
+            Each is ranked, given a formal LOGOS statement, attacked by contributors' models, and settled only by the kernel.</p>
+        </div>
+        <div class="totals">
+          <div class="total"><b id="total-problems">{formatCount(problems)}</b><span>problems</span></div>
+          <div class="total"><b id="total-solved">{formatCount(solved)}</b><span>solved</span></div>
+        </div>
+      </section>
+      <div class="card">
+        <StageLegend/>
+      </div>
+      {if error is not equal to "":}<p class="error-banner" role="alert" id="error">{error}</p>{end}
+      <ul class="tree card" id="tree">
+        {for each n in rows, keyed by n's id:}
+          <AtlasRow n={n} open={open contains n's id} waiting={waiting is equal to n's id} unfetched={unfetchedChildren(rows, n)} toggle={toggle} more={more}/>
+        {else:}
+          <li class="empty">Loading the atlas…</li>
+        {end}
+      </ul>
+    {end}
+
+## Test: the atlas opens on the cohorts with their totals
+
+Given that GET "/api/v1/graph/children?node=root" answers 200 with """[{{"id": "cohort:A", "parentId": "", "problemId": "", "kind": "cohort", "label": "Atlas A", "stage": "ranked",
+  "rankBp": 9, "depth": 1, "childCount": 2, "total": 1200, "ranked": 1197, "formalizing": 0, "formalized": 0,
+  "inProgress": 0, "partial": 0, "solved": 3, "refuted": 0, "invalid": 0}}]""".
+Expect that the count of ".tree-row" is equal to 1.
+Expect that the text of "#total-problems" is equal to "1,200".
+Expect that the text of "#total-solved" is equal to "3".
+Expect that the count of ".seg" is equal to 2.
+
+## Test: opening a branch fetches its children and closing it hides them
+
+Given that GET "/api/v1/graph/children?node=root" answers 200 with """[{{"id": "cohort:A", "parentId": "", "problemId": "", "kind": "cohort", "label": "A", "stage": "ranked",
+  "rankBp": 9, "depth": 1, "childCount": 3, "total": 3, "ranked": 2, "formalizing": 0, "formalized": 0,
+  "inProgress": 0, "partial": 0, "solved": 1, "refuted": 0, "invalid": 0}}]""".
+Given that GET "/api/v1/graph/children?node=cohort%3AA&limit=200" answers 200 with """[{{"id": "problem:p1", "parentId": "cohort:A", "problemId": "p1", "kind": "problem", "label": "First", "stage": "solved",
+  "rankBp": 5, "depth": 2, "childCount": 0, "total": 1, "ranked": 0, "formalizing": 0, "formalized": 0,
+  "inProgress": 0, "partial": 0, "solved": 1, "refuted": 0, "invalid": 0}}]""".
+Click ".caret".
+Expect that the count of ".tree-row" is equal to 2.
+Expect that the text of ".tree-row a.label" is equal to "First".
+Expect that the text of ".tree-more" is equal to "show 2 more".
+Click ".caret".
+Expect that the count of ".tree-row" is equal to 1.
+
+## Test: an atlas the coordinator cannot serve says why
+
+Given that GET "/api/v1/graph/children?node=root" answers 503 with "the database did not answer".
+Expect that the text of "#error" is equal to "503: the database did not answer".
+Expect that the text of ".empty" is equal to "Loading the atlas…".

@@ -1,0 +1,67 @@
+# OPDP import
+
+Import HostTools from "./host_tools.lg".
+Import WireRead from "./wire_read.lg".
+Import OpdpImportRules from "./opdp_import_rules.lg".
+
+`factory coordinator import-opdp <pin.json> <atlas.json.gz> <work-dir>` imports
+every problem of the Ulam OPDP difficulty atlas into the coordinator so workers
+can lease it: the release is refused unless its SHA-256 is the one the pin
+(`ops/factory/opdp.pin.json`) names; it is decompressed and cut into pieces in
+`work-dir` by `gzip`, `sed` and `split`; each record becomes a problem, its node
+under its cohort, source collection and category, and its profile; then every
+open problem without a unit gets one (`opdp_plan.lg`), and the counts are checked
+against the pin. Every statement is an upsert, so running it again changes
+nothing but ranks.
+
+## Note
+The release cut into line pieces: a new line before every record start, then
+pieces of at most eight megabytes that end at line ends.
+
+## To prepareSteps () -> Text:
+    Let mutable q be ["set -eu; rm -rf \"$2/parts\"; mkdir -p \"$2/parts\";"].
+    Push "gzip -dc \"$1\" | sed 's/{{\"problem_id\":/\\n&/g' > \"$2/atlas.lines\";" to q.
+    Push "split -C 8M -d -a 5 \"$2/atlas.lines\" \"$2/parts/atlas.\"; rm -f \"$2/atlas.lines\"" to q.
+    Return join(q, " ").
+
+## Note
+A tool's output, or why it failed.
+
+## To toolOutput (program: Text, arguments: Seq of Text) -> Result of Text and Text:
+    Inspect runTool(program, arguments, 1800000, 1048576):
+        When Err (e):
+            Return a new Err with error program + ": " + e.
+        When Ok (r):
+            If r's exitCode is not equal to 0:
+                Return a new Err with error program + " failed: " + r's stderr.
+            Return a new Ok with value r's stdout.
+    Return a new Err with error program + ": unrun".
+
+## Note
+The pin's cohort labels by cohort key, after the release's hash is checked.
+
+## To checkedPin (pinPath: Text, atlasPath: Text) -> Result of Json and Text:
+    Inspect read(pinPath):
+        When Err (e):
+            Return a new Err with error "cannot read the pin: " + e.
+        When Ok (pinText):
+            Let pin be jsonParse(pinText).
+            Inspect toolOutput("sha256sum", [atlasPath]):
+                When Err (e):
+                    Return a new Err with error e.
+                When Ok (out):
+                    Let actual be item 1 of split(trim(out), " ").
+                    If actual is not equal to textAt(pin, "sha256") or length of actual is not equal to 64:
+                        Return a new Err with error "the release's sha256 is " + actual + ", the pin names " + textAt(pin, "sha256").
+                    Return a new Ok with value pin.
+    Return a new Err with error "no pin".
+
+## To cohortLabels (pin: Json) -> Map of Text to Text:
+    Let mutable out be a new Map of Text to Text.
+    Inspect jsonGet(pin, "cohorts"):
+        When JObj (entries):
+            Repeat for en in entries:
+                Set out at cohortKeyOf(en's key) to textAt(en's val, "label").
+        Otherwise:
+            Return out.
+    Return out.

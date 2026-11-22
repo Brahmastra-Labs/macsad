@@ -1,0 +1,72 @@
+# The board
+
+Import WebBoard from "../src/web_board.lg".
+Import UiSite from "../src/ui_site.lg".
+Import UiBoard from "../src/ui_board.lg".
+
+The factory's board, `/board`: one lane per stage, in the order work moves, each
+with its count, the units waiting and leased in it, and its best-ranked problems.
+
+## Page /board
+
+Head:
+    <title>MaCSad — the board</title>
+
+State:
+    Let lanes be a new Seq of BoardLane.
+    Let cards be a new Seq of BoardCard.
+    Let error be "".
+
+Actions:
+    When the page loads:
+        Get "/api/v1/board" as Seq of BoardLane, then gotLanes.
+        Get "/api/v1/board/cards?per=8" as Seq of BoardCard, then gotCards.
+
+    Every 30 seconds as refresh:
+        Get "/api/v1/board" as Seq of BoardLane, then gotLanes.
+        Get "/api/v1/board/cards?per=8" as Seq of BoardCard, then gotCards.
+
+    To gotLanes (answer: Result of Seq of BoardLane and HttpError):
+        Inspect answer:
+            When Ok (list):
+                Set lanes to list.
+                Set error to "".
+            When Err (e):
+                Set error to e's message.
+
+    To gotCards (answer: Result of Seq of BoardCard and HttpError):
+        Inspect answer:
+            When Ok (list):
+                Set cards to list.
+            When Err (e):
+                Set error to e's message.
+
+View:
+    {extends Site}
+    {block content:}
+      <PageHead eyebrow="The board" title="Where every problem stands">
+        <p class="lede">A problem moves right as it is formalized, attacked and settled. Only the trusted verifier moves one to solved,
+          refuted or partial, on a proof the LOGOS kernel checked.</p>
+      </PageHead>
+      {if error is not equal to "":}<p class="error-banner" role="alert" id="error">{error}</p>{end}
+      <div class="lanes" id="lanes">
+        {for each l in lanes, keyed by l's stage:}<LaneColumn lane={l} cards={cards}/>{else:}<p class="empty">Loading the board…</p>{end}
+      </div>
+    {end}
+
+## Test: the board draws a lane per stage with its cards
+
+Given that GET "/api/v1/board" answers 200 with """[{{"stage": "ranked", "problems": 102819, "readyUnits": 7, "leasedUnits": 1},
+  {{"stage": "solved", "problems": 0, "readyUnits": 0, "leasedUnits": 0}}]""".
+Given that GET "/api/v1/board/cards?per=8" answers 200 with """[{{"problemId": "opdp:1", "title": "P versus NP",
+  "stage": "ranked", "rankBp": 9000, "cohort": "UnsolvedMath", "collection": "millennium-prize", "unitKind": "prove", "holder": "ada"}}]""".
+Expect that the count of ".lane" is equal to 2.
+Expect that the text of "#lane-ranked .lane-count" is equal to "102,819".
+Expect that the text of "#lane-ranked .meta" is equal to "prove leased by ada".
+Expect that the text of "#lane-solved .empty" is equal to "No problem stands here yet.".
+
+## Test: a board the coordinator cannot serve says why
+
+Given that GET "/api/v1/board" answers 503 with "down".
+Given that GET "/api/v1/board/cards?per=8" answers 503 with "down".
+Expect that the text of "#error" is equal to "503: down".

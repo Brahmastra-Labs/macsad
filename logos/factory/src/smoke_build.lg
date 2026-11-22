@@ -1,0 +1,60 @@
+# Smoke check: attempts
+
+Import AttemptRecord from "./attempt_record.lg".
+Import TrailRecord from "./trail_record.lg".
+Import VerdictRecord from "./verdict_record.lg".
+Import WorkRecord from "./work_record.lg".
+Import ArtifactRules from "./artifact_rules.lg".
+Import CoordinatorWire from "./coordinator_wire.lg".
+
+An attempt as a worker builds one: the attempt, its trail entry sealed onto the
+head the worker last saw, and one artifact. `seed` makes the approach: two
+attempts built from one seed are the same approach, which is how the check
+provokes a dead end.
+
+## To smokeSubmission (g: LeaseGrant, holder: Text, verdict: Text, seed: Text, prevSeq: Int, prevHash: Text, draft: Option of StatementDraft) -> Text:
+    Let mutable unit be a new WorkUnit.
+    Inspect g's unit:
+        When Some (u):
+            Set unit to u.
+        When None:
+            Return "{{}}".
+    Let mutable token be 0.
+    Inspect g's lease:
+        When Some (l):
+            Set token to l's token.
+        When None:
+            Return "{{}}".
+    Let note be "coordinator smoke check, approach " + seed.
+    Let artifact be a new ArtifactUpload with sha256 contentSha(note) and name "submission.txt" and text note.
+    Let fingerprint be contentSha("approach " + seed).
+    Let mutable a be a new Attempt with unitId unit's id and problemId unit's problemId and contributor holder and model "smoke/none" and strategyId "smoke".
+    Set a's promptSha to contentSha("prompt " + seed).
+    Set a's responseSha to contentSha("response " + seed).
+    Set a's approachFingerprint to fingerprint.
+    Set a's verdict to newVerdict(verdict, 0, "", [], "the smoke check reports " + verdict).
+    Set a's startedAt to now().
+    Set a's finishedAt to now().
+    Let mutable e be a new TrailEntry with ts now() and problemId unit's problemId and stage "progress" and kind unit's kind and contributor holder.
+    Set e's model to "smoke/none".
+    Set e's strategyId to "smoke".
+    Set e's promptSha to a's promptSha.
+    Set e's approachFingerprint to fingerprint.
+    Set e's artifactShas to [artifact's sha256].
+    Set e's verdict to verdict.
+    Set e's diagnostics to "smoke: " + verdict.
+    Set e's summary to note.
+    Let sealed be sealEntry(e, prevSeq + 1, prevHash).
+    Let mutable s be a new AttemptSubmission with unitId unit's id and token token and holder holder and secret g's secret.
+    Set s's attempt to a.
+    Set s's entry to sealed.
+    Set s's artifacts to [artifact].
+    Set s's draft to draft.
+    Return toJson_AttemptSubmission(s).
+
+## Note
+The statement a smoke `formalize` attempt proposes.
+
+## To smokeDraft () -> Option of StatementDraft:
+    Let doc be "Definition smoke_goal : Prop := forall (n : Nat), Eq Nat n n.".
+    Return some (a new StatementDraft with document doc and goalName "smoke_goal" and route "C").

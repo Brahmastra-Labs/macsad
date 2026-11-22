@@ -1,0 +1,120 @@
+# Attempt rules
+
+Whether a posted attempt and its trail entry agree with each other and with the
+lease they came under. The intake copies their fields and the locked unit's into
+a `ClaimFields`, so every refusal here names a fact of the request.
+
+## A ClaimFields has:
+    a holder, which is Text.
+    a unitId, which is Text.
+    a unitKind, which is Text.
+    a unitProblem, which is Text.
+    an attemptUnit, which is Text.
+    an attemptProblem, which is Text.
+    an attemptContributor, which is Text.
+    an entryProblem, which is Text.
+    an entryContributor, which is Text.
+    an entryKind, which is Text.
+    a fingerprint, which is Text.
+    an entryFingerprint, which is Text.
+    a shas, which is Seq of Text.
+    a verdictKind, which is Text.
+    an entryVerdict, which is Text.
+    a costMicros, which is Int.
+    an entryCost, which is Int.
+    a startedAt, which is Int.
+    a finishedAt, which is Int.
+
+## Note
+The verdict kinds the attempt table records, and whether a text is a lowercase
+hex digest of 64 digits.
+
+## To attemptVerdictKinds () -> Seq of Text:
+    Return ["verified", "rejected", "admitted_axiom", "infrastructure", "refused_submission", "budget_exhausted"].
+
+## To claimSha (t: Text) -> Bool:
+    If length of t is not equal to 64:
+        Return false.
+    Repeat for b in text_bytes(t):
+        If (b is at least 48 and b is at most 57) is equal to false and (b is at least 97 and b is at most 102) is equal to false:
+            Return false.
+    Return true.
+
+## Note
+The first inconsistency of a claim, or the empty text. One attempt costs at most
+a thousand dollars: a larger figure is a broken worker, not a bill.
+
+## To claimProblem (c: ClaimFields) -> Text:
+    If c's attemptUnit is not equal to c's unitId:
+        Return "the attempt names unit {c's attemptUnit}, not {c's unitId}".
+    If c's attemptProblem is not equal to c's unitProblem or c's entryProblem is not equal to c's unitProblem:
+        Return "the attempt and its trail entry must be about {c's unitProblem}".
+    If c's attemptContributor is not equal to c's holder or c's entryContributor is not equal to c's holder:
+        Return "the attempt and its trail entry must name the lease holder {c's holder}".
+    If c's entryKind is not equal to c's unitKind:
+        Return "the trail entry must be of kind {c's unitKind}".
+    If c's fingerprint is not equal to c's entryFingerprint:
+        Return "the attempt and its trail entry name different approaches".
+    Repeat for s in c's shas:
+        If claimSha(s) is equal to false:
+            Return "{s} is not a lowercase hex SHA-256".
+    If attemptVerdictKinds() contains c's verdictKind is equal to false:
+        Return "verdict kind {c's verdictKind} is not one the factory records".
+    If c's entryVerdict is not equal to c's verdictKind:
+        Return "the trail entry must carry the attempt's verdict".
+    If c's costMicros is less than 0 or c's costMicros is greater than 1000000000 or c's entryCost is not equal to c's costMicros:
+        Return "the cost must be 0 to 1000000000 micro-dollars and the same on both records".
+    If c's startedAt is greater than c's finishedAt or c's startedAt is less than 0:
+        Return "an attempt cannot finish before it starts".
+    Return "".
+
+## Note
+A consistent claim, for the tests to break one field at a time.
+
+## To sampleClaim () -> ClaimFields:
+    Let h be repeatText("a", 64).
+    Let mutable c be a new ClaimFields with holder "w1" and unitId "u1" and unitKind "prove" and unitProblem "opdp:1" and attemptUnit "u1" and attemptProblem "opdp:1".
+    Set c's attemptContributor to "w1".
+    Set c's entryProblem to "opdp:1".
+    Set c's entryContributor to "w1".
+    Set c's entryKind to "prove".
+    Set c's fingerprint to h.
+    Set c's entryFingerprint to h.
+    Set c's shas to [h, h].
+    Set c's verdictKind to "rejected".
+    Set c's entryVerdict to "rejected".
+    Set c's costMicros to 1250.
+    Set c's entryCost to 1250.
+    Set c's finishedAt to 2.
+    Return c.
+
+## Test: claims consistent with their lease are accepted
+
+Expect that claimProblem(sampleClaim()) is equal to "".
+Expect that claimSha(repeatText("A", 64)) is equal to false.
+
+## Test: claims are refused field by field
+
+Let mutable c be sampleClaim().
+Set c's attemptProblem to "opdp:2".
+Expect that claimProblem(c) contains "must be about opdp:1".
+Set c to sampleClaim().
+Set c's entryContributor to "w2".
+Expect that claimProblem(c) contains "lease holder w1".
+Set c to sampleClaim().
+Set c's shas to ["xyz"].
+Expect that claimProblem(c) contains "xyz is not".
+Set c to sampleClaim().
+Set c's entryCost to 1.
+Expect that claimProblem(c) contains "same on both".
+Set c to sampleClaim().
+Set c's startedAt to 9.
+Expect that claimProblem(c) contains "finish before".
+
+## Test: claims carry one verdict on both records
+
+For all booleans agree:
+    Let mutable c be sampleClaim().
+    If agree is equal to false:
+        Set c's entryVerdict to "verified".
+    Expect that (claimProblem(c) is equal to "") is equal to agree.

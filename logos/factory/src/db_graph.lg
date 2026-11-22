@@ -1,0 +1,120 @@
+# Atlas and contributor queries
+
+Import CoordinatorDb from "./coordinator_db.lg".
+Import WebGraph from "./web_graph.lg".
+Import WebBoard from "./web_board.lg".
+
+The children of one node of the atlas, best rank first, one page at a time, each
+with the stage counts of every problem below it. PostgreSQL walks the subtree
+(`WITH RECURSIVE`, down `node_parent_idx`) and stops at the problems, so the
+statements and lemmas under a problem never inflate a count. Asked for `root`,
+it answers the cohorts.
+
+Who contributes and where they may aim: the leaderboard, best first by proofs the
+verifier attested, then by proofs claimed, then by attempts; and the focus a
+contributor may give a worker, every cohort and every collection with its open
+problems.
+
+## Note
+The statement. `$1` is the node id or `root`, `$2` the page size, `$3` the offset.
+
+## To graphChildrenSql () -> Text:
+    Let mutable q be ["WITH RECURSIVE kids AS (SELECT n.id, n.parent_id, n.problem_id, n.kind, n.label, n.stage, n.rank FROM factory.node n"].
+    Push "WHERE ($1 = 'root' AND n.parent_id IS NULL) OR n.parent_id = $1 ORDER BY n.rank DESC, n.id LIMIT $2::int OFFSET $3::int)," to q.
+    Push "below (top, id, kind, stage) AS (SELECT k.id, k.id, k.kind, k.stage FROM kids k UNION ALL SELECT b.top, c.id, c.kind, c.stage" to q.
+    Push "FROM below b JOIN factory.node c ON c.parent_id = b.id WHERE b.kind NOT IN ('problem', 'statement', 'lemma'))," to q.
+    Push "tally AS (SELECT top, count(*) FILTER (WHERE kind = 'problem') AS total, " + stageCountsSql() + " FROM below GROUP BY top)," to q.
+    Push "up (id, parent_id, d) AS (SELECT id, parent_id, 1 FROM factory.node WHERE id = $1" to q.
+    Push "UNION ALL SELECT n.id, n.parent_id, u.d + 1 FROM up u JOIN factory.node n ON n.id = u.parent_id)" to q.
+    Push "SELECT coalesce(json_agg(json_build_object('id', k.id, 'parentId', coalesce(k.parent_id, ''), 'problemId', coalesce(k.problem_id, '')," to q.
+    Push "'kind', k.kind, 'label', k.label, 'stage', k.stage, 'rankBp', k.rank, 'depth', (SELECT coalesce(max(d), 0) FROM up) + 1," to q.
+    Push "'childCount', (SELECT count(*) FROM factory.node c WHERE c.parent_id = k.id), 'total', t.total, " + stageFieldsSql() + ")" to q.
+    Push "ORDER BY k.rank DESC, k.id), '[]')::text FROM kids k JOIN tally t ON t.top = k.id" to q.
+    Return join(q, " ").
+
+## Note
+The eight stage columns, as the record names them, in the schema's stage order.
+
+## To stageNames () -> Seq of Seq of Text:
+    Let mutable out be [["ranked", "ranked"], ["formalizing", "formalizing"], ["formalized", "formalized"], ["in_progress", "inProgress"]].
+    Push ["partial", "partial"] to out.
+    Push ["solved", "solved"] to out.
+    Push ["refuted", "refuted"] to out.
+    Push ["invalid_formalization", "invalid"] to out.
+    Return out.
+
+## To stageCountsSql () -> Text:
+    Let mutable parts be a new Seq of Text.
+    Repeat for s in stageNames():
+        Push "count(*) FILTER (WHERE kind = 'problem' AND stage = '" + item 1 of s + "') AS " + lower(item 2 of s) to parts.
+    Return join(parts, ", ").
+
+## To stageFieldsSql () -> Text:
+    Let mutable parts be a new Seq of Text.
+    Repeat for s in stageNames():
+        Push "'" + item 2 of s + "', t." + lower(item 2 of s) to parts.
+    Return join(parts, ", ").
+
+## Note
+One page of a node's children as their canonical JSON, or the empty text for a
+node the atlas does not hold (`root` always exists), in one statement.
+
+## To graphChildren (nodeId: Text, limit: Int, offset: Int) -> Result of Text and Text:
+    Let known be "SELECT CASE WHEN $1 = 'root' OR EXISTS (SELECT 1 FROM factory.node WHERE id = $1) THEN (" + graphChildrenSql() + ") ELSE '' END".
+    Inspect dbCell(known, [nodeId, "{limit}", "{offset}"]):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (text):
+            If text is equal to "":
+                Return a new Ok with value "".
+            Inspect fromJsonSeq_GraphNode(text):
+                When Err (e):
+                    Return a new Err with error "GraphNode: " + e.
+                When Ok (kids):
+                    Return a new Ok with value toJsonSeq_GraphNode(kids).
+    Return a new Err with error "no answer".
+
+## To leadersSql () -> Text:
+    Let mutable q be ["SELECT coalesce(json_agg(x ORDER BY x.attested DESC, x.claimed DESC, x.attempts DESC, x.contributor), '[]')::text FROM ("].
+    Push "SELECT c.id AS contributor, c.display_name AS \"displayName\", count(a.id) AS attempts," to q.
+    Push "count(a.id) FILTER (WHERE a.verdict_kind = 'verified') AS claimed," to q.
+    Push "(SELECT count(*) FROM factory.attestation t JOIN factory.attempt b ON t.subject_kind = 'attempt' AND t.subject_id = b.id" to q.
+    Push "WHERE b.contributor = c.id AND t.verdict_kind = 'verified') AS attested," to q.
+    Push "(SELECT count(*) FROM factory.dead_end d JOIN factory.attempt b ON b.id = d.first_attempt_id WHERE b.contributor = c.id) AS \"deadEnds\"," to q.
+    Push "c.spent_micros AS \"spentMicros\", c.budget_micros AS \"budgetMicros\"," to q.
+    Push "coalesce((extract(epoch FROM max(a.finished_at)) * 1000)::bigint, 0) AS \"lastSeen\"" to q.
+    Push "FROM factory.contributor c LEFT JOIN factory.attempt a ON a.contributor = c.id GROUP BY c.id) x" to q.
+    Return join(q, " ").
+
+## To focusSql () -> Text:
+    Let mutable q be ["SELECT coalesce(json_agg(x ORDER BY x.kind DESC, x.problems DESC, x.value), '[]')::text FROM ("].
+    Push "SELECT p.cohort AS value, coalesce(min(n.label), p.cohort) AS label, 'cohort' AS kind, count(*) AS problems" to q.
+    Push "FROM factory.problem p LEFT JOIN factory.node n ON n.id = 'cohort:' || p.cohort WHERE p.status = 'open' GROUP BY p.cohort" to q.
+    Push "UNION ALL SELECT p.collection, coalesce(min(n.label), p.collection), 'collection', count(*) FROM factory.problem p" to q.
+    Push "LEFT JOIN factory.node n ON n.id = 'collection:' || p.cohort || '/' || p.collection" to q.
+    Push "WHERE p.status = 'open' GROUP BY p.cohort, p.collection) x" to q.
+    Return join(q, " ").
+
+## To leaderRows () -> Result of Text and Text:
+    Inspect dbCell(leadersSql(), a new Seq of Text):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (text):
+            Inspect fromJsonSeq_LeaderRow(text):
+                When Err (e):
+                    Return a new Err with error "LeaderRow: " + e.
+                When Ok (rows):
+                    Return a new Ok with value toJsonSeq_LeaderRow(rows).
+    Return a new Err with error "no leaders".
+
+## To focusOptions () -> Result of Text and Text:
+    Inspect dbCell(focusSql(), a new Seq of Text):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (text):
+            Inspect fromJsonSeq_FocusOption(text):
+                When Err (e):
+                    Return a new Err with error "FocusOption: " + e.
+                When Ok (rows):
+                    Return a new Ok with value toJsonSeq_FocusOption(rows).
+    Return a new Err with error "no focus options".

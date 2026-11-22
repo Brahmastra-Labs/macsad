@@ -1,0 +1,81 @@
+# Board queries
+
+Import CoordinatorDb from "./coordinator_db.lg".
+Import WebBoard from "./web_board.lg".
+
+The factory at a glance: how many problems stand in each stage with the units
+waiting and leased on them, the best-ranked problems of each stage with the unit
+being worked on each, and the coordinator's health.
+
+## To stageArraySql () -> Text:
+    Return "ARRAY['ranked', 'formalizing', 'formalized', 'in_progress', 'partial', 'solved', 'refuted', 'invalid_formalization']".
+
+## To lanesSql () -> Text:
+    Let mutable q be ["SELECT coalesce(json_agg(json_build_object('stage', s.stage, 'problems', coalesce(p.n, 0),"].
+    Push "'readyUnits', coalesce(u.ready, 0), 'leasedUnits', coalesce(u.leased, 0)) ORDER BY s.ord), '[]')::text" to q.
+    Push "FROM unnest(" + stageArraySql() + ") WITH ORDINALITY AS s (stage, ord)" to q.
+    Push "LEFT JOIN (SELECT stage, count(*) AS n FROM factory.node WHERE kind = 'problem' GROUP BY stage) p ON p.stage = s.stage" to q.
+    Push "LEFT JOIN (SELECT n.stage, count(*) FILTER (WHERE w.state = 'ready') AS ready, count(*) FILTER (WHERE w.state = 'leased') AS leased" to q.
+    Push "FROM factory.work_unit w JOIN factory.node n ON n.problem_id = w.problem_id AND n.kind = 'problem'" to q.
+    Push "WHERE w.state IN ('ready', 'leased') AND w.kind <> 'verify' GROUP BY n.stage) u ON u.stage = s.stage" to q.
+    Return join(q, " ").
+
+## Note
+The best-ranked `$1` problems of every stage, each with its live unit if any.
+
+## To cardsSql () -> Text:
+    Let mutable q be ["SELECT coalesce(json_agg(json_build_object('problemId', p.id, 'title', p.title, 'stage', r.stage, 'rankBp', r.rank,"].
+    Push "'cohort', p.cohort, 'collection', p.collection, 'unitKind', coalesce(w.kind, ''), 'holder', coalesce(w.holder, ''))" to q.
+    Push "ORDER BY r.stage, r.rank DESC, p.id), '[]')::text FROM (SELECT n.problem_id, n.stage, n.rank," to q.
+    Push "row_number() OVER (PARTITION BY n.stage ORDER BY n.rank DESC, n.id) AS place FROM factory.node n WHERE n.kind = 'problem') r" to q.
+    Push "JOIN factory.problem p ON p.id = r.problem_id LEFT JOIN LATERAL (SELECT u.kind, u.holder FROM factory.work_unit u" to q.
+    Push "WHERE u.problem_id = p.id AND u.state IN ('ready', 'leased') AND u.kind <> 'verify'" to q.
+    Push "ORDER BY (u.state = 'leased') DESC, u.priority DESC LIMIT 1) w ON true WHERE r.place <= $1::int" to q.
+    Return join(q, " ").
+
+## To healthSql () -> Text:
+    Let mutable q be ["SELECT json_build_object('ok', true, 'database', 'reachable', 'problems', (SELECT count(*) FROM factory.problem),"].
+    Push "'readyUnits', (SELECT count(*) FROM factory.work_unit WHERE state = 'ready')," to q.
+    Push "'leasedUnits', (SELECT count(*) FROM factory.work_unit WHERE state = 'leased')," to q.
+    Push "'attempts', (SELECT count(*) FROM factory.attempt), 'trailEntries', (SELECT count(*) FROM factory.trail_entry)," to q.
+    Push "'attested', (SELECT count(*) FROM factory.attestation WHERE verdict_kind = 'verified'))::text" to q.
+    Return join(q, " ").
+
+## Note
+Each list as its record's canonical JSON.
+
+## To boardLanes () -> Result of Text and Text:
+    Inspect dbCell(lanesSql(), a new Seq of Text):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (text):
+            Inspect fromJsonSeq_BoardLane(text):
+                When Err (e):
+                    Return a new Err with error "BoardLane: " + e.
+                When Ok (lanes):
+                    Return a new Ok with value toJsonSeq_BoardLane(lanes).
+    Return a new Err with error "no lanes".
+
+## To boardCards (perStage: Int) -> Result of Text and Text:
+    Inspect dbCell(cardsSql(), ["{perStage}"]):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (text):
+            Inspect fromJsonSeq_BoardCard(text):
+                When Err (e):
+                    Return a new Err with error "BoardCard: " + e.
+                When Ok (cards):
+                    Return a new Ok with value toJsonSeq_BoardCard(cards).
+    Return a new Err with error "no cards".
+
+## To healthNow () -> HealthView:
+    Inspect dbCell(healthSql(), a new Seq of Text):
+        When Err (e):
+            Return a new HealthView with ok false and database e.
+        When Ok (text):
+            Inspect fromJson_HealthView(text):
+                When Err (e):
+                    Return a new HealthView with ok false and database "HealthView: " + e.
+                When Ok (h):
+                    Return h.
+    Return a new HealthView with ok false and database "no answer".

@@ -1,0 +1,74 @@
+# Recording an attempt
+
+Import TrailRecord from "./trail_record.lg".
+Import AttemptRules from "./attempt_rules.lg".
+Import IntakePolicy from "./intake_policy.lg".
+Import CoordinatorWire from "./coordinator_wire.lg".
+Import DbIntake from "./db_intake.lg".
+Import IntakeRecord from "./intake_record.lg".
+
+The attempt intake inside one transaction: the coordinator's own facts are read
+and locked, the claim is checked against them (`attempt_rules.lg`), the policy
+decides (`intake_policy.lg`), and an accepted attempt is written with everything
+that follows from it. Any error undoes all of it.
+
+## Note
+The claim's fields beside the unit's, for the rules.
+
+## To claimFieldsOf (st: IntakeState, s: AttemptSubmission) -> ClaimFields:
+    Let a be s's attempt.
+    Let e be s's entry.
+    Let mutable c be a new ClaimFields with holder s's holder and unitId s's unitId and unitKind st's kind and unitProblem st's problemId.
+    Set c's attemptUnit to a's unitId.
+    Set c's attemptProblem to a's problemId.
+    Set c's attemptContributor to a's contributor.
+    Set c's entryProblem to e's problemId.
+    Set c's entryContributor to e's contributor.
+    Set c's entryKind to e's kind.
+    Set c's fingerprint to a's approachFingerprint.
+    Set c's entryFingerprint to e's approachFingerprint.
+    Let mutable shas be [a's promptSha, a's responseSha, a's approachFingerprint, e's prevHash, e's hash] + e's artifactShas.
+    If a's documentSha is not equal to "":
+        Push a's documentSha to shas.
+    Set c's shas to shas.
+    Set c's verdictKind to a's verdict's kind.
+    Set c's entryVerdict to e's verdict.
+    Set c's costMicros to a's costMicros.
+    Set c's entryCost to e's costMicros.
+    Set c's startedAt to a's startedAt.
+    Set c's finishedAt to a's finishedAt.
+    Return c.
+
+## Note
+The facts the policy decides on.
+
+## To intakeFactsOf (st: IntakeState, s: AttemptSubmission, secretOk: Bool) -> IntakeFacts:
+    Let e be s's entry.
+    Let kind be s's attempt's verdict's kind.
+    Let mutable f be a new IntakeFacts with leaseLive (st's live and secretOk and st's holder is equal to s's holder and st's token is equal to s's token).
+    Set f's sameProblem to st's problemId is equal to e's problemId.
+    Set f's entrySealed to e's hash is equal to trailHash(e's prevHash, e).
+    Set f's atHead to e's seq is equal to st's headSeq + 1 and e's prevHash is equal to st's headHash.
+    Set f's deadEnd to st's deadEnd.
+    Set f's claimedVerified to kind is equal to "verified".
+    Set f's failedApproach to kind is equal to "rejected".
+    Return f.
+
+## Note
+The attempt recorded on a connection inside a transaction, or the refusal.
+
+## To intakeOn (c: PgConn, s: AttemptSubmission, secretOk: Bool) -> Result of IntakeResult and Text:
+    Inspect intakeStateOn(c, s's unitId, s's attempt's approachFingerprint):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (st):
+            If st's found is equal to false:
+                Return a new Ok with value intakeRefusal(404, "unknown_unit", "unit " + s's unitId + " is not on the board").
+            Let problem be claimProblem(claimFieldsOf(st, s)).
+            If problem is not equal to "":
+                Return a new Ok with value intakeRefusal(422, "invalid_claim", problem).
+            Let d be decideIntake(intakeFactsOf(st, s, secretOk)).
+            If d's accept is equal to false:
+                Return a new Ok with value intakeRefusal(d's status, d's outcome, "the attempt was not recorded").
+            Return recordOn(c, st, s, d).
+    Return a new Err with error "no intake".

@@ -1,0 +1,52 @@
+# Atlas rows
+
+Import WebGraph from "./web_graph.lg".
+Import WebFormat from "./web_format.lg".
+Import UiStage from "./ui_stage.lg".
+
+One row of the atlas tree: indented by its depth, a caret that opens or closes
+its branch, its kind, its name (a problem's name links to its page), the stage
+bar of everything below it, and its count. A branch that holds more children than
+were fetched offers the next page of them on its own row.
+
+## Note
+The indentation of a row, as a CSS length.
+
+## To indentOf (depth: Int) -> Text:
+    Return "padding-left: {(depth - 1) * 22 + 12}px".
+
+## Note
+What a row's count says: the problems below it and how many are settled as
+solved, or, for a problem, its stage.
+
+## To countLine (n: GraphNode) -> Text:
+    If n's kind is equal to "problem":
+        Return stageLabel(n's stage).
+    If n's total is equal to 0:
+        Return "no problems".
+    Return formatCount(n's total) + " · " + formatCount(n's solved) + " solved".
+
+## Component AtlasRow (n: GraphNode) and (open: Bool) and (waiting: Bool) and (unfetched: Int) and (toggle: fn(Text) -> Unit) and (more: fn(Text) -> Unit)
+
+View:
+    <li class="tree-row" id="row-{n's id}" style={indentOf(n's depth)}>
+      <div class="tree-name">
+        {if n's childCount is greater than 0:}
+          <button class="caret" class:open={open} aria-expanded={open} aria-label="open {n's label}" on-click={toggle(n's id)}>▶</button>
+        {else:}
+          <span class="caret-spacer"></span>
+        {end}
+        <span class="chip kind">{n's kind}</span>
+        {if n's problemId is not equal to "":}
+          <a class="label" href="/problem?id={urlEncode(n's problemId)}">{n's label}</a>
+        {else:}
+          <span class="label">{n's label}</span>
+        {end}
+        {if waiting:}<span class="muted">loading…</span>{end}
+        {if open and unfetched is greater than 0:}
+          <button class="link tree-more" on-click={more(n's id)}>show {formatCount(unfetched)} more</button>
+        {end}
+      </div>
+      <StageBar n={n}/>
+      <span class="tree-count">{countLine(n)}</span>
+    </li>

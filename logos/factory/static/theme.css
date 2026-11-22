@@ -1,0 +1,86 @@
+/* MaCSad factory - design tokens. Light by default, dark when the visitor asks for it.
+   Stage colours are one categorical set, validated for colour-vision deficiency in both
+   modes in the order the stage bar draws them (formalizing to refuted); ranked is neutral. */
+:root {
+  color-scheme: light;
+  --paper: #f7f6f2;
+  --surface: #fdfcfa;
+  --surface-2: #f0eee8;
+  --ink: #171715;
+  --ink-2: #4b4a45;
+  --muted: #7a786f;
+  --border: #e2dfd6;
+  --accent: #2a62c9;
+  --accent-hover: #1f4fa8;
+  --accent-contrast: #ffffff;
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(20, 20, 15, .05), 0 6px 20px rgba(20, 20, 15, .05);
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --measure: 72rem;
+  --stage-ranked: #c4c1b6;
+  --stage-formalizing: #eda100;
+  --stage-formalized: #1baf7a;
+  --stage-in_progress: #2a78d6;
+  --stage-partial: #e87ba4;
+  --stage-solved: #008300;
+  --stage-invalid_formalization: #4a3aa7;
+  --stage-refuted: #e34948;
+  --good: #0ca30c;
+  --critical: #d03b3b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --paper: #121211;
+    --surface: #1a1a19;
+    --surface-2: #232321;
+    --ink: #f3f2ec;
+    --ink-2: #c3c2b7;
+    --muted: #8f8d84;
+    --border: #2f2e2b;
+    --accent: #6da7ec;
+    --accent-hover: #86b6ef;
+    --accent-contrast: #0d1117;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 20px rgba(0, 0, 0, .3);
+    --stage-ranked: #55544f;
+    --stage-formalizing: #c98500;
+    --stage-formalized: #199e70;
+    --stage-in_progress: #3987e5;
+    --stage-partial: #d55181;
+    --stage-solved: #008300;
+    --stage-invalid_formalization: #9085e9;
+    --stage-refuted: #e66767;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #121211;
+  --surface: #1a1a19;
+  --surface-2: #232321;
+  --ink: #f3f2ec;
+  --ink-2: #c3c2b7;
+  --muted: #8f8d84;
+  --border: #2f2e2b;
+  --accent: #6da7ec;
+  --accent-hover: #86b6ef;
+  --accent-contrast: #0d1117;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 20px rgba(0, 0, 0, .3);
+  --stage-ranked: #55544f;
+  --stage-formalizing: #c98500;
+  --stage-formalized: #199e70;
+  --stage-in_progress: #3987e5;
+  --stage-partial: #d55181;
+  --stage-solved: #008300;
+  --stage-invalid_formalization: #9085e9;
+  --stage-refuted: #e66767;
+}
+html, body { margin: 0; background: var(--paper); color: var(--ink); }
+body { font: 15px/1.55 var(--font-sans); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+code, pre, .mono { font-family: var(--font-mono); font-size: .86em; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-hover); text-decoration: underline; }
+h1, h2, h3 { line-height: 1.2; letter-spacing: -.01em; margin: 0 0 .5rem; }
+h1 { font-size: 1.9rem; font-weight: 680; }
+h2 { font-size: 1.15rem; font-weight: 650; }
+h3 { font-size: 1rem; font-weight: 620; }
