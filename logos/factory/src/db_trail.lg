@@ -1,8 +1,8 @@
 # Trail queries
 
-Import TrailRecord from "./trail_record.lg".
-Import RecordsDecode from "./records_decode.lg".
 Import CoordinatorDb from "./coordinator_db.lg".
+Import RecordsDecode from "./records_decode.lg".
+Import TrailRecord from "./trail_record.lg".
 
 A problem's trail exactly as it is stored: every entry, oldest first, read back
 into the wire contract's `TrailEntry` through its decoder, so the entries a

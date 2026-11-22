@@ -2,8 +2,8 @@
 
 Import CoordinatorDb from "./coordinator_db.lg".
 Import DbIntake from "./db_intake.lg".
-Import StageRules from "./stage_rules.lg".
 Import LoadRules from "./load_rules.lg".
+Import StageRules from "./stage_rules.lg".
 
 The units an accepted attempt queues, inside its transaction. A claimed proof
 queues a `verify` unit for the trusted verifier and nothing else. A `formalize`

@@ -11,11 +11,11 @@ recorded as a dead end on this problem is refused, so no contributor pays twice 
 the same wall. Everything else is recorded, and three things follow from it:
 
 - an entry written against an older head of the trail is RESEALED onto the head (a
-  concurrent attempt got there first; the content is unchanged, its place moves);
+concurrent attempt got there first; the content is unchanged, its place moves);
 - a failed approach is recorded as a dead end;
 - a claimed proof becomes a `verify` unit for the trusted verifier. A worker's
-  verdict is a claim. The coordinator marks nothing proved on it; only an
-  attestation does, and the schema refuses a solved node without one.
+    verdict is a claim. The coordinator marks nothing proved on it; only an
+    attestation does, and the schema refuses a solved node without one.
 
 ## A IntakeFacts has:
     a leaseLive, which is Bool.

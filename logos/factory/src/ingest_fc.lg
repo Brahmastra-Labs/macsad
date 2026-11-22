@@ -1,12 +1,12 @@
 # Ingest fc
 
-Import WireRead from "./wire_read.lg".
-Import ProblemRecord from "./problem_record.lg".
+Import ManifestEntry from "./manifest_entry.lg".
 Import NodeRecord from "./node_record.lg".
+Import ProblemRecord from "./problem_record.lg".
 Import RankScore from "./rank_score.lg".
 Import RankTrail from "./rank_trail.lg".
 Import TrailDigest from "./trail_digest.lg".
-Import ManifestEntry from "./manifest_entry.lg".
+Import WireRead from "./wire_read.lg".
 
 The formalization lab's whole manifest: every entry a problem, under its
 collection, under the lab's cohort. Every entry has a Lean statement and none a

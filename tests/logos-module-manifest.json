@@ -971,6 +971,12 @@
           "code": "unused-import",
           "severity": "warning",
           "file": "src/main.lg",
+          "message": "`Import TextSet` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
           "message": "`Import TrailDigest` is unused \u2014 no name from it is referenced here."
         },
         {

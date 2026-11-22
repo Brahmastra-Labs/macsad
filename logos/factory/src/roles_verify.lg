@@ -2,13 +2,13 @@
 
 Import HostFiles from "./host_files.lg".
 Import HostTools from "./host_tools.lg".
-Import VerdictRecord from "./verdict_record.lg".
 Import KernelReport from "./kernel_report.lg".
+Import LocalRun from "./local_run.lg".
 Import RefExample from "./ref_example.lg".
 Import RefProse from "./ref_prose.lg".
 Import Reference from "./reference.lg".
+Import VerdictRecord from "./verdict_record.lg".
 Import Verifier from "./verifier.lg".
-Import LocalRun from "./local_run.lg".
 
 The verifier roles: a submission judged against a statement, a statement
 checked well-formed, and the kernel reference checked against the kernel — every

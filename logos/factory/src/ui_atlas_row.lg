@@ -1,8 +1,8 @@
 # Atlas rows
 
-Import WebGraph from "./web_graph.lg".
-Import WebFormat from "./web_format.lg".
 Import UiStage from "./ui_stage.lg".
+Import WebFormat from "./web_format.lg".
+Import WebGraph from "./web_graph.lg".
 
 One row of the atlas tree: indented by its depth, a caret that opens or closes
 its branch, its kind, its name (a problem's name links to its page), the stage

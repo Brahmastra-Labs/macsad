@@ -1,7 +1,7 @@
 # Results and lemmas
 
-Import WebProblem from "./web_problem.lg".
 Import WebFormat from "./web_format.lg".
+Import WebProblem from "./web_problem.lg".
 
 The verdicts the trusted verifier signed on a problem, and the lemma tree a
 decomposition grew below it, each fetched when its section appears.

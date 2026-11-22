@@ -1,8 +1,8 @@
 # Lease grants
 
-Import WorkRecord from "./work_record.lg".
-Import ProblemRecord from "./problem_record.lg".
 Import NodeRecord from "./node_record.lg".
+Import ProblemRecord from "./problem_record.lg".
+Import WorkRecord from "./work_record.lg".
 
 What a worker receives with a lease, read in one statement as the JSON of the
 factory's own records: the unit, the lease, the problem, the unit's statement,

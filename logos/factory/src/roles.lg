@@ -1,15 +1,15 @@
 # Roles
 
 Import Conventions from "./conventions.lg".
-Import Reference from "./reference.lg".
+Import Coordinator from "./coordinator.lg".
+Import HostFiles from "./host_files.lg".
 Import LocalRun from "./local_run.lg".
+Import Reference from "./reference.lg".
 Import RolesIngest from "./roles_ingest.lg".
 Import RolesVerify from "./roles_verify.lg".
-Import HostFiles from "./host_files.lg".
 Import SelftestLive from "./selftest_live.lg".
-Import Coordinator from "./coordinator.lg".
-Import WorkerRun from "./worker_run.lg".
 Import VerifierRun from "./verifier_run.lg".
+Import WorkerRun from "./worker_run.lg".
 
 The MaCSad math factory is one program with one role per process; which role
 runs is the first argument. Every role prints what it did and fails when it did

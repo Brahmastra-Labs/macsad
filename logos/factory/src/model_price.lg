@@ -1,8 +1,8 @@
 # Model price
 
-Import WireRead from "./wire_read.lg".
-Import WireNumber from "./wire_number.lg".
 Import Budget from "./budget.lg".
+Import WireNumber from "./wire_number.lg".
+Import WireRead from "./wire_read.lg".
 
 A model's price as the factory computes with it, from OpenRouter's public model
 list, and what a call is held at and charged. Prices are micro-dollars per

@@ -1,0 +1,33 @@
+{
+  "schema": "macsad-factory-source-pin/1",
+  "name": "Ulam OPDP Difficulty Atlas",
+  "author": "Alejandro Zarzuelo Urdiales",
+  "repository": "https://github.com/alejandrozu/ulam-opdp-difficulty-atlas",
+  "commit": "cf6a78732d5c01e850a89f03b777b76f69f30939",
+  "path": "data/Ulam_MathDB_ProofAtlas_OPDP_Assessments_v1.8.json.gz",
+  "download": "https://media.githubusercontent.com/media/alejandrozu/ulam-opdp-difficulty-atlas/cf6a78732d5c01e850a89f03b777b76f69f30939/data/Ulam_MathDB_ProofAtlas_OPDP_Assessments_v1.8.json.gz",
+  "sha256": "588153f0f188722c8876399930262ab989d197eb10fdf95c26db0ee4dbe910e5",
+  "bytes": 62168329,
+  "uncompressed_bytes": 1378385103,
+  "records": 102819,
+  "cohorts": {
+    "1.2.0": { "label": "UnsolvedMath original", "records": 5426 },
+    "1.5.0": { "label": "AIM Workshop Problem Lists", "records": 3359 },
+    "1.6.0": { "label": "Oberwolfach Reports Open Problems", "records": 6673 },
+    "1.7.0": { "label": "MathDB public catalog", "records": 87105 },
+    "1.8.0": { "label": "ProofAtlas curated", "records": 256 }
+  },
+  "source_collections": 16,
+  "licenses": {
+    "UnsolvedMath": "CC BY 4.0 (Ulam AI, https://huggingface.co/datasets/ulamai/UnsolvedMath)",
+    "MathDB": "CC BY 4.0 declared database content (https://mathdb.com/terms); records are public-list excerpts, not complete statements",
+    "ProofAtlas": "see the atlas NOTICE.md and OPDP_v1.8_PROOFATLAS_APPEND_NOTES.md"
+  },
+  "import_rules": [
+    "numeric problem_id is the key; problem_number is a display id and is not unique",
+    "intrinsic tiers T1-T5 and tractability bands T0-T10 are separate namespaces",
+    "null is not zero: tractability.score is null for solved or ill-posed records",
+    "catalog_status and assessment_gate stay visible; a score does not certify openness",
+    "MathDB records carry source_text.text_mode = mathdb_public_list_excerpt and must be completed from their cited source before formalization; never bulk-fetch MathDB detail pages past its terms"
+  ]
+}

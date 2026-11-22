@@ -1,12 +1,12 @@
 # Worker
 
-Import Conventions from "./conventions.lg".
-Import HostFiles from "./host_files.lg".
 Import Budget from "./budget.lg".
-Import LocalSettings from "./local_settings.lg".
-Import LocalRun from "./local_run.lg".
+Import Conventions from "./conventions.lg".
 Import CoordinatorWire from "./coordinator_wire.lg".
+Import HostFiles from "./host_files.lg".
 Import LeaseWire from "./lease_wire.lg".
+Import LocalRun from "./local_run.lg".
+Import LocalSettings from "./local_settings.lg".
 Import WorkerClient from "./worker_client.lg".
 Import WorkerUnit from "./worker_unit.lg".
 

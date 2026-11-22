@@ -1,11 +1,10 @@
 # Atlas graph records
 
-The atlas the website draws: cohorts, collections, categories and problems, and
-below a problem its statements and the lemmas a decomposition left. The page
-holds the visible part of the tree as one list of rows in display order, each
-row a `GraphNode`, and grows or shrinks it as the visitor opens and closes
-branches; children are fetched only when their branch is opened, so a corpus of a
-hundred thousand problems costs the browser only what is on screen.
+Import TextSet from "./text_set.lg".
+
+The atlas the website draws: cohorts, collections, categories and problems, and below a problem its statements and the lemmas a decomposition left.
+The page holds the visible part of the tree as one list of rows in display order, each row a `GraphNode`, and grows or shrinks it as the visitor
+opens and closes branches; children are fetched only when their branch is opened, so a hundred thousand problems cost only what is on screen.
 
 ## Note
 One node as the website sees it. `parentId` and `problemId` are the empty text
@@ -46,7 +45,7 @@ already below it, in the order they came, skipping any row already shown.
         Push r's id to shown.
     Let mutable fresh be a new Seq of GraphNode.
     Repeat for k in kids:
-        If shown contains k's id is equal to false:
+        If holdsText(shown, k's id) is equal to false:
             Push k to fresh.
     Let mutable out be a new Seq of GraphNode.
     Let mutable parentDepth be 0.

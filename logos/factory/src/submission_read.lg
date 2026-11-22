@@ -1,8 +1,8 @@
 # Reading an attempt and keeping its artifacts
 
+Import ArtifactRules from "./artifact_rules.lg".
 Import CoordinatorWire from "./coordinator_wire.lg".
 Import RecordsDecode from "./records_decode.lg".
-Import ArtifactRules from "./artifact_rules.lg".
 
 A posted attempt is a closed JSON object: its flat head by a derived codec, the
 attempt and trail entry by the factory's closed decoders (`records_decode.lg`),

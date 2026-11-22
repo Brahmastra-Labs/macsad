@@ -1,7 +1,7 @@
 # Stage marks
 
-Import WebGraph from "./web_graph.lg".
 Import WebFormat from "./web_format.lg".
+Import WebGraph from "./web_graph.lg".
 
 How a stage looks wherever the website shows one: a colour dot with its name, a
 legend of all eight, and the stacked bar of a node's problems by stage. The bar

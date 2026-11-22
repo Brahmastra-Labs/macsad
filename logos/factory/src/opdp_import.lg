@@ -1,8 +1,8 @@
 # OPDP import
 
 Import HostTools from "./host_tools.lg".
-Import WireRead from "./wire_read.lg".
 Import OpdpImportRules from "./opdp_import_rules.lg".
+Import WireRead from "./wire_read.lg".
 
 `factory coordinator import-opdp <pin.json> <atlas.json.gz> <work-dir>` imports
 every problem of the Ulam OPDP difficulty atlas into the coordinator so workers

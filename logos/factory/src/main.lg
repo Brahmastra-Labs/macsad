@@ -92,6 +92,7 @@ Import SmokeRun from "./smoke_run.lg".
 Import StageRules from "./stage_rules.lg".
 Import SubmissionPolicy from "./submission_policy.lg".
 Import SubmissionRead from "./submission_read.lg".
+Import TextSet from "./text_set.lg".
 Import TrailDigest from "./trail_digest.lg".
 Import TrailMemory from "./trail_memory.lg".
 Import TrailRecord from "./trail_record.lg".

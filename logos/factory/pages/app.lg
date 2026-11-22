@@ -1,10 +1,11 @@
 # The atlas
 
-Import WebGraph from "../src/web_graph.lg".
-Import WebFormat from "../src/web_format.lg".
+Import TextSet from "../src/text_set.lg".
+Import UiAtlasRow from "../src/ui_atlas_row.lg".
 Import UiSite from "../src/ui_site.lg".
 Import UiStage from "../src/ui_stage.lg".
-Import UiAtlasRow from "../src/ui_atlas_row.lg".
+Import WebFormat from "../src/web_format.lg".
+Import WebGraph from "../src/web_graph.lg".
 
 The front page of macsad.com: every problem the factory holds, as a tree of
 cohorts, collections and categories, each branch coloured by where its problems
@@ -40,7 +41,7 @@ Actions:
                 Set error to e's message.
 
     To toggle (id: Text):
-        If open contains id:
+        If holdsText(open, id):
             Set rows to withoutBelow(rows, id).
             Remove every o from open where o is equal to id.
         Otherwise:
@@ -73,7 +74,7 @@ View:
       {if error is not equal to "":}<p class="error-banner" role="alert" id="error">{error}</p>{end}
       <ul class="tree card" id="tree">
         {for each n in rows, keyed by n's id:}
-          <AtlasRow n={n} open={open contains n's id} waiting={waiting is equal to n's id} unfetched={unfetchedChildren(rows, n)} toggle={toggle} more={more}/>
+          <AtlasRow n={n} open={holdsText(open, n's id)} waiting={waiting is equal to n's id} unfetched={unfetchedChildren(rows, n)} toggle={toggle} more={more}/>
         {else:}
           <li class="empty">Loading the atlas…</li>
         {end}

@@ -1,6 +1,6 @@
 # The math factory image: the pinned LOGOS toolchain (`largo`) and the compiled factory, nothing else.
 #
-# One image serves every role — `factory coordinator`, `verifier`, `worker`, `local`, `ingest` — chosen
+# One image serves every role (the factory's LOGOS source under /opt/macsad/factory, run by `largo`) — `factory coordinator`, `verifier`, `worker`, `local`, `ingest` — chosen
 # by the command. A contributor's worker needs no Lean and no database: statements arrive as LOGOS
 # documents from the coordinator, proofs are LOGOS, and the LOGOS kernel inside `largo` checks them.
 #
@@ -14,11 +14,16 @@ RUN apt-get update \
  && groupadd --system --gid 10001 macsad \
  && useradd --system --uid 10001 --gid macsad --home-dir /var/lib/macsad --create-home --shell /usr/sbin/nologin macsad
 
-COPY --chmod=0755 bin/largo /usr/local/bin/largo
-COPY --chmod=0755 bin/factory /usr/local/bin/factory
-COPY --chmod=0444 bin/toolchain.receipt.json /opt/macsad/toolchain.receipt.json
+COPY bin/largo /usr/local/bin/largo
+COPY factory-entry.sh /usr/local/bin/factory
+COPY bin/factory /opt/macsad/factory
+COPY bin/toolchain.receipt.json /opt/macsad/toolchain.receipt.json
+RUN chmod 0755 /usr/local/bin/largo /usr/local/bin/factory \
+ && chmod -R a-w,a+rX /opt/macsad \
+ && chown -R macsad:macsad /var/lib/macsad
 
 ENV MACSAD_LARGO=/usr/local/bin/largo \
+    HOME=/var/lib/macsad \
     MACSAD_WORK=/var/lib/macsad/work \
     MACSAD_RESULTS_DIR=/var/lib/macsad/results \
     LOGOS_HOST=0.0.0.0 \

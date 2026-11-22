@@ -1,11 +1,11 @@
 # Coordinator wire
 
-Import WorkRecord from "./work_record.lg".
-Import ProblemRecord from "./problem_record.lg".
-Import NodeRecord from "./node_record.lg".
-Import AttemptRecord from "./attempt_record.lg".
-Import TrailRecord from "./trail_record.lg".
 Import ArtifactRules from "./artifact_rules.lg".
+Import AttemptRecord from "./attempt_record.lg".
+Import NodeRecord from "./node_record.lg".
+Import ProblemRecord from "./problem_record.lg".
+Import TrailRecord from "./trail_record.lg".
+Import WorkRecord from "./work_record.lg".
 
 What the coordinator answers a worker, and the attempt a worker posts. The
 answers reuse the factory's own records, so a worker decodes a grant with the

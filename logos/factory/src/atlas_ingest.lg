@@ -1,13 +1,13 @@
 # Atlas ingest
 
+Import AtlasGraph from "./atlas_graph.lg".
+Import AtlasScan from "./atlas_scan.lg".
 Import Conventions from "./conventions.lg".
 Import HostFiles from "./host_files.lg".
-Import WireRead from "./wire_read.lg".
-Import ProblemRecord from "./problem_record.lg".
 Import NodeRecord from "./node_record.lg".
-Import AtlasScan from "./atlas_scan.lg".
 Import OpdpRow from "./opdp_row.lg".
-Import AtlasGraph from "./atlas_graph.lg".
+Import ProblemRecord from "./problem_record.lg".
+Import WireRead from "./wire_read.lg".
 
 A release streamed from its chunk files into an output directory:
 `problems.jsonl` (one problem a line), `nodes.jsonl` (the graph above the

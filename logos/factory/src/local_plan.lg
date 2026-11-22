@@ -1,20 +1,20 @@
 # Local plan
 
+Import ChatReply from "./chat_reply.lg".
+Import ChatRequest from "./chat_request.lg".
 Import HostFiles from "./host_files.lg".
 Import HostTools from "./host_tools.lg".
-Import NodeRecord from "./node_record.lg".
-Import WorkRecord from "./work_record.lg".
-Import TrailRecord from "./trail_record.lg".
-Import TrailMemory from "./trail_memory.lg".
-Import TrailDigest from "./trail_digest.lg".
 Import KernelBlocks from "./kernel_blocks.lg".
-Import ChatRequest from "./chat_request.lg".
-Import ChatReply from "./chat_reply.lg".
-Import ModelPrice from "./model_price.lg".
-Import Replay from "./replay.lg".
-Import Prompts from "./prompts.lg".
 Import LocalSettings from "./local_settings.lg".
 Import LocalStore from "./local_store.lg".
+Import ModelPrice from "./model_price.lg".
+Import NodeRecord from "./node_record.lg".
+Import Prompts from "./prompts.lg".
+Import Replay from "./replay.lg".
+Import TrailDigest from "./trail_digest.lg".
+Import TrailMemory from "./trail_memory.lg".
+Import TrailRecord from "./trail_record.lg".
+Import WorkRecord from "./work_record.lg".
 
 What the next attempt on a problem asks, and of whom. The next unit is `repair`
 when the last attempt was refused at a block (there is a submission to fix and an

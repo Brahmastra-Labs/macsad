@@ -2,12 +2,12 @@
 
 Import Conventions from "./conventions.lg".
 Import HostFiles from "./host_files.lg".
-Import ProblemRecord from "./problem_record.lg".
-Import NodeRecord from "./node_record.lg".
-Import WorkRecord from "./work_record.lg".
-Import TrailRecord from "./trail_record.lg".
-Import RecordsDecode from "./records_decode.lg".
 Import LocalSettings from "./local_settings.lg".
+Import NodeRecord from "./node_record.lg".
+Import ProblemRecord from "./problem_record.lg".
+Import RecordsDecode from "./records_decode.lg".
+Import TrailRecord from "./trail_record.lg".
+Import WorkRecord from "./work_record.lg".
 
 A workspace on disk: `statements/<slug>.json` (the accepted statement),
 `problems.jsonl`, `strategy.json`, `trails/<slug>.jsonl` (append-only),

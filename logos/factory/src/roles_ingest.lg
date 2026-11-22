@@ -1,12 +1,12 @@
 # Roles ingest
 
-Import HostFiles from "./host_files.lg".
-Import ProblemRecord from "./problem_record.lg".
-Import NodeRecord from "./node_record.lg".
-Import IngestFc from "./ingest_fc.lg".
 Import AtlasIngest from "./atlas_ingest.lg".
+Import HostFiles from "./host_files.lg".
 Import HostTools from "./host_tools.lg".
+Import IngestFc from "./ingest_fc.lg".
 Import LocalRun from "./local_run.lg".
+Import NodeRecord from "./node_record.lg".
+Import ProblemRecord from "./problem_record.lg".
 
 The two ingest roles: the formalization lab's manifest, and the OPDP atlas
 streamed from its release file, each written as `problems.jsonl` and `nodes.jsonl`.

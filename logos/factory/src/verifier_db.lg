@@ -1,10 +1,10 @@
 # Verifier database
 
-Import WireRead from "./wire_read.lg".
-Import TrailRecord from "./trail_record.lg".
 Import Attestation from "./attestation.lg".
 Import CoordinatorDb from "./coordinator_db.lg".
 Import IntakeWrite from "./intake_write.lg".
+Import TrailRecord from "./trail_record.lg".
+Import WireRead from "./wire_read.lg".
 
 The trusted verifier's door to PostgreSQL. It alone takes `verify` units (no
 worker may lease one), reads what a unit asks it to check — the statement under

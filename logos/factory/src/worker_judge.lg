@@ -1,18 +1,18 @@
 # Worker judge
 
-Import HostTools from "./host_tools.lg".
-Import NodeRecord from "./node_record.lg".
-Import WorkRecord from "./work_record.lg".
-Import VerdictRecord from "./verdict_record.lg".
-Import TrailMemory from "./trail_memory.lg".
-Import Extraction from "./extraction.lg".
-Import VernacularCommand from "./vernacular_command.lg".
-Import SubmissionPolicy from "./submission_policy.lg".
-Import ProofDocument from "./proof_document.lg".
-Import PromptRoles from "./prompt_roles.lg".
-Import Verifier from "./verifier.lg".
 Import ArtifactRules from "./artifact_rules.lg".
 Import CoordinatorWire from "./coordinator_wire.lg".
+Import Extraction from "./extraction.lg".
+Import HostTools from "./host_tools.lg".
+Import NodeRecord from "./node_record.lg".
+Import PromptRoles from "./prompt_roles.lg".
+Import ProofDocument from "./proof_document.lg".
+Import SubmissionPolicy from "./submission_policy.lg".
+Import TrailMemory from "./trail_memory.lg".
+Import VerdictRecord from "./verdict_record.lg".
+Import Verifier from "./verifier.lg".
+Import VernacularCommand from "./vernacular_command.lg".
+Import WorkRecord from "./work_record.lg".
 
 A worker judges its own answer with the kernel before it claims anything, as the
 trusted verifier will again: a proof (`prove`, `repair`, `decompose`) is

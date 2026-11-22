@@ -1,0 +1,13 @@
+# Text set
+
+Membership in a list of texts, asked by the atlas tree on the server and in the browser.
+
+## Note
+Whether a list of ids holds this one, compared as text. The browser build cannot test list
+containment over text, so the tree and its page both ask this instead.
+
+## To holdsText (xs: Seq of Text) and (t: Text) -> Bool:
+    Repeat for x in xs:
+        If x is equal to t:
+            Return true.
+    Return false.

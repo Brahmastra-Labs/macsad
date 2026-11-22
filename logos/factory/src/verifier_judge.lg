@@ -1,14 +1,14 @@
 # Verifier judge
 
+Import Attestation from "./attestation.lg".
 Import HostFiles from "./host_files.lg".
 Import HostTools from "./host_tools.lg".
-Import VerdictRecord from "./verdict_record.lg".
-Import VernacularCommand from "./vernacular_command.lg".
 Import ProofDocument from "./proof_document.lg".
+Import VerdictRecord from "./verdict_record.lg".
 Import Verifier from "./verifier.lg".
-Import Attestation from "./attestation.lg".
-Import WorkerClient from "./worker_client.lg".
 Import VerifierDb from "./verifier_db.lg".
+Import VernacularCommand from "./vernacular_command.lg".
+Import WorkerClient from "./worker_client.lg".
 
 Who the verifier is and what it finds. Its identity is its ML-DSA key: the seed in
 `MACSAD_VERIFIER_KEY_FILE`, and the public key's SHA-256, which names it on the

@@ -1,12 +1,12 @@
 # Worker client
 
-Import WireRead from "./wire_read.lg".
-Import TrailRecord from "./trail_record.lg".
-Import HostTools from "./host_tools.lg".
 Import ArtifactRules from "./artifact_rules.lg".
 Import CoordinatorWire from "./coordinator_wire.lg".
-Import LeaseWire from "./lease_wire.lg".
 Import DbTrail from "./db_trail.lg".
+Import HostTools from "./host_tools.lg".
+Import LeaseWire from "./lease_wire.lg".
+Import TrailRecord from "./trail_record.lg".
+Import WireRead from "./wire_read.lg".
 
 A worker's side of the coordinator's public API: it leases a unit, keeps the
 lease alive, posts the attempt, and reads the trail and artifacts any visitor can
