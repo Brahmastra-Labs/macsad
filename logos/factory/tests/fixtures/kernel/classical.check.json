@@ -1,0 +1,1 @@
+{"blocks":[{"block":1,"output":""},{"block":2,"output":""},{"block":3,"output":""},{"block":4,"output":""},{"block":5,"output":""},{"block":6,"output":"proof_of_goal : goal"},{"block":7,"output":"'proof_of_goal' depends on axioms: [Classical_choice, Quot_sound, propext]"}],"checked":true,"error":null,"failed_block":null,"file":"classical.lg","surface":"kernel_document"}

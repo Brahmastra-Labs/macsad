@@ -1,0 +1,594 @@
+# OpenRouter
+
+The one door to a language model: an OpenAI-shaped chat-completions request
+through OpenRouter, paid for from the contributor's own key and budget.
+
+Everything here is pure — building the request, reading the reply, reading the
+price list, and the money arithmetic. The call itself is made by `host.lg`, which
+is also the only place the API key is read; the key goes into one request header
+and nowhere else (never a trail entry, never a log line, never the coordinator).
+
+The money rule is RESERVE, THEN RECONCILE. Before a call, the worst case it can
+cost is reserved against the budget, and a call whose worst case does not fit is
+not made — the worker stops honestly instead of overspending. After the call,
+the reservation is replaced by what the call actually cost: the cost OpenRouter
+reports when it reports one, else the tokens it reports at the listed price.
+
+Import Wire.
+Import Shared.
+Import Submission.
+
+## Note
+One message of a conversation: `system`, `user` or `assistant`, and its text.
+
+## A ChatMessage has:
+    a role, which is Text.
+    a content, which is Text.
+
+## Note
+What is asked of a model. `temperatureBp` is the sampling temperature in basis
+points (2,000 is 0.2), so a strategy stores it as an integer like every other
+score.
+
+## A ChatRequest has:
+    a model, which is Text.
+    a messages, which is Seq of ChatMessage.
+    a maxTokens, which is Int.
+    a temperatureBp, which is Int.
+
+## Note
+What a model answered, read. `costMicros` is OpenRouter's own reported cost,
+rounded up to a micro-dollar, when the reply carries one; `usageKnown` says
+whether the reply reported its token counts at all.
+
+## A ChatReply has:
+    an id, which is Text.
+    a model, which is Text.
+    a content, which is Text.
+    a finishReason, which is Text.
+    a usageKnown, which is Bool.
+    a promptTokens, which is Int.
+    a completionTokens, which is Int.
+    a costMicros, which is Option of Int.
+
+## Note
+A model's price, as the factory computes with it: micro-dollars per million
+tokens (OpenRouter's `"0.0000025"` dollars a token is 2,500,000), plus a flat
+price per request. Where OpenRouter lists a higher tier for long prompts
+(`overrides`), the HIGHEST price is kept, because a reservation is a worst case.
+`maxCompletionTokens` is `0` when OpenRouter does not say.
+
+## A ModelPrice has:
+    an id, which is Text.
+    a promptPerMTok, which is Int.
+    a completionPerMTok, which is Int.
+    a requestMicros, which is Int.
+    a contextLength, which is Int.
+    a maxCompletionTokens, which is Int.
+
+## Note
+A contributor's budget: the limit they set, what calls have cost, and what is held
+for calls in flight.
+
+## A Budget has:
+    a limitMicros, which is Int.
+    a spentMicros, which is Int.
+    a reservedMicros, which is Int.
+
+## Note
+Where requests go.
+
+## To chatCompletionsUrl () -> Text:
+    Return "https://openrouter.ai/api/v1/chat/completions".
+
+## Note
+Where the price list is. It needs no key.
+
+## To modelsUrl () -> Text:
+    Return "https://openrouter.ai/api/v1/models".
+
+## Note
+The headers of a request: the contributor's key as a bearer token, and the two
+attribution headers OpenRouter asks applications to send.
+
+## To openRouterHeaders (apiKey: Text) -> Map of Text to Text:
+    Let mutable h be a new Map of Text to Text.
+    Set h at "Authorization" to "Bearer " + apiKey.
+    Set h at "Content-Type" to "application/json".
+    Set h at "HTTP-Referer" to "https://macsad.com".
+    Set h at "X-Title" to "MaCSad factory".
+    Return h.
+
+## Note
+JSON building blocks, so a request is written as the structure it is.
+
+## To jstr (s: Text) -> Json:
+    Return a new JStr with s s.
+
+## Note
+A JSON integer.
+
+## To jint (n: Int) -> Json:
+    Return a new JNum with n n.
+
+## Note
+A JSON object member.
+
+## To jfield (key: Text, v: Json) -> JEntry:
+    Return a new JEntry with key key and val v.
+
+## Note
+Basis points as the exact JSON decimal they stand for: `2000` is `0.2`, `10000` is
+`1`, `15` is `0.0015`.
+
+## To bpDecimal (bp: Int) -> Json:
+    If bp % 10000 is equal to 0:
+        Return a new JNum with n (bp / 10000).
+    Let mutable m be bp.
+    Let mutable sc be 0 - 4.
+    While m % 10 is equal to 0:
+        Set m to m / 10.
+        Set sc to sc + 1.
+    Return a new JDec with mant m and scale sc.
+
+## Note
+The request body. `usage.include` asks OpenRouter to report the call's cost in the
+reply, which is what reconciliation reads. The members are in a fixed order and
+the serialization is canonical, so the body — and the prompt hash taken over it —
+is the same on every machine.
+
+## To chatRequestJson (r: ChatRequest) -> Text:
+    Let mutable msgs be a new Seq of Json.
+    Repeat for m in r's messages:
+        Push (a new JObj with entries [jfield("role", jstr(m's role)), jfield("content", jstr(m's content))]) to msgs.
+    Let usage be a new JObj with entries [jfield("include", a new JBool with b true)].
+    Let body be a new JObj with entries [jfield("model", jstr(r's model)), jfield("messages", a new JArr with elems msgs), jfield("max_tokens", jint(r's maxTokens)), jfield("temperature", bpDecimal(r's temperatureBp)), jfield("usage", usage)].
+    Return jsonSerialize(body).
+
+## Note
+The prompt hash: the SHA-256 of the exact request body. Two calls with the same
+hash asked the same model the same thing with the same budget of tokens, which is
+what the replay provider keys its recordings by.
+
+## To promptSha (r: ChatRequest) -> Text:
+    Return sha256Hex(chatRequestJson(r)).
+
+## Note
+The shape of a successful reply that the factory reads; the rest is ignored.
+
+## To chatReplyShape () -> Seq of Text:
+    Return ["id:text", "model:text", "choices:array"].
+
+## Note
+The message of an error reply (`{"error": {"code": 402, "message": "…"}}`), or `""`.
+
+## To errorOfReply (v: Json) -> Text:
+    If jsonHas(v, "error") is equal to false:
+        Return "".
+    Let e be jsonGet(v, "error").
+    Let message be textAt(e, "message").
+    Inspect jsonGet(e, "code"):
+        When JNum (code):
+            Return "OpenRouter error {code}: {message}".
+        Otherwise:
+            Return "OpenRouter error: {message}".
+    Return "OpenRouter error: {message}".
+
+## Note
+A chat-completions reply read: the first choice's message content and finish
+reason, and the usage — token counts and, when present, the reported cost in
+dollars, rounded up to a micro-dollar.
+
+## To parseChatReply (text: Text) -> Result of ChatReply and Text:
+    Inspect parseStrict(text):
+        When Err (e):
+            Return a new Err with error "the reply is not JSON: " + e.
+        When Ok (v):
+            Let failure be errorOfReply(v).
+            If failure is not equal to "":
+                Return a new Err with error failure.
+            Let problem be openShapeProblem(v, chatReplyShape()).
+            If problem is not equal to "":
+                Return a new Err with error "the reply is not a chat completion: " + problem.
+            Let mutable content be "".
+            Let mutable finish be "".
+            Inspect jsonGet(v, "choices"):
+                When JArr (choices):
+                    If length of choices is equal to 0:
+                        Return a new Err with error "the reply has no choices".
+                    Let first be item 1 of choices.
+                    Let message be jsonGet(first, "message").
+                    Inspect jsonGet(message, "content"):
+                        When JStr (s):
+                            Set content to s.
+                        Otherwise:
+                            Return a new Err with error "the first choice has no text content".
+                    Set finish to textAt(first, "finish_reason").
+                Otherwise:
+                    Return a new Err with error "the reply has no choices".
+            Let usage be jsonGet(v, "usage").
+            Let known be openShapeProblem(usage, ["prompt_tokens:int", "completion_tokens:int"]) is equal to "".
+            Let mutable cost: Option of Int be none.
+            If jsonHas(usage, "cost"):
+                Inspect jsonScaledCeil(jsonGet(usage, "cost"), 6):
+                    When Ok (micros):
+                        Set cost to some micros.
+                    When Err (e):
+                        Return a new Err with error "the reply's cost is unreadable: " + e.
+            Return a new Ok with value (a new ChatReply with id textAt(v, "id") and model textAt(v, "model") and content content and finishReason finish and usageKnown known and promptTokens intAt(usage, "prompt_tokens") and completionTokens intAt(usage, "completion_tokens") and costMicros cost).
+    Return a new Err with error "unreadable reply".
+
+## Note
+One listed price, per million tokens, rounded up; a negative listing (OpenRouter
+writes `"-1"` for a router whose price depends on where it routes) is refused,
+because such a model has no worst case to reserve.
+
+## To pricePerMTok (v: Json, what: Text) -> Result of Int and Text:
+    Inspect v:
+        When JStr (s):
+            If startsWith(trim(s), "-"):
+                Return a new Err with error "the {what} price is not fixed ({s})".
+            Return decimalTextScaledCeil(s, 12).
+        When JNull:
+            Return a new Ok with value 0.
+        Otherwise:
+            Return a new Err with error "the {what} price is not a decimal string".
+    Return a new Err with error "unreadable price".
+
+## Note
+The larger of two integers.
+
+## To maxInt (a: Int, b: Int) -> Int:
+    If a is greater than b:
+        Return a.
+    Return b.
+
+## Note
+A model's price from its entry in OpenRouter's model list: base prompt and
+completion prices, raised to the highest `overrides` tier, the per-request
+price rounded up to a micro-dollar, and the context limits.
+
+## To modelPriceOf (m: Json) -> Result of ModelPrice and Text:
+    Let id be textAt(m, "id").
+    Let pricing be jsonGet(m, "pricing").
+    Inspect pricePerMTok(jsonGet(pricing, "prompt"), "prompt"):
+        When Err (e):
+            Return a new Err with error id + ": " + e.
+        When Ok (prompt):
+            Inspect pricePerMTok(jsonGet(pricing, "completion"), "completion"):
+                When Err (e):
+                    Return a new Err with error id + ": " + e.
+                When Ok (completion):
+                    Let mutable p be prompt.
+                    Let mutable c be completion.
+                    Inspect jsonGet(pricing, "overrides"):
+                        When JArr (tiers):
+                            Repeat for tier in tiers:
+                                Inspect pricePerMTok(jsonGet(tier, "prompt"), "prompt"):
+                                    When Ok (tp):
+                                        Set p to maxInt(p, tp).
+                                    When Err (e):
+                                        Return a new Err with error id + ": " + e.
+                                Inspect pricePerMTok(jsonGet(tier, "completion"), "completion"):
+                                    When Ok (tc):
+                                        Set c to maxInt(c, tc).
+                                    When Err (e):
+                                        Return a new Err with error id + ": " + e.
+                        Otherwise:
+                            Let ignored be p.
+                    Let mutable request be 0.
+                    If jsonHas(pricing, "request"):
+                        Inspect pricePerMTok(jsonGet(pricing, "request"), "request"):
+                            When Ok (perMillion):
+                                Set request to ceilDiv(perMillion, 1000000).
+                            When Err (e):
+                                Return a new Err with error id + ": " + e.
+                    Let top be jsonGet(m, "top_provider").
+                    Return a new Ok with value (a new ModelPrice with id id and promptPerMTok p and completionPerMTok c and requestMicros request and contextLength intAt(m, "context_length") and maxCompletionTokens intAt(top, "max_completion_tokens")).
+    Return a new Err with error id + ": unreadable price".
+
+## Note
+The price of `modelId` in an OpenRouter model list document, or why there is none.
+
+## To priceOf (modelsJson: Text, modelId: Text) -> Result of ModelPrice and Text:
+    Inspect parseStrict(modelsJson):
+        When Err (e):
+            Return a new Err with error "the model list is not JSON: " + e.
+        When Ok (v):
+            Inspect jsonGet(v, "data"):
+                When JArr (models):
+                    Repeat for m in models:
+                        If textAt(m, "id") is equal to modelId:
+                            Return modelPriceOf(m).
+                    Return a new Err with error "OpenRouter lists no model {modelId}".
+                Otherwise:
+                    Return a new Err with error "the model list has no data array".
+    Return a new Err with error "unreadable model list".
+
+## Note
+`a / b` rounded up, for positive `b`.
+
+## To ceilDiv (a: Int, b: Int) -> Int:
+    Let q be a / b.
+    If a % b is greater than 0:
+        Return q + 1.
+    Return q.
+
+## Note
+An upper bound on the prompt tokens of a request, without a tokenizer: every token
+is at least one byte, so a message cannot be more tokens than it has bytes. Each
+message is also charged 16 tokens for the role and the framing around it. The
+bound is loose — prose is about four bytes a token — and that is the point: a
+reservation is a worst case, and reconciliation returns the difference.
+
+## To promptTokenBound (r: ChatRequest) -> Int:
+    Let mutable total be 0.
+    Repeat for m in r's messages:
+        Set total to total + length of text_bytes(m's content) + length of text_bytes(m's role) + 16.
+    Return total.
+
+## Note
+The most a request can cost: every prompt token at the highest prompt price, the
+whole `maxTokens` allowance at the highest completion price, and the per-request
+price, rounded up to a micro-dollar.
+
+## To reservationMicros (p: ModelPrice, r: ChatRequest) -> Int:
+    Let tokens be promptTokenBound(r) * p's promptPerMTok + r's maxTokens * p's completionPerMTok.
+    Return ceilDiv(tokens, 1000000) + p's requestMicros.
+
+## Note
+What a finished call cost: OpenRouter's reported cost when there is one; else the
+reported tokens at the listed price; else — a reply that reports nothing — the
+whole reservation, since nothing smaller can be shown to be enough.
+
+## To actualCostMicros (p: ModelPrice, reply: ChatReply, reserved: Int) -> Int:
+    Inspect reply's costMicros:
+        When Some (c):
+            Return c.
+        When None:
+            If reply's usageKnown:
+                Return ceilDiv(reply's promptTokens * p's promptPerMTok + reply's completionTokens * p's completionPerMTok, 1000000) + p's requestMicros.
+            Return reserved.
+    Return reserved.
+
+## Note
+A fresh budget of `limitMicros`.
+
+## To newBudget (limitMicros: Int) -> Budget:
+    Return a new Budget with limitMicros limitMicros and spentMicros 0 and reservedMicros 0.
+
+## Note
+What is left to reserve.
+
+## To budgetLeft (b: Budget) -> Int:
+    Return b's limitMicros - b's spentMicros - b's reservedMicros.
+
+## Note
+The budget with `amount` held for a call, or the honest stop: the reason the call
+must not be made. The stop is a normal outcome, written to the trail; the worker
+reports what it spent and ends.
+
+## To reserve (b: Budget, amount: Int) -> Result of Budget and Text:
+    If amount is greater than budgetLeft(b):
+        Return a new Err with error "budget stop: the call may cost up to " + formatMicros(amount) + ", and " + formatMicros(budgetLeft(b)) + " of " + formatMicros(b's limitMicros) + " is left".
+    Let mutable out be b.
+    Set out's reservedMicros to b's reservedMicros + amount.
+    Return a new Ok with value out.
+
+## Note
+The budget after a call that held `reserved` and cost `actual`: the hold is
+released and the actual cost is spent.
+
+## To settle (b: Budget, reserved: Int, actual: Int) -> Budget:
+    Let mutable out be b.
+    Set out's reservedMicros to b's reservedMicros - reserved.
+    Set out's spentMicros to b's spentMicros + actual.
+    Return out.
+
+## Note
+A request for the tests below.
+
+## To sampleRequest () -> ChatRequest:
+    Return a new ChatRequest with model "openai/gpt-4o-mini" and messages [a new ChatMessage with role "system" and content "You write LOGOS kernel proofs.", a new ChatMessage with role "user" and content "Prove goal."] and maxTokens 1000 and temperatureBp 2000.
+
+## Note
+A chat-completions reply in the shape OpenRouter documents, with its usage and
+its reported cost.
+
+## To sampleReply () -> Text:
+    Return "{{\"id\":\"gen-1732300000-abc\",\"provider\":\"OpenAI\",\"model\":\"openai/gpt-4o-mini\",\"object\":\"chat.completion\",\"created\":1732300000,\"choices\":[{{\"logprobs\":null,\"finish_reason\":\"stop\",\"native_finish_reason\":\"stop\",\"index\":0,\"message\":{{\"role\":\"assistant\",\"content\":\"```logos-kernel\\nTheorem proof_of_goal : goal := by intro n; rfl.\\n```\\nSummary: tried rfl.\",\"refusal\":null,\"reasoning\":null}}}}],\"usage\":{{\"prompt_tokens\":1200,\"completion_tokens\":85,\"total_tokens\":1285,\"cost\":0.0002310,\"is_byok\":false,\"prompt_tokens_details\":{{\"cached_tokens\":0}},\"completion_tokens_details\":{{\"reasoning_tokens\":0}}}}}}".
+
+## Note
+Three entries of OpenRouter's public model list, as `GET /api/v1/models` returned
+them on 2026-11-22 (only the fields the factory reads kept): a model with a
+long-prompt tier, a plain one, and a router whose price is not fixed. The same
+bytes are in `tests/fixtures/openrouter/models.sample.json`.
+
+## To sampleModels () -> Text:
+    Return "{{\"data\":[{{\"id\":\"google/gemini-2.5-pro\",\"name\":\"Google: Gemini 2.5 Pro\",\"context_length\":1048576,\"pricing\":{{\"prompt\":\"0.00000125\",\"completion\":\"0.00001\",\"image\":\"0.00000125\",\"audio\":\"0.00000125\",\"input_audio_cache\":\"0.000000125\",\"web_search\":\"0.014\",\"internal_reasoning\":\"0.00001\",\"input_cache_read\":\"0.000000125\",\"input_cache_write\":\"0.000000375\",\"overrides\":[{{\"min_prompt_tokens\":200000,\"prompt\":\"0.0000025\",\"completion\":\"0.000015\",\"audio\":\"0.0000025\",\"input_audio_cache\":\"0.00000025\",\"input_cache_read\":\"0.00000025\"}}]}},\"top_provider\":{{\"context_length\":1048576,\"max_completion_tokens\":65536,\"is_moderated\":false}}}},{{\"id\":\"openai/gpt-4o-mini\",\"name\":\"OpenAI: GPT-4o-mini\",\"context_length\":128000,\"pricing\":{{\"prompt\":\"0.00000015\",\"completion\":\"0.0000006\",\"input_cache_read\":\"0.000000075\"}},\"top_provider\":{{\"context_length\":128000,\"max_completion_tokens\":16384,\"is_moderated\":true}}}},{{\"id\":\"openrouter/auto\",\"name\":\"Auto Router\",\"context_length\":2000000,\"pricing\":{{\"prompt\":\"-1\",\"completion\":\"-1\"}},\"top_provider\":{{\"context_length\":null,\"max_completion_tokens\":null,\"is_moderated\":false}}}}]}}".
+
+## Test: a request body is canonical JSON in a fixed order
+
+Expect that chatRequestJson(sampleRequest()) is equal to "{{\"model\":\"openai/gpt-4o-mini\",\"messages\":[{{\"role\":\"system\",\"content\":\"You write LOGOS kernel proofs.\"}},{{\"role\":\"user\",\"content\":\"Prove goal.\"}}],\"max_tokens\":1000,\"temperature\":0.2,\"usage\":{{\"include\":true}}}}".
+Expect that jsonValid(chatRequestJson(sampleRequest())) is equal to true.
+
+## Test: a message with quotes and newlines is escaped, not broken
+
+Let r be a new ChatRequest with model "m" and messages [a new ChatMessage with role "user" and content "line \"one\"\nline two"] and maxTokens 5 and temperatureBp 0.
+Let body be jsonParse(chatRequestJson(r)).
+Expect that jsonSerialize(jsonGet(body, "temperature")) is equal to "0".
+Inspect jsonGet(body, "messages"):
+    When JArr (ms):
+        Expect that textAt(item 1 of ms, "content") is equal to "line \"one\"\nline two".
+    Otherwise:
+        Expect that "an array" is equal to "something else".
+
+## Test: temperatures are exact decimals
+
+For each of these cases:
+
+| bp    | shown    |
+|-------|----------|
+| 0     | "0"      |
+| 2000  | "0.2"    |
+| 10000 | "1"      |
+| 15    | "0.0015" |
+| 12500 | "1.25"   |
+
+Expect that jsonSerialize(bpDecimal(bp)) is equal to shown.
+
+## Test: the prompt hash is the hash of the exact body
+
+Expect that promptSha(sampleRequest()) is equal to sha256Hex(chatRequestJson(sampleRequest())).
+Let mutable other be sampleRequest().
+Set other's temperatureBp to 2001.
+Expect that promptSha(other) is not equal to promptSha(sampleRequest()).
+
+## Test: the key goes into the Authorization header and nowhere else
+
+Let h be openRouterHeaders("sk-or-test").
+Expect that item "Authorization" of h is equal to "Bearer sk-or-test".
+Expect that item "Content-Type" of h is equal to "application/json".
+Expect that chatRequestJson(sampleRequest()) contains "sk-or-test" is equal to false.
+
+## Test: a reply yields its content, finish reason, tokens and cost
+
+Inspect parseChatReply(sampleReply()):
+    When Ok (r):
+        Expect that r's content is equal to "```logos-kernel\nTheorem proof_of_goal : goal := by intro n; rfl.\n```\nSummary: tried rfl.".
+        Expect that r's finishReason is equal to "stop".
+        Expect that r's promptTokens is equal to 1200.
+        Expect that r's completionTokens is equal to 85.
+        Expect that r's costMicros is equal to some 231.
+        Expect that r's usageKnown is equal to true.
+        Expect that (extractSubmission(r's content))'s block is equal to "Theorem proof_of_goal : goal := by intro n; rfl.".
+    When Err (e):
+        Expect that e is equal to "no error".
+
+## Test: an error reply is an error, with its code
+
+Inspect parseChatReply("{{\"error\":{{\"code\":402,\"message\":\"Insufficient credits\"}}}}"):
+    When Ok (r):
+        Expect that r's content is equal to "refused".
+    When Err (e):
+        Expect that e is equal to "OpenRouter error 402: Insufficient credits".
+
+## Test: a reply without choices or text is refused
+
+Inspect parseChatReply("{{\"id\":\"g\",\"model\":\"m\",\"choices\":[]}}"):
+    When Ok (r):
+        Expect that r's content is equal to "refused".
+    When Err (e):
+        Expect that e is equal to "the reply has no choices".
+Inspect parseChatReply("{{\"id\":\"g\",\"model\":\"m\",\"choices\":[{{\"message\":{{\"content\":null}}}}]}}"):
+    When Ok (r):
+        Expect that r's content is equal to "refused".
+    When Err (e):
+        Expect that e is equal to "the first choice has no text content".
+
+## Test: a reply that reports no usage is still read
+
+Inspect parseChatReply("{{\"id\":\"g\",\"model\":\"m\",\"choices\":[{{\"finish_reason\":\"length\",\"message\":{{\"content\":\"partial\"}}}}]}}"):
+    When Ok (r):
+        Expect that r's usageKnown is equal to false.
+        Expect that r's costMicros is none.
+        Expect that r's finishReason is equal to "length".
+    When Err (e):
+        Expect that e is equal to "no error".
+
+## Test: prices are read per million tokens, at the highest tier
+
+Inspect priceOf(sampleModels(), "google/gemini-2.5-pro"):
+    When Ok (p):
+        Expect that p's promptPerMTok is equal to 2500000.
+        Expect that p's completionPerMTok is equal to 15000000.
+        Expect that p's requestMicros is equal to 0.
+        Expect that p's maxCompletionTokens is equal to 65536.
+        Expect that p's contextLength is equal to 1048576.
+    When Err (e):
+        Expect that e is equal to "no error".
+Inspect priceOf(sampleModels(), "openai/gpt-4o-mini"):
+    When Ok (p):
+        Expect that p's promptPerMTok is equal to 150000.
+        Expect that p's completionPerMTok is equal to 600000.
+    When Err (e):
+        Expect that e is equal to "no error".
+
+## Test: a model without a fixed price cannot be reserved for
+
+Inspect priceOf(sampleModels(), "openrouter/auto"):
+    When Ok (p):
+        Expect that p's id is equal to "refused".
+    When Err (e):
+        Expect that e is equal to "openrouter/auto: the prompt price is not fixed (-1)".
+Inspect priceOf(sampleModels(), "nobody/nothing"):
+    When Ok (p):
+        Expect that p's id is equal to "refused".
+    When Err (e):
+        Expect that e is equal to "OpenRouter lists no model nobody/nothing".
+
+## Test: the prompt bound charges every byte as a token
+
+Expect that promptTokenBound(sampleRequest()) is equal to 83.
+
+## Test: a reservation is the worst case, and reconciliation the actual cost
+
+Inspect priceOf(sampleModels(), "openai/gpt-4o-mini"):
+    When Ok (p):
+        Let held be reservationMicros(p, sampleRequest()).
+        Expect that held is equal to 613.
+        Inspect parseChatReply(sampleReply()):
+            When Ok (reply):
+                Expect that actualCostMicros(p, reply, held) is equal to 231.
+                Let mutable unreported be reply.
+                Set unreported's costMicros to none.
+                Expect that actualCostMicros(p, unreported, held) is equal to 231.
+                Set unreported's usageKnown to false.
+                Expect that actualCostMicros(p, unreported, held) is equal to 613.
+            When Err (e):
+                Expect that e is equal to "no error".
+    When Err (e):
+        Expect that e is equal to "no error".
+
+## Test: a budget holds, settles and stops honestly
+
+Let b be newBudget(5000000).
+Inspect reserve(b, 613):
+    When Ok (held):
+        Expect that held's reservedMicros is equal to 613.
+        Let done be settle(held, 613, 231).
+        Expect that done's reservedMicros is equal to 0.
+        Expect that done's spentMicros is equal to 231.
+        Expect that budgetLeft(done) is equal to 4999769.
+    When Err (e):
+        Expect that e is equal to "no error".
+Inspect reserve(newBudget(500), 613):
+    When Ok (held):
+        Expect that held's reservedMicros is equal to -1.
+    When Err (e):
+        Expect that e is equal to "budget stop: the call may cost up to $0.000613, and $0.000500 of $0.000500 is left".
+
+## Test: a budget never goes negative through reservations
+
+For all integers limit and a and b:
+    Let mutable budget be newBudget(foldTo(limit, 1000000)).
+    Inspect reserve(budget, foldTo(a, 1000000)):
+        When Ok (h1):
+            Set budget to h1.
+        When Err (e):
+            Let ignored be e.
+    Inspect reserve(budget, foldTo(b, 1000000)):
+        When Ok (h2):
+            Set budget to h2.
+        When Err (e):
+            Let ignored be e.
+    Expect that budgetLeft(budget) is at least 0.
+
+## Test: the embedded model list is the recorded fixture
+
+This test may use the real filesystem.
+Inspect read("tests/fixtures/openrouter/models.sample.json"):
+    When Ok (text):
+        Expect that trimEnd(text) is equal to sampleModels().
+    When Err (e):
+        Expect that e is equal to "readable".

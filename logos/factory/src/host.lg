@@ -1,0 +1,245 @@
+# Host
+
+Every call that reaches outside the program lives in this file: files, the
+environment, other programs and the network. Everything else in the factory is
+written against these functions and nothing below them, so the rest of the code
+reads as policy and is tested as policy, and the edge where the world comes in is
+one page long.
+
+The file calls work in a test's sealed world (an in-memory filesystem), so the
+modules that keep state on disk are tested without touching a disk. A sealed world
+starts no process and opens no connection: the functions that run `largo` or talk
+to OpenRouter are exercised by the live tests (`largo test --live`), which say so.
+
+Import Shared.
+
+## Note
+Where the factory finds its tools and how far it trusts them to run: the `largo`
+it checks proofs with (`MACSAD_LARGO`, else `largo` on the `PATH`), the deadline
+of one kernel run, the output it keeps from one, and the directory it writes the
+documents it checks into (`MACSAD_WORK`, else `.macsad-work`).
+
+## A Toolchain has:
+    a largo, which is Text.
+    a kernelTimeoutMs, which is Int.
+    a maxOutput, which is Int.
+    a workDir, which is Text.
+
+## Note
+The value of an environment variable, or `fallback` when it is unset or empty.
+
+## To envOr (name: Text, fallback: Text) -> Text:
+    Inspect get(name):
+        When Some (v):
+            If trim(v) is equal to "":
+                Return fallback.
+            Return v.
+        When None:
+            Return fallback.
+    Return fallback.
+
+## Note
+The toolchain the environment describes.
+
+## To defaultToolchain () -> Toolchain:
+    Return a new Toolchain with largo envOr("MACSAD_LARGO", "largo") and kernelTimeoutMs 120000 and maxOutput 4194304 and workDir envOr("MACSAD_WORK", ".macsad-work").
+
+## Note
+A file's text.
+
+## To readText (path: Text) -> Result of Text and Text:
+    Return read(path).
+
+## Note
+A file's text replaced.
+
+## To writeText (path: Text, content: Text) -> Result of Unit and Text:
+    Return write(path, content).
+
+## Note
+Text added to the end of a file (created when absent): how every ledger in the
+factory grows, so an entry once written is never rewritten.
+
+## To appendText (path: Text, content: Text) -> Result of Unit and Text:
+    Return appendFile(path, content).
+
+## Note
+Whether anything is at a path.
+
+## To pathExists (path: Text) -> Bool:
+    Return fileExists(path).
+
+## Note
+The sorted names in a directory.
+
+## To listNames (dir: Text) -> Result of Seq of Text and Text:
+    Return listDir(dir).
+
+## Note
+A directory and every directory above it.
+
+## To ensureDir (dir: Text) -> Result of Unit and Text:
+    Return makeDirs(dir).
+
+## Note
+A file replaced all at once: written beside itself under a temporary name, then
+renamed over the old one, so a reader sees the old content or the new and never
+half of either.
+
+## To writeAtomically (path: Text, content: Text) -> Result of Unit and Text:
+    Let temporary be path + ".tmp".
+    Inspect write(temporary, content):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (done):
+            Return renameFile(temporary, path).
+    Return a new Err with error "unwritten".
+
+## Note
+The program's arguments, the program's own name first.
+
+## To programArgs () -> Seq of Text:
+    Return args().
+
+## Note
+The time, in Unix milliseconds.
+
+## To clockMs () -> Int:
+    Return now().
+
+## Note
+One run of `largo` with `args`, bounded by the toolchain's deadline and output cap.
+
+## To runLargo (tc: Toolchain, arguments: Seq of Text) -> Result of ProcessResult and Text:
+    Return runProcess(tc's largo, arguments, "", a new Map of Text to Text, tc's kernelTimeoutMs, tc's maxOutput).
+
+## Note
+A program run with `arguments`, for the tools the factory drives besides `largo`
+(`gzip`, `split`, `git`).
+
+## To runTool (program: Text, arguments: Seq of Text, timeoutMs: Int, maxOutput: Int) -> Result of ProcessResult and Text:
+    Return runProcess(program, arguments, "", a new Map of Text to Text, timeoutMs, maxOutput).
+
+## Note
+What one kernel run answered: its exit status, its report, and whether its
+deadline stopped it — the three things `kernelVerdict` reads.
+
+## A KernelRun has:
+    an exitCode, which is Int.
+    a stdout, which is Text.
+    a timedOut, which is Bool.
+
+## Note
+`document` checked by the kernel: written into the work directory under its own
+hash (so a document is checked from the bytes it hashes to, and two identical
+documents share one file), then `largo prove --kernel <file> --json`.
+
+## To kernelRun (tc: Toolchain, document: Text) -> Result of KernelRun and Text:
+    Inspect makeDirs(tc's workDir):
+        When Err (e):
+            Return a new Err with error "cannot make the work directory: " + e.
+        When Ok (made):
+            Let path be tc's workDir + "/" + sha256Hex(document) + ".lg".
+            Inspect write(path, document):
+                When Err (e):
+                    Return a new Err with error "cannot write the document: " + e.
+                When Ok (written):
+                    Inspect runLargo(tc, ["prove", "--kernel", path, "--json"]):
+                        When Err (e):
+                            Return a new Err with error "cannot run largo: " + e.
+                        When Ok (r):
+                            Return a new Ok with value (a new KernelRun with exitCode r's exitCode and stdout r's stdout and timedOut r's timedOut).
+    Return a new Err with error "unrun".
+
+## Note
+The key a worker calls OpenRouter with. It is read here, at the moment of the
+call, and handed to one header; nothing stores it.
+
+## To openRouterKey () -> Option of Text:
+    Return get("OPENROUTER_API_KEY").
+
+## Note
+One HTTP exchange.
+
+## To httpCall (method: Text, url: Text, headers: Map of Text to Text, body: Text, timeoutMs: Int) -> Result of HttpReply and Text:
+    Return httpRequest(method, url, headers, body, timeoutMs).
+
+## Test: the toolchain falls back to largo on the PATH and a local work directory
+
+Let tc be defaultToolchain().
+Expect that tc's largo is equal to "largo".
+Expect that tc's workDir is equal to ".macsad-work".
+Expect that tc's kernelTimeoutMs is equal to 120000.
+
+## Test: an atomic write replaces a file whole and leaves no temporary behind
+
+Inspect writeAtomically("ledger.json", "first"):
+    When Ok (a):
+        Let ignored be a.
+    When Err (e):
+        Expect that e is equal to "written".
+Inspect writeAtomically("ledger.json", "second"):
+    When Ok (b):
+        Let ignored be b.
+    When Err (e):
+        Expect that e is equal to "written".
+Inspect readText("ledger.json"):
+    When Ok (t):
+        Expect that t is equal to "second".
+    When Err (e):
+        Expect that e is equal to "readable".
+Expect that pathExists("ledger.json.tmp") is equal to false.
+
+## Test: appending grows a file one entry at a time
+
+Inspect ensureDir("trails/opdp"):
+    When Ok (d):
+        Let ignored be d.
+    When Err (e):
+        Expect that e is equal to "made".
+Inspect appendText("trails/opdp/116.jsonl", "one\n"):
+    When Ok (a):
+        Let ignored be a.
+    When Err (e):
+        Expect that e is equal to "appended".
+Inspect appendText("trails/opdp/116.jsonl", "two\n"):
+    When Ok (a):
+        Let ignored be a.
+    When Err (e):
+        Expect that e is equal to "appended".
+Inspect readText("trails/opdp/116.jsonl"):
+    When Ok (t):
+        Expect that t is equal to "one\ntwo\n".
+    When Err (e):
+        Expect that e is equal to "readable".
+Inspect listNames("trails/opdp"):
+    When Ok (names):
+        Expect that names is equal to ["116.jsonl"].
+    When Err (e):
+        Expect that e is equal to "listed".
+
+## Test: a sealed world starts no process
+
+Inspect runTool("true", [], 1000, 1000):
+    When Ok (r):
+        Expect that r's exitCode is equal to -1.
+    When Err (e):
+        Expect that length of e is greater than 0.
+
+## Test: the kernel checks a recorded fixture document for real
+
+This test may use the real filesystem.
+This test may use the real processes.
+This test may use the real environment.
+Let tc be defaultToolchain().
+Inspect readText("tests/fixtures/kernel/verified.lg"):
+    When Ok (doc):
+        Inspect kernelRun(tc, doc):
+            When Ok (run):
+                Expect that run's exitCode is equal to 0.
+                Expect that run's timedOut is equal to false.
+                Expect that run's stdout contains "'proof_of_goal' depends on no axioms".
+            When Err (e):
+                Expect that e is equal to "a run of " + tc's largo.
+    When Err (e):
+        Expect that e is equal to "readable".
