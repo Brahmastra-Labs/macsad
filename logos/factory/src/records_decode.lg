@@ -1,10 +1,10 @@
 # Records decode
 
-Import WireShape from "./wire_shape.lg".
-Import WireRead from "./wire_read.lg".
-Import VerdictRecord from "./verdict_record.lg".
-Import TrailRecord from "./trail_record.lg".
 Import AttemptRecord from "./attempt_record.lg".
+Import TrailRecord from "./trail_record.lg".
+Import VerdictRecord from "./verdict_record.lg".
+Import WireRead from "./wire_read.lg".
+Import WireShape from "./wire_shape.lg".
 
 Decoders for the records that carry a `Seq` field, which the derive encodes but
 does not decode (`LOGOS_ISSUES.md`, issue 1). Each is a closed shape check, then

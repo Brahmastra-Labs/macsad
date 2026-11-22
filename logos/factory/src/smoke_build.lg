@@ -1,11 +1,11 @@
 # Smoke check: attempts
 
+Import ArtifactRules from "./artifact_rules.lg".
 Import AttemptRecord from "./attempt_record.lg".
+Import CoordinatorWire from "./coordinator_wire.lg".
 Import TrailRecord from "./trail_record.lg".
 Import VerdictRecord from "./verdict_record.lg".
 Import WorkRecord from "./work_record.lg".
-Import ArtifactRules from "./artifact_rules.lg".
-Import CoordinatorWire from "./coordinator_wire.lg".
 
 An attempt as a worker builds one: the attempt, its trail entry sealed onto the
 head the worker last saw, and one artifact. `seed` makes the approach: two

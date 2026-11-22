@@ -1,15 +1,15 @@
 # Local run
 
+Import Budget from "./budget.lg".
+Import ChatRequest from "./chat_request.lg".
 Import Conventions from "./conventions.lg".
 Import HostFiles from "./host_files.lg".
-Import NodeRecord from "./node_record.lg".
-Import ChatRequest from "./chat_request.lg".
-Import Budget from "./budget.lg".
-Import Replay from "./replay.lg".
+Import Local from "./local.lg".
+Import LocalPlan from "./local_plan.lg".
 Import LocalSettings from "./local_settings.lg".
 Import LocalStore from "./local_store.lg".
-Import LocalPlan from "./local_plan.lg".
-Import Local from "./local.lg".
+Import NodeRecord from "./node_record.lg".
+Import Replay from "./replay.lg".
 
 Up to a number of attempts on one problem, stopping at the first verified one, at
 a budget stop, or when an attempt could not be made; and the two helpers that

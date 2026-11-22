@@ -1,11 +1,11 @@
 # Recording an attempt
 
-Import TrailRecord from "./trail_record.lg".
 Import AttemptRules from "./attempt_rules.lg".
-Import IntakePolicy from "./intake_policy.lg".
 Import CoordinatorWire from "./coordinator_wire.lg".
 Import DbIntake from "./db_intake.lg".
+Import IntakePolicy from "./intake_policy.lg".
 Import IntakeRecord from "./intake_record.lg".
+Import TrailRecord from "./trail_record.lg".
 
 The attempt intake inside one transaction: the coordinator's own facts are read
 and locked, the claim is checked against them (`attempt_rules.lg`), the policy

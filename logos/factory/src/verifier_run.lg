@@ -1,15 +1,15 @@
 # Verifier
 
-Import HostFiles from "./host_files.lg".
-Import HostTools from "./host_tools.lg".
-Import WireRead from "./wire_read.lg".
-Import TrailRecord from "./trail_record.lg".
-Import LocalAttempt from "./local_attempt.lg".
-Import LocalRun from "./local_run.lg".
 Import Attestation from "./attestation.lg".
 Import CoordinatorDb from "./coordinator_db.lg".
+Import HostFiles from "./host_files.lg".
+Import HostTools from "./host_tools.lg".
+Import LocalAttempt from "./local_attempt.lg".
+Import LocalRun from "./local_run.lg".
+Import TrailRecord from "./trail_record.lg".
 Import VerifierDb from "./verifier_db.lg".
 Import VerifierJudge from "./verifier_judge.lg".
+Import WireRead from "./wire_read.lg".
 
 `factory verifier` is the one process whose word settles a problem. It takes the
 `verify` units the coordinator queues straight from the database, judges each

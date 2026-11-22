@@ -1,8 +1,8 @@
 # Trail memory
 
 Import Conventions from "./conventions.lg".
-Import VerdictRecord from "./verdict_record.lg".
 Import TrailRecord from "./trail_record.lg".
+Import VerdictRecord from "./verdict_record.lg".
 
 What the factory learns from a trail: which approaches already failed, which
 failure keeps recurring, and how much was verified. The coordinator refuses to

@@ -1,10 +1,10 @@
 # Opdp row
 
-Import WireShape from "./wire_shape.lg".
-Import WireRead from "./wire_read.lg".
-Import WireNumber from "./wire_number.lg".
 Import ProblemRecord from "./problem_record.lg".
 Import RankScore from "./rank_score.lg".
+Import WireNumber from "./wire_number.lg".
+Import WireRead from "./wire_read.lg".
+Import WireShape from "./wire_shape.lg".
 
 One atlas record projected into a factory problem and the inputs it is ranked by.
 The key is the numeric `problem_id` (`opdp:116`); `problem_number` is not unique.

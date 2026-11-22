@@ -1,11 +1,11 @@
 # The atlas
 
-Import WebGraph from "../src/web_graph.lg".
 Import TextSet from "../src/text_set.lg".
-Import WebFormat from "../src/web_format.lg".
+Import UiAtlasRow from "../src/ui_atlas_row.lg".
 Import UiSite from "../src/ui_site.lg".
 Import UiStage from "../src/ui_stage.lg".
-Import UiAtlasRow from "../src/ui_atlas_row.lg".
+Import WebFormat from "../src/web_format.lg".
+Import WebGraph from "../src/web_graph.lg".
 
 The front page of macsad.com: every problem the factory holds, as a tree of
 cohorts, collections and categories, each branch coloured by where its problems

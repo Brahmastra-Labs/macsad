@@ -1,9 +1,9 @@
 # Problem part queries
 
 Import CoordinatorDb from "./coordinator_db.lg".
-Import WebProblem from "./web_problem.lg".
-Import WebBoard from "./web_board.lg".
 Import DbProblem from "./db_problem.lg".
+Import WebBoard from "./web_board.lg".
+Import WebProblem from "./web_problem.lg".
 
 The parts of a problem's page that are lists: the lemma tree below it, the
 verifier's verdicts on it, and its trail made displayable, newest first.

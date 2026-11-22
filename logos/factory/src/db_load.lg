@@ -1,9 +1,9 @@
 # Loading ingested problems
 
-Import ProblemRecord from "./problem_record.lg".
+Import LoadRules from "./load_rules.lg".
 Import NodeRecord from "./node_record.lg".
 Import OpdpProfile from "./opdp_profile.lg".
-Import LoadRules from "./load_rules.lg".
+Import ProblemRecord from "./problem_record.lg".
 
 The ingest roles write what a source holds as lines of JSON: `problems.jsonl`
 (one `Problem` a line), `nodes.jsonl` (the graph, parents first) and, for the

@@ -1,9 +1,9 @@
 # Smoke check: the scenario
 
 Import CoordinatorWire from "./coordinator_wire.lg".
-Import SmokeHttp from "./smoke_http.lg".
-Import SmokeBuild from "./smoke_build.lg".
 Import LoadRules from "./load_rules.lg".
+Import SmokeBuild from "./smoke_build.lg".
+Import SmokeHttp from "./smoke_http.lg".
 
 `factory coordinator smoke <base-url>` drives a running coordinator through the
 whole worker protocol on the fixture problem `smoke:coordinator`

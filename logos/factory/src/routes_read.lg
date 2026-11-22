@@ -1,11 +1,11 @@
 # Read routes
 
 Import ApiBounds from "./api_bounds.lg".
-Import HttpAnswers from "./http_answers.lg".
 Import ArtifactRules from "./artifact_rules.lg".
-Import SubmissionRead from "./submission_read.lg".
-Import DbGraph from "./db_graph.lg".
 Import DbBoard from "./db_board.lg".
+Import DbGraph from "./db_graph.lg".
+Import HttpAnswers from "./http_answers.lg".
+Import SubmissionRead from "./submission_read.lg".
 Import WebBoard from "./web_board.lg".
 
 `GET /api/v1/graph/children?node=<id>&offset=<n>&limit=<n>` answers one page of a

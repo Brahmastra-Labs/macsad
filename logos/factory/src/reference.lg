@@ -2,9 +2,9 @@
 
 Import RefExample from "./ref_example.lg".
 Import RefLanguage from "./ref_language.lg".
+Import RefProse from "./ref_prose.lg".
 Import RefTacticsBasic from "./ref_tactics_basic.lg".
 Import RefTacticsCompute from "./ref_tactics_compute.lg".
-Import RefProse from "./ref_prose.lg".
 
 The kernel reference every prompt carries, BUILT from its checked examples so it
 cannot quote one the checks did not run. The refusals are shown here: each

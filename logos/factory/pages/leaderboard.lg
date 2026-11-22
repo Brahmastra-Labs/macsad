@@ -1,8 +1,8 @@
 # The leaderboard
 
+Import UiSite from "../src/ui_site.lg".
 Import WebBoard from "../src/web_board.lg".
 Import WebFormat from "../src/web_format.lg".
-Import UiSite from "../src/ui_site.lg".
 
 Who runs the factory, `/leaderboard`: every contributor, first by the proofs the
 trusted verifier attested, then by proofs claimed, then by attempts. A dead end

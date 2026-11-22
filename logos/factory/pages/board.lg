@@ -1,8 +1,8 @@
 # The board
 
-Import WebBoard from "../src/web_board.lg".
-Import UiSite from "../src/ui_site.lg".
 Import UiBoard from "../src/ui_board.lg".
+Import UiSite from "../src/ui_site.lg".
+Import WebBoard from "../src/web_board.lg".
 
 The factory's board, `/board`: one lane per stage, in the order work moves, each
 with its count, the units waiting and leased in it, and its best-ranked problems.

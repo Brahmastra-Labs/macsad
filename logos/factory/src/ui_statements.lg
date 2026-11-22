@@ -1,7 +1,7 @@
 # Statement section
 
-Import WebProblem from "./web_problem.lg".
 Import WebFormat from "./web_format.lg".
+Import WebProblem from "./web_problem.lg".
 
 A problem's formal statements, fetched when the section appears: each a LOGOS
 kernel document with its goal, its hash, how it was made and how its review

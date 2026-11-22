@@ -1,9 +1,9 @@
 # Manifest entry
 
-Import WireShape from "./wire_shape.lg".
-Import WireRead from "./wire_read.lg".
-Import ProblemRecord from "./problem_record.lg".
 Import MscCategory from "./msc_category.lg".
+Import ProblemRecord from "./problem_record.lg".
+Import WireRead from "./wire_read.lg".
+Import WireShape from "./wire_shape.lg".
 
 One entry of Alejandro's formalization-lab manifest as a factory problem. The
 lab pins 200 open statements at exact upstream commits; an entry becomes

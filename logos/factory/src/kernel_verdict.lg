@@ -1,9 +1,9 @@
 # Kernel verdict
 
 Import Conventions from "./conventions.lg".
-Import VerdictRecord from "./verdict_record.lg".
 Import KernelReport from "./kernel_report.lg".
 Import NodeRecord from "./node_record.lg".
+Import VerdictRecord from "./verdict_record.lg".
 
 The acceptance policy, applied to one kernel run. It is fixed, and no agent can
 edit it: every block checked; the closing `Check <proof>.` printed exactly

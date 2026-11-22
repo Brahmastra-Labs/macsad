@@ -2,14 +2,14 @@
 
 Import HostFiles from "./host_files.lg".
 Import HostTools from "./host_tools.lg".
+Import LocalRun from "./local_run.lg".
+Import LocalStore from "./local_store.lg".
+Import RolesVerify from "./roles_verify.lg".
+Import SelftestPolicy from "./selftest_policy.lg".
+Import SelftestRecords from "./selftest_records.lg".
+Import SelftestSources from "./selftest_sources.lg".
 Import TrailRecord from "./trail_record.lg".
 Import Verifier from "./verifier.lg".
-Import LocalStore from "./local_store.lg".
-Import LocalRun from "./local_run.lg".
-Import SelftestRecords from "./selftest_records.lg".
-Import SelftestPolicy from "./selftest_policy.lg".
-Import SelftestSources from "./selftest_sources.lg".
-Import RolesVerify from "./roles_verify.lg".
 
 `factory selftest` runs, from the project directory, every check that crosses
 modules — the integration the leaf `## Test`s cannot hold. `--live` adds the

@@ -1,17 +1,17 @@
 # Worker prompt
 
-Import HostFiles from "./host_files.lg".
-Import ProblemRecord from "./problem_record.lg".
-Import NodeRecord from "./node_record.lg".
-Import WorkRecord from "./work_record.lg".
-Import TrailRecord from "./trail_record.lg".
-Import TrailMemory from "./trail_memory.lg".
-Import KernelBlocks from "./kernel_blocks.lg".
 Import ChatRequest from "./chat_request.lg".
-Import Prompts from "./prompts.lg".
-Import LocalSettings from "./local_settings.lg".
-Import LocalPlan from "./local_plan.lg".
 Import CoordinatorWire from "./coordinator_wire.lg".
+Import HostFiles from "./host_files.lg".
+Import KernelBlocks from "./kernel_blocks.lg".
+Import LocalPlan from "./local_plan.lg".
+Import LocalSettings from "./local_settings.lg".
+Import NodeRecord from "./node_record.lg".
+Import ProblemRecord from "./problem_record.lg".
+Import Prompts from "./prompts.lg".
+Import TrailMemory from "./trail_memory.lg".
+Import TrailRecord from "./trail_record.lg".
+Import WorkRecord from "./work_record.lg".
 Import WorkerClient from "./worker_client.lg".
 
 What a leased unit asks its model, built from the grant alone — the problem, the

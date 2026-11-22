@@ -1,14 +1,14 @@
 # Selftest records
 
-Import Conventions from "./conventions.lg".
-Import VerdictRecord from "./verdict_record.lg".
-Import TrailRecord from "./trail_record.lg".
-Import TrailMemory from "./trail_memory.lg".
-Import TrailDigest from "./trail_digest.lg".
 Import AttemptRecord from "./attempt_record.lg".
-Import RecordsDecode from "./records_decode.lg".
+Import Conventions from "./conventions.lg".
 Import RankScore from "./rank_score.lg".
 Import RankTrail from "./rank_trail.lg".
+Import RecordsDecode from "./records_decode.lg".
+Import TrailDigest from "./trail_digest.lg".
+Import TrailMemory from "./trail_memory.lg".
+Import TrailRecord from "./trail_record.lg".
+Import VerdictRecord from "./verdict_record.lg".
 
 The checks that cross modules, which the macsad test contract cannot hold as
 `## Test`s (a test-bearing module must import nothing): the hand decoders against

@@ -1,10 +1,10 @@
 # Trail digest
 
 Import Conventions from "./conventions.lg".
-Import TrailRecord from "./trail_record.lg".
-Import TrailMemory from "./trail_memory.lg".
 Import RankScore from "./rank_score.lg".
 Import RankTrail from "./rank_trail.lg".
+Import TrailMemory from "./trail_memory.lg".
+Import TrailRecord from "./trail_record.lg".
 
 What a model reads about a problem's past before attempting it: the tally, the
 last few attempts newest first with what the kernel said, every distinct failure

@@ -1,12 +1,12 @@
 # Verifier
 
 Import HostTools from "./host_tools.lg".
-Import VernacularCommand from "./vernacular_command.lg".
-Import SubmissionPolicy from "./submission_policy.lg".
-Import ProofDocument from "./proof_document.lg".
-Import VerdictRecord from "./verdict_record.lg".
 Import KernelReport from "./kernel_report.lg".
 Import KernelVerdict from "./kernel_verdict.lg".
+Import ProofDocument from "./proof_document.lg".
+Import SubmissionPolicy from "./submission_policy.lg".
+Import VerdictRecord from "./verdict_record.lg".
+Import VernacularCommand from "./vernacular_command.lg".
 
 The judgement of a submission, start to finish, cheapest first: read it, probe
 every name it declares, check the assembled document with the kernel, apply the
