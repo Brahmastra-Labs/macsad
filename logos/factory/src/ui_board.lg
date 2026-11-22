@@ -1,0 +1,47 @@
+# Board lanes
+
+Import WebBoard from "./web_board.lg".
+Import WebFormat from "./web_format.lg".
+
+One lane of the board: a stage, how many problems stand in it, the units waiting
+and leased on them, and its best-ranked problems, each with the unit being worked
+on it, if any, and who holds it.
+
+## Note
+Whether a card belongs in a lane.
+
+## To laneCards (cards: Seq of BoardCard, stage: Text) -> Seq of BoardCard:
+    Let mutable out be a new Seq of BoardCard.
+    Repeat for c in cards:
+        If c's stage is equal to stage:
+            Push c to out.
+    Return out.
+
+## Note
+What a card says about the work on its problem.
+
+## To workLine (c: BoardCard) -> Text:
+    If c's unitKind is equal to "":
+        Return c's cohort + " · " + c's collection.
+    If c's holder is equal to "":
+        Return c's unitKind + " waiting · " + c's collection.
+    Return c's unitKind + " leased by " + c's holder.
+
+## Component LaneColumn (lane: BoardLane) and (cards: Seq of BoardCard)
+
+View:
+    <section class="lane" id="lane-{lane's stage}">
+      <div class="lane-head">
+        <span class="stage-label"><span class="dot s-{lane's stage}"></span>{stageLabel(lane's stage)}</span>
+        <span class="lane-count">{formatCount(lane's problems)}</span>
+      </div>
+      <div class="lane-units">{formatCount(lane's readyUnits)} units waiting · {formatCount(lane's leasedUnits)} leased</div>
+      {for each c in laneCards(cards, lane's stage), keyed by c's problemId:}
+        <a class="board-card" href="/problem?id={urlEncode(c's problemId)}">
+          <div class="title">{c's title}</div>
+          <div class="meta">{workLine(c)}</div>
+        </a>
+      {else:}
+        <p class="empty">No problem stands here yet.</p>
+      {end}
+    </section>

@@ -1,0 +1,96 @@
+# A problem
+
+Import WebProblem from "../src/web_problem.lg".
+Import UiSite from "../src/ui_site.lg".
+Import UiProfile from "../src/ui_profile.lg".
+Import UiTrail from "../src/ui_trail.lg".
+Import UiStatements from "../src/ui_statements.lg".
+Import UiResults from "../src/ui_results.lg".
+
+One problem's page, `/problem?id=<problem id>`: the problem and its OPDP profile,
+its formal statements, every attempt on its trail with what the kernel said, the
+lemma tree below it, and the verdicts the trusted verifier signed. The id travels
+in the query because problem ids may hold slashes; a visitor may also paste one
+into the form. Each section fetches its own list when it appears.
+
+## Page /problem
+
+Head:
+    <title>MaCSad — a problem</title>
+
+State:
+    Let id be "".
+    Let draft be "".
+    Let problem be a new ProblemView.
+    Let found be false.
+    Let error be "".
+
+Actions:
+    To open (pid: Text):
+        If trim(pid) is equal to "":
+            Return.
+        Set id to trim(pid).
+        Set found to false.
+        Set error to "".
+        Get "/api/v1/problem?id=" + urlEncode(id) as ProblemView, then arrived.
+
+    When the page loads:
+        Call open with routeQuery("id").
+
+    To submitId:
+        Call open with draft.
+
+    To arrived (answer: Result of ProblemView and HttpError):
+        Inspect answer:
+            When Ok (p):
+                Set problem to p.
+                Set found to true.
+                Set the title to "MaCSad — " + p's title.
+            When Err (e):
+                Set error to e's message.
+
+View:
+    {extends Site}
+    {block content:}
+      <form class="form-row" id="open-form" on-submit.prevent={submitId}>
+        <label>Problem id<input id="problem-id" bind={draft} placeholder="opdp:116, op:OP022, fc:ErdosProblems/10"></label>
+        <button class="primary" type="submit">Open</button>
+      </form>
+      {if error is not equal to "":}<p class="error-banner" role="alert" id="error">{error}</p>{end}
+      {if found:}
+        <ProblemHead p={problem}/>
+        <div class="grid-2">
+          <div class="stack"><ProblemProfile p={problem}/><StatementSection pid={id}/><TrailSection pid={id} check={problem's trailCheck}/></div>
+          <div class="stack"><ResultSection pid={id}/><LemmaSection pid={id}/></div>
+        </div>
+      {else:}
+        <p class="empty" id="pick">Open a problem from the <a href="/">atlas</a>, or paste its id above.</p>
+      {end}
+    {end}
+
+## Test: a problem opens with its profile and an empty trail
+
+Given that GET "/api/v1/problem?id=opdp%3A116" answers 200 with """{{"id": "opdp:116", "title": "Gowers box norms", "status": "open",
+  "stage": "ranked", "rankBp": 6100, "source": "opdp", "cohort": "UnsolvedMath", "collection": "green-problems", "category": "combinatorics",
+  "statementInformal": "Let p be an odd prime.", "leanStatement": "", "leanModule": "", "leanDeclaration": "", "externalKey": "GREEN-1",
+  "crossRef": "", "difficultyLabel": "T4 Hard", "difficulty": "7.9", "tier": "T4", "aiFit": "AI-favorable", "aiDifficulty": "6.1",
+  "tractability": "T3", "progress": "10-20%", "formalization": "3.1", "verification": "4.0", "toolLeverage": "5.5",
+  "route": "Literature audit", "effortHours": "300-1,000", "explanation": "A serious project.", "attempts": 2, "claimed": 0,
+  "attested": 0, "spentMicros": 1250, "trailLength": 2, "deadEnds": 1, "openUnits": 1, "trailCheck": "intact"}}""".
+Given that GET "/api/v1/problem/timeline?id=opdp%3A116&limit=200" answers 200 with "[]".
+Given that GET "/api/v1/problem/statements?id=opdp%3A116" answers 200 with "[]".
+Type "opdp:116" into "#problem-id".
+Submit "#open-form".
+Expect that the text of "#problem-title" is equal to "Gowers box norms".
+Expect that the text of "#attempts" is equal to "2".
+Expect that the count of "#opdp div" is equal to 10.
+Expect that the text of "#trail-check" is equal to "chain intact".
+Expect that the text of "#no-statements" is equal to "No formal statement yet: the problem is waiting for a formalize unit.".
+
+## Test: an unknown problem says so and draws nothing
+
+Given that GET "/api/v1/problem?id=nope" answers 404 with "problem nope is not known to the coordinator".
+Type "nope" into "#problem-id".
+Submit "#open-form".
+Expect that the text of "#error" is equal to "404: problem nope is not known to the coordinator".
+Expect that "#problem-title" is hidden.

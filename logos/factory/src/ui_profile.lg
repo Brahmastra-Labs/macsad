@@ -1,0 +1,59 @@
+# Problem profile
+
+Import WebProblem from "./web_problem.lg".
+Import WebFormat from "./web_format.lg".
+Import UiStage from "./ui_stage.lg".
+
+The head of a problem's page: where it comes from and stands, its statement as
+the source gives it, and the OPDP atlas's profile of it when the atlas covers it.
+
+## Component ProblemHead (p: ProblemView)
+
+View:
+    <section class="page-head">
+      <div>
+        <div class="eyebrow">{p's cohort} · {p's collection} · {p's category}</div>
+        <h1 id="problem-title">{p's title}</h1>
+        <div class="statement-head">
+          <StageMark stage={p's stage}/>
+          <span class="chip">{p's status}</span>
+          <span class="chip kind">{p's id}</span>
+          {if p's externalKey is not equal to "":}<span class="chip">{p's externalKey}</span>{end}
+        </div>
+      </div>
+      <div class="totals">
+        <div class="total"><b id="attempts">{formatCount(p's attempts)}</b><span>attempts</span></div>
+        <div class="total"><b id="attested">{formatCount(p's attested)}</b><span>attested</span></div>
+        <div class="total"><b>{formatMoney(p's spentMicros)}</b><span>spent</span></div>
+      </div>
+    </section>
+
+## Component ProblemProfile (p: ProblemView)
+
+View:
+    <div class="card">
+      <h2>The problem</h2>
+      {if p's statementInformal is not equal to "":}<p id="informal">{p's statementInformal}</p>{end}
+      {if p's leanStatement is not equal to "":}
+        <div class="eyebrow">Lean statement · {p's leanDeclaration}</div>
+        <pre class="doc" id="lean">{p's leanStatement}</pre>
+      {end}
+      {if p's difficulty is not equal to "":}
+        <h3>OPDP profile</h3>
+        <dl class="facts" id="opdp">
+          <div><dt>Difficulty</dt><dd>{p's difficultyLabel}</dd></div>
+          <div><dt>Intrinsic</dt><dd>{p's difficulty} · {p's tier}</dd></div>
+          <div><dt>AI fit</dt><dd>{p's aiFit}</dd></div>
+          <div><dt>AI difficulty</dt><dd>{p's aiDifficulty}</dd></div>
+          <div><dt>Tractability</dt><dd>{p's tractability}</dd></div>
+          <div><dt>Chance of progress</dt><dd>{p's progress}</dd></div>
+          <div><dt>Formalization burden</dt><dd>{p's formalization}</dd></div>
+          <div><dt>Verification burden</dt><dd>{p's verification}</dd></div>
+          <div><dt>Tool leverage</dt><dd>{p's toolLeverage}</dd></div>
+          <div><dt>Specialist hours</dt><dd>{p's effortHours}</dd></div>
+        </dl>
+        <p class="muted">{p's route}. {p's explanation}</p>
+      {else:}
+        <p class="muted">The OPDP atlas does not profile this problem.</p>
+      {end}
+    </div>

@@ -1,0 +1,81 @@
+# Intake state
+
+Import CoordinatorDb from "./coordinator_db.lg".
+Import LoadRules from "./load_rules.lg".
+
+What the coordinator itself knows when an attempt arrives, read inside the
+attempt's transaction: the unit, locked (`FOR UPDATE`), so its lease cannot move
+while the attempt is recorded; then the problem's trail, locked with the same
+advisory lock the schema's append trigger takes, so no other attempt can append
+to it until this one commits; then its head, and whether the approach is already
+a dead end.
+
+## A IntakeState has:
+    a found, which is Bool.
+    a state, which is Text.
+    a holder, which is Text.
+    a token, which is Int.
+    a problemId, which is Text.
+    a kind, which is Text.
+    a statementId, which is Text.
+    a live, which is Bool.
+    a priority, which is Int.
+    a headSeq, which is Int.
+    a headHash, which is Text.
+    a deadEnd, which is Bool.
+
+## To unitLockSql () -> Text:
+    Let mutable q be ["SELECT json_build_object('found', true, 'state', u.state, 'holder', coalesce(u.holder, ''),"].
+    Push "'token', coalesce(u.lease_token, 0), 'problemId', u.problem_id, 'kind', u.kind, 'statementId', coalesce(u.statement_id, '')," to q.
+    Push "'live', coalesce(u.state = 'leased' AND u.expires_at >= clock_timestamp(), false), 'priority', u.priority," to q.
+    Push "'headSeq', 0, 'headHash', '', 'deadEnd', false)::text FROM factory.work_unit u WHERE u.id = $1 FOR UPDATE" to q.
+    Return join(q, " ").
+
+## To trailLockSql () -> Text:
+    Return "SELECT pg_advisory_xact_lock(hashtextextended('factory:trail:' || $1, 0))::text".
+
+## To headSql () -> Text:
+    Let mutable q be ["SELECT json_build_object('seq', coalesce((SELECT max(seq) FROM factory.trail_entry WHERE problem_id = $1), 0),"].
+    Push "'hash', coalesce((SELECT hash FROM factory.trail_entry WHERE problem_id = $1 ORDER BY seq DESC LIMIT 1), repeat('0', 64))," to q.
+    Push "'deadEnd', EXISTS (SELECT 1 FROM factory.dead_end WHERE problem_id = $1 AND approach_fingerprint = $2))::text" to q.
+    Return join(q, " ").
+
+## Note
+The state for an attempt on `unitId` with approach `fingerprint`, on a connection
+inside a transaction. A unit the coordinator does not hold is `found: false`.
+
+## To intakeStateOn (c: PgConn, unitId: Text, fingerprint: Text) -> Result of IntakeState and Text:
+    Inspect pgQueryParams(c, unitLockSql(), [unitId]):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (qr):
+            If length of qr's rows is equal to 0:
+                Return a new Ok with value (a new IntakeState with found false).
+            Inspect pgTextAt(qr, 1, 1):
+                When Err (e):
+                    Return a new Err with error e.
+                When Ok (text):
+                    Inspect fromJson_IntakeState(text):
+                        When Err (e):
+                            Return a new Err with error "IntakeState: " + e.
+                        When Ok (st):
+                            Return headOn(c, st, fingerprint).
+    Return a new Err with error "no state".
+
+## To headOn (c: PgConn, st: IntakeState, fingerprint: Text) -> Result of IntakeState and Text:
+    Inspect dbCellOn(c, trailLockSql(), [st's problemId]):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (locked):
+            Let held be locked.
+    Inspect dbCellOn(c, headSql(), [st's problemId, fingerprint]):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (text):
+            Let v be jsonParse(text).
+            Let mutable out be st.
+            Set out's headSeq to intOfJson(jsonGet(v, "seq")).
+            Set out's headHash to textOfJson(jsonGet(v, "hash")).
+            Set out's deadEnd to boolOfJson(jsonGet(v, "deadEnd")).
+            Return a new Ok with value out.
+    Return a new Err with error "no head".

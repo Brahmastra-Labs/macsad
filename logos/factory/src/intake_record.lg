@@ -1,0 +1,112 @@
+# Writing an accepted attempt
+
+Import CoordinatorDb from "./coordinator_db.lg".
+Import CoordinatorWire from "./coordinator_wire.lg".
+Import DbIntake from "./db_intake.lg".
+Import IntakeFollow from "./intake_follow.lg".
+Import StageRules from "./stage_rules.lg".
+Import ArtifactRules from "./artifact_rules.lg".
+Import TrailRecord from "./trail_record.lg".
+Import IntakePolicy from "./intake_policy.lg".
+Import IntakeWrite from "./intake_write.lg".
+
+An accepted attempt's rows, in their order: the attempt, its trail entry —
+resealed onto the head when it was written against an older one — then the dead
+end, the spend and the end of the lease, then the units it queues. The attempt
+is stored under the coordinator's id for it, one per lease: `a:<unit>:<token>`.
+
+Which units an accepted attempt queues, by the kind of its unit and the verdict
+its worker reported (see `intake_follow.lg` for the rules in words).
+
+## Note
+The units queued after an attempt whose verdict kind is `verdict`; `claimed` is
+whether that verdict claims a proof.
+
+## To queueAfter (c: PgConn, st: IntakeState, s: AttemptSubmission, verdict: Text, claimed: Bool) -> Result of Queued and Text:
+    Let none be a new Queued with verifyUnit "" and followUnit "".
+    If st's kind is equal to "review":
+        Return afterReview(c, st, s's unitId).
+    If st's kind is equal to "formalize" and claimed:
+        Return afterDraft(c, st, s).
+    If claimed and isProgressKind(st's kind):
+        Inspect queueOn(c, st, st's statementId, s's unitId, "verify"):
+            When Err (e):
+                Return a new Err with error e.
+            When Ok (id):
+                Return a new Ok with value (a new Queued with verifyUnit id and followUnit "").
+    Let next be followUpKind(st's kind, verdict).
+    If next is equal to "":
+        Return a new Ok with value none.
+    Inspect queueOn(c, st, st's statementId, s's unitId, next):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (id):
+            Return a new Ok with value (a new Queued with verifyUnit "" and followUnit id).
+    Return a new Ok with value none.
+
+## Note
+A checked statement draft stored for review, and its first review queued. A
+`formalize` attempt that claims a statement but carries none is refused earlier.
+
+## To afterDraft (c: PgConn, st: IntakeState, s: AttemptSubmission) -> Result of Queued and Text:
+    Inspect s's draft:
+        When None:
+            Return a new Err with error "a formalize attempt that checked must carry its statement draft".
+        When Some (d):
+            Let sha be contentSha(d's document).
+            Let ps be [st's problemId, d's document, sha, d's goalName, d's route, s's holder, s's attempt's model].
+            Inspect dbCellOn(c, draftInsertSql() + " RETURNING id", ps):
+                When Err (e):
+                    Let reused be e.
+                When Ok (id):
+                    Let stored be id.
+            Inspect queueOn(c, st, "stmt:" + sha, s's unitId, "review"):
+                When Err (e):
+                    Return a new Err with error e.
+                When Ok (id):
+                    Return a new Ok with value (a new Queued with verifyUnit "" and followUnit id).
+    Return a new Err with error "no draft".
+
+## Note
+What the intake answers: the status, and the receipt the worker reads.
+
+## A IntakeResult has:
+    a status, which is Int.
+    a receipt, which is AttemptReceipt.
+
+## To intakeRefusal (status: Int, outcome: Text, detail: Text) -> IntakeResult:
+    Return a new IntakeResult with status status and receipt (a new AttemptReceipt with accepted false and outcome outcome and detail detail).
+
+## To recordOn (c: PgConn, st: IntakeState, s: AttemptSubmission, d: IntakeDecision) -> Result of IntakeResult and Text:
+    Let attemptId be "a:" + s's unitId + ":" + "{s's token}".
+    Let mutable entry be s's entry.
+    If d's reseal:
+        Set entry to sealEntry(entry, st's headSeq + 1, st's headHash).
+    Inspect insertAttempt(c, attemptId, s's attempt):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (done):
+            Let stored be done.
+    Inspect insertEntry(c, entry):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (done):
+            Let chained be done.
+    Inspect closeAttempt(c, s's attempt, attemptId, d's recordDeadEnd, s's token):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (done):
+            Let closed be done.
+    Inspect queueAfter(c, st, s, s's attempt's verdict's kind, d's enqueueVerify):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (q):
+            Let mutable r be a new AttemptReceipt with accepted true and outcome d's outcome and attemptId attemptId.
+            Set r's detail to "recorded as entry {entry's seq} of the trail of " + st's problemId.
+            Set r's trailSeq to entry's seq.
+            Set r's trailHash to entry's hash.
+            Set r's resealed to d's reseal.
+            Set r's verifyUnit to q's verifyUnit.
+            Set r's followUnit to q's followUnit.
+            Return a new Ok with value (a new IntakeResult with status d's status and receipt r).
+    Return a new Err with error "unrecorded".

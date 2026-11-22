@@ -1,0 +1,71 @@
+# The leaderboard
+
+Import WebBoard from "../src/web_board.lg".
+Import WebFormat from "../src/web_format.lg".
+Import UiSite from "../src/ui_site.lg".
+
+Who runs the factory, `/leaderboard`: every contributor, first by the proofs the
+trusted verifier attested, then by proofs claimed, then by attempts. A dead end
+found counts in a contributor's favour: it is an approach nobody pays for again.
+
+## Page /leaderboard
+
+Head:
+    <title>MaCSad — leaderboard</title>
+
+State:
+    Let rows be a new Seq of LeaderRow.
+    Let error be "".
+
+Actions:
+    When the page loads:
+        Get "/api/v1/leaderboard" as Seq of LeaderRow, then arrived.
+
+    To arrived (answer: Result of Seq of LeaderRow and HttpError):
+        Inspect answer:
+            When Ok (list):
+                Set rows to list.
+            When Err (e):
+                Set error to e's message.
+
+View:
+    {extends Site}
+    {block content:}
+      <PageHead eyebrow="Leaderboard" title="The people and models behind every proof">
+        <p class="lede">Each contributor brings an OpenRouter key and a budget. Attested proofs passed the trusted verifier;
+          claimed ones wait for it.</p>
+      </PageHead>
+      {if error is not equal to "":}<p class="error-banner" role="alert" id="error">{error}</p>{end}
+      <div class="card">
+        <table class="data" id="leaders">
+          <thead><tr><th>#</th><th>Contributor</th><th class="num">Attested</th><th class="num">Claimed</th><th class="num">Attempts</th>
+            <th class="num">Dead ends</th><th class="num">Spent</th><th class="num">Budget</th><th>Last attempt</th></tr></thead>
+          <tbody>
+            {for each r in rows, keyed by r's contributor, at index i:}
+              <tr class="leader">
+                <td>{i}</td><td><b>{r's displayName}</b> <span class="hash">{r's contributor}</span></td>
+                <td class="num">{formatCount(r's attested)}</td><td class="num">{formatCount(r's claimed)}</td>
+                <td class="num">{formatCount(r's attempts)}</td><td class="num">{formatCount(r's deadEnds)}</td>
+                <td class="num">{formatMoney(r's spentMicros)}</td><td class="num">{formatMoney(r's budgetMicros)}</td>
+                <td>{formatStamp(r's lastSeen)}</td>
+              </tr>
+            {else:}
+              <tr><td colspan="9" class="empty">Nobody has contributed yet. <a href="/contribute">Be the first.</a></td></tr>
+            {end}
+          </tbody>
+        </table>
+      </div>
+    {end}
+
+## Test: contributors are listed with their spend in dollars
+
+Given that GET "/api/v1/leaderboard" answers 200 with """[{{"contributor": "ada-1", "displayName": "Ada", "attempts": 12,
+  "claimed": 2, "attested": 1, "deadEnds": 4, "spentMicros": 1250000, "budgetMicros": 5000000, "lastSeen": 1795000000000}}]""".
+Expect that the count of ".leader" is equal to 1.
+Expect that the text of ".leader b" is equal to "Ada".
+Expect that the text of "#leaders tbody td.num" is equal to "1".
+
+## Test: an empty leaderboard invites the first contributor
+
+Given that GET "/api/v1/leaderboard" answers 200 with "[]".
+Expect that the text of ".empty a" is equal to "Be the first.".

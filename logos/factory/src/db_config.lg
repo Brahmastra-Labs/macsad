@@ -1,0 +1,103 @@
+# Database configuration
+
+Where the coordinator's database is, from the environment its container is given:
+`MACSAD_DATABASE_HOST`, `MACSAD_DATABASE_PORT`, `MACSAD_DATABASE_NAME`,
+`MACSAD_DATABASE_USER`, and `MACSAD_DATABASE_PASSWORD_FILE`, the file holding the
+password. The password is read from that file and never from the environment, so
+it appears in no process listing and no crash report; the connection URL is built
+in memory, used, and never printed. `MACSAD_DATABASE_TLS=require` makes the
+connection refuse a server that will not encrypt, for a database across a network
+the coordinator does not own.
+
+This module checks the pieces; reading the environment and the file is the
+caller's.
+
+## Note
+The password a secret file holds: its first line, without the line break a text
+editor or `openssl rand -hex 32 > file` leaves after it.
+
+## To passwordFromFile (content: Text) -> Text:
+    Let first be item 1 of lines(content + "\n").
+    Return trimEnd(first).
+
+## Note
+Whether a host name or address is safe to place in a URL: letters, digits, dots
+and dashes, as a container network names a service.
+
+## To isHostName (t: Text) -> Bool:
+    If length of t is equal to 0 or length of t is greater than 253:
+        Return false.
+    Repeat for b in text_bytes(t):
+        Let letter be (b is at least 97 and b is at most 122) or (b is at least 65 and b is at most 90).
+        If (letter or (b is at least 48 and b is at most 57) or b is equal to 46 or b is equal to 45) is equal to false:
+            Return false.
+    Return true.
+
+## Note
+Whether a database or role name is a plain identifier: a letter or underscore,
+then letters, digits and underscores, at most 63 bytes as PostgreSQL allows.
+
+## To isSqlName (t: Text) -> Bool:
+    If length of t is equal to 0 or length of t is greater than 63:
+        Return false.
+    Let mutable first be true.
+    Repeat for b in text_bytes(t):
+        Let word be (b is at least 97 and b is at most 122) or (b is at least 65 and b is at most 90) or b is equal to 95.
+        If (word or (first is equal to false and b is at least 48 and b is at most 57)) is equal to false:
+            Return false.
+        Set first to false.
+    Return true.
+
+## Note
+The connection URL, or what is wrong with the pieces. A password may hold any
+byte but the ones that would end the URL's user part.
+
+## To databaseUrl (host: Text, port: Int, name: Text, user: Text, password: Text) -> Result of Text and Text:
+    If isHostName(host) is equal to false:
+        Return a new Err with error "MACSAD_DATABASE_HOST is not a host name".
+    If port is less than 1 or port is greater than 65535:
+        Return a new Err with error "MACSAD_DATABASE_PORT is not a port".
+    If isSqlName(name) is equal to false or isSqlName(user) is equal to false:
+        Return a new Err with error "MACSAD_DATABASE_NAME and MACSAD_DATABASE_USER must be plain identifiers".
+    If length of password is equal to 0 or password contains "@" or password contains "/":
+        Return a new Err with error "the database password file is empty or holds @ or /".
+    Return a new Ok with value "postgres://" + user + ":" + password + "@" + host + ":" + "{port}" + "/" + name.
+
+## Note
+Whether the TLS setting demands an encrypted connection. Only the exact word
+`require` does; anything else connects in the clear, as on the internal network
+of the compose stack.
+
+## To requiresTls (setting: Text) -> Bool:
+    Return trim(setting) is equal to "require".
+
+## Test: database passwords come from the first line of their file
+
+Expect that passwordFromFile("0123abcd\n") is equal to "0123abcd".
+Expect that passwordFromFile("0123abcd\r\n") is equal to "0123abcd".
+Expect that passwordFromFile("0123abcd") is equal to "0123abcd".
+Expect that passwordFromFile("") is equal to "".
+
+## Test: database URLs are built only from checked pieces
+
+Inspect databaseUrl("postgres", 5432, "macsad", "macsad_runtime", "ab12"):
+    When Ok (u):
+        Expect that u is equal to "postgres://macsad_runtime:ab12@postgres:5432/macsad".
+    When Err (e):
+        Expect that e is equal to "built".
+Inspect databaseUrl("postgres", 5432, "mac sad", "macsad_runtime", "ab12"):
+    When Ok (u):
+        Expect that u is equal to "refused".
+    When Err (e):
+        Expect that e contains "plain identifiers".
+Expect that isHostName("172.17.0.2") is equal to true.
+Expect that isHostName("db/evil") is equal to false.
+Expect that isSqlName("1abc") is equal to false.
+
+## Test: database TLS is required only when asked
+
+For all booleans asked:
+    Let mutable setting be "".
+    If asked:
+        Set setting to "require".
+    Expect that requiresTls(setting) is equal to asked.

@@ -1,0 +1,80 @@
+# Coordinator wire
+
+Import WorkRecord from "./work_record.lg".
+Import ProblemRecord from "./problem_record.lg".
+Import NodeRecord from "./node_record.lg".
+Import AttemptRecord from "./attempt_record.lg".
+Import TrailRecord from "./trail_record.lg".
+Import ArtifactRules from "./artifact_rules.lg".
+
+What the coordinator answers a worker, and the attempt a worker posts. The
+answers reuse the factory's own records, so a worker decodes a grant with the
+derived `fromJson_LeaseGrant` and finds in it the `WorkUnit`, `Lease`,
+`Problem`, `Statement` and `Strategy` it already knows.
+
+## Note
+The answer to a lease request. `granted` is false when no unit fits, and
+`reason` says why. `secret` authenticates the worker's heartbeats and attempt on
+this lease (`lease_secret.lg`). `trailDigest` is what the model reads about the
+problem's past; `trailSeq` and `trailHead` are the trail's last entry, the place
+the attempt's own entry chains from. `context` is what the worker must know
+before it starts, such as that the statement is an excerpt to complete first.
+
+## A LeaseGrant has:
+    a granted, which is Bool.
+    a reason, which is Text.
+    a secret, which is Text.
+    a lease, which is Option of Lease.
+    a unit, which is Option of WorkUnit.
+    a problem, which is Option of Problem.
+    a statement, which is Option of Statement.
+    a strategy, which is Option of Strategy.
+    a trailDigest, which is Text.
+    a trailSeq, which is Int.
+    a trailHead, which is Text.
+    a deadEnds, which is Int.
+    a context, which is Text.
+
+## A HeartbeatAnswer has:
+    an alive, which is Bool.
+    an expiresAt, which is Int.
+
+## Note
+What became of a posted attempt. `outcome` is the intake's code (`recorded`,
+`awaiting_verifier`, or why it was refused); `trailSeq` and `trailHash` are the
+entry as stored, which differ from the posted one when it was `resealed` onto a
+newer head; `verifyUnit` and `followUnit` are the units the attempt queued.
+
+## A AttemptReceipt has:
+    an accepted, which is Bool.
+    an outcome, which is Text.
+    a detail, which is Text.
+    an attemptId, which is Text.
+    a trailSeq, which is Int.
+    a trailHash, which is Text.
+    a resealed, which is Bool.
+    a verifyUnit, which is Text.
+    a followUnit, which is Text.
+
+## Note
+A formal statement a `formalize` attempt proposes: a kernel document defining
+`goalName` as a `Prop`, made by route A, B or C.
+
+## A StatementDraft has:
+    a document, which is Text.
+    a goalName, which is Text.
+    a route, which is Text.
+
+## Note
+A posted attempt: the lease it comes under, the attempt and its trail entry, the
+files it hands over, and, for a `formalize` unit, the statement it proposes.
+
+## A AttemptSubmission has:
+    a unitId, which is Text.
+    a token, which is Int.
+    a holder, which is Text.
+    a secret, which is Text.
+    an attempt, which is Attempt.
+    an entry, which is TrailEntry.
+    an artifacts, which is Seq of ArtifactUpload.
+    a draft, which is Option of StatementDraft.

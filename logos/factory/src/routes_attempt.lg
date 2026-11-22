@@ -1,0 +1,95 @@
+# Attempt route
+
+Import ApiBounds from "./api_bounds.lg".
+Import HttpAnswers from "./http_answers.lg".
+Import ArtifactRules from "./artifact_rules.lg".
+Import SubmissionRead from "./submission_read.lg".
+Import LeaseSecret from "./lease_secret.lg".
+Import CoordinatorDb from "./coordinator_db.lg".
+Import CoordinatorWire from "./coordinator_wire.lg".
+Import IntakeRun from "./intake_run.lg".
+
+`POST /api/v1/attempt` takes an `AttemptSubmission`. A recorded attempt is
+answered `201` with an `AttemptReceipt`; a refused one with the API's refusal
+document (`http_answers.lg`): `409` when its lease moved on (`stale_lease`) or
+its approach is a known dead end (`dead_end`), `422` when it contradicts itself
+or its lease (`invalid_claim`), `404` for a unit the board does not hold. What can be checked without the
+database is checked first — the body's size and shape, the artifacts' hashes,
+the statement draft — so a malformed attempt costs the database nothing.
+
+## Note
+The first thing wrong with a submission that needs no database to see.
+
+## To submissionProblem (s: AttemptSubmission) -> Text:
+    Let artifacts be artifactsProblem(s's artifacts).
+    If artifacts is not equal to "":
+        Return artifacts.
+    Inspect s's draft:
+        When Some (d):
+            Return draftProblem(d's document, d's goalName, d's route).
+        When None:
+            Return "".
+    Return "".
+
+## Note
+The transaction committed when the attempt was accepted, rolled back otherwise.
+
+## To finishTransaction (c: PgConn, commit: Bool) -> Result of Int and Text:
+    If commit:
+        Return pgCommit(c).
+    Return pgRollback(c).
+
+## Note
+A submission recorded in its own transaction.
+
+## To intakeAnswer (s: AttemptSubmission, secretOk: Bool) -> Response:
+    Inspect dbOpen():
+        When Err (e):
+            Return unavailable(e).
+        When Ok (c):
+            Let began be pgBegin(c).
+            Let outcome be intakeOn(c, s, secretOk).
+            Let mutable commit be false.
+            Inspect outcome:
+                When Ok (r):
+                    Set commit to r's receipt's accepted.
+                When Err (e):
+                    Set commit to false.
+            Let ended be finishTransaction(c, commit).
+            Let closed be pgClose(c).
+            Inspect outcome:
+                When Err (e):
+                    Return unavailable("the attempt was not recorded: " + e).
+                When Ok (r):
+                    Inspect ended:
+                        When Err (e):
+                            Return unavailable("the attempt's transaction did not commit: " + e).
+                        When Ok (n):
+                            If r's receipt's accepted is equal to false:
+                                Return refuse(r's status, r's receipt's outcome, r's receipt's detail).
+                            Return answerJson(r's status, toJson_AttemptReceipt(r's receipt)).
+    Return unavailable("no answer").
+
+## Route POST /api/v1/attempt (request: Request) -> Response:
+    If bodyFits(request's body, attemptBodyLimit()) is equal to false:
+        Return tooLarge(attemptBodyLimit()).
+    Inspect readSubmission(request's body):
+        When Err (e):
+            Return badRequest(e).
+        When Ok (s):
+            Let problem be submissionProblem(s).
+            If problem is not equal to "":
+                Return refuse(422, "invalid_claim", problem).
+            Inspect coordLeaseKey():
+                When Err (e):
+                    Return unavailable(e).
+                When Ok (key):
+                    Let secretOk be leaseSecretValid(key, s's unitId, s's token, s's secret).
+                    If secretOk:
+                        Inspect storeArtifacts(s's artifacts):
+                            When Err (e):
+                                Return unavailable(e).
+                            When Ok (n):
+                                Let kept be n.
+                    Return intakeAnswer(s, secretOk).
+    Return unavailable("no answer").

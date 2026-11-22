@@ -1,0 +1,99 @@
+# Board and trail records
+
+
+
+The factory's board as the website reads it: how many problems stand in each
+stage, the best-ranked of them, who is contributing, and what a contributor may
+focus a worker on.
+
+A problem's trail as the website reads it: every attempt and event, newest
+last, flattened for the browser. The canonical entries, with their hash chain,
+are `/api/v1/trail/:id`; this is the same history made displayable — the lists an
+entry carries are joined into text, because a page cannot decode a record that
+holds a list (LOGOS_ISSUES.md 1).
+
+## Note
+One stage of the board: its problems, and the units waiting and leased on them.
+
+## A BoardLane has:
+    a stage, which is Text.
+    a problems, which is Int.
+    a readyUnits, which is Int.
+    a leasedUnits, which is Int.
+
+## Note
+One problem on the board, in its stage's lane, with the unit being worked on it
+if one is (`unitKind` and `holder` are the empty text when none is).
+
+## A BoardCard has:
+    a problemId, which is Text.
+    a title, which is Text.
+    a stage, which is Text.
+    a rankBp, which is Int.
+    a cohort, which is Text.
+    a collection, which is Text.
+    a unitKind, which is Text.
+    a holder, which is Text.
+
+## Note
+One contributor: attempts made, proofs claimed and proofs the verifier attested,
+dead ends found (each saves everyone after them a repeat), and what they spent of
+the budget they set. `lastSeen` is the Unix milliseconds of their latest attempt.
+
+## A LeaderRow has:
+    a contributor, which is Text.
+    a displayName, which is Text.
+    an attempts, which is Int.
+    a claimed, which is Int.
+    an attested, which is Int.
+    a deadEnds, which is Int.
+    a spentMicros, which is Int.
+    a budgetMicros, which is Int.
+    a lastSeen, which is Int.
+
+## Note
+A focus a contributor may give a worker: a cohort or a collection, with the
+problems it holds. `value` is what goes in `MACSAD_FOCUS`.
+
+## A FocusOption has:
+    a value, which is Text.
+    a label, which is Text.
+    a kind, which is Text.
+    a problems, which is Int.
+
+## Note
+Whether the coordinator can serve: whether its database answers (`database` is
+`reachable` or what went wrong), and how much the factory holds.
+
+## A HealthView has:
+    an ok, which is Bool.
+    a database, which is Text.
+    a problems, which is Int.
+    a readyUnits, which is Int.
+    a leasedUnits, which is Int.
+    an attempts, which is Int.
+    a trailEntries, which is Int.
+    an attested, which is Int.
+
+## Note
+One trail entry. `suggestions` joins the entry's next suggestions with ` · `,
+and `artifacts` counts the files it names; `hash` and `prevHash` are its links.
+
+## A TrailRow has:
+    a seq, which is Int.
+    a ts, which is Int.
+    a stage, which is Text.
+    a kind, which is Text.
+    a contributor, which is Text.
+    a model, which is Text.
+    a strategyId, which is Text.
+    a verdict, which is Text.
+    an exitCode, which is Int.
+    a diagnostics, which is Text.
+    a costMicros, which is Int.
+    a summary, which is Text.
+    a suggestions, which is Text.
+    an artifacts, which is Int.
+    a fingerprint, which is Text.
+    a hash, which is Text.
+    a prevHash, which is Text.

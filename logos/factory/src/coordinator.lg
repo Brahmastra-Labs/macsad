@@ -1,0 +1,105 @@
+# Coordinator
+
+Import RoutesRead from "./routes_read.lg".
+Import RoutesProblem from "./routes_problem.lg".
+Import RoutesLease from "./routes_lease.lg".
+Import Heartbeat from "./heartbeat.lg".
+Import RoutesAttempt from "./routes_attempt.lg".
+Import SmokeRun from "./smoke_run.lg".
+Import CoordinatorDb from "./coordinator_db.lg".
+Import DbLoad from "./db_load.lg".
+Import LoadRules from "./load_rules.lg".
+Import OpdpRun from "./opdp_run.lg".
+Import OpdpPlan from "./opdp_plan.lg".
+
+The factory's coordinator: the one process that holds the board. It serves the
+worker API (`/api/v1/lease`, `/heartbeat`, `/attempt`), the read API the website
+and auditors use, and the website itself, all from one route table over one
+PostgreSQL database. Workers never touch the database; they see only these
+routes, and every route checks what it is sent before anything is written.
+
+The role is chosen by the factory's `roles.lg`: `factory coordinator` serves, and
+`factory coordinator load <dir>` loads what an ingest role wrote, and `factory
+coordinator smoke <base-url>` checks a running coordinator end to end.
+
+One load: the problems first (a node names its problem), then the graph, then the
+atlas profiles, then each problem's rank copied from its node, all on one
+connection. A load that stops partway leaves what it loaded, and the next load of
+the same directory completes it, because every statement is an idempotent upsert.
+
+## Note
+Serve the route table. `PORT` (or `LOGOS_PORT`) in the environment overrides the
+port, and `LOGOS_HOST` the interface, as the standard server reads them.
+
+## To serveCoordinator (port: Int):
+    Serve on port port.
+
+## Note
+A coordinator command other than serving, from the program's arguments: the
+program's name, `coordinator`, the command, then its arguments.
+
+## To coordinatorCommand (xs: Seq of Text) -> Result of Text and Text:
+    Let mutable a be ["", "", "", ""].
+    Repeat for i from 3 to 6:
+        If i is at most length of xs:
+            Set item (i - 2) of a to item i of xs.
+    If item 1 of a is equal to "load" and item 2 of a is not equal to "":
+        Return loadIngested(item 2 of a).
+    If item 1 of a is equal to "smoke" and item 2 of a is not equal to "":
+        Return coordinatorSmoke(item 2 of a).
+    If item 1 of a is equal to "plan":
+        Return planOpenProblems().
+    If item 1 of a is equal to "import-opdp" and item 4 of a is not equal to "":
+        Return importOpdp(item 2 of a, item 3 of a, item 4 of a).
+    Return a new Err with error "usage: factory coordinator [load <ingest-dir> | import-opdp <pin.json> <atlas.json.gz> <work-dir> | plan | smoke <base-url>]".
+
+## Note
+The atlas record files of a directory, in name order: `records.jsonl`, or the
+`records-NNNN.jsonl` pieces an operator splits a large release into.
+
+## To recordFiles (dir: Text) -> Seq of Text:
+    Let mutable out be a new Seq of Text.
+    Inspect listDir(dir):
+        When Ok (names):
+            Repeat for name in names:
+                If isRecordFile(name):
+                    Push dir + "/" + name to out.
+        When Err (e):
+            Return out.
+    Return out.
+
+## Note
+The directory `dir` loaded, or the first thing that stopped it.
+
+## To loadIngested (dir: Text) -> Result of Text and Text:
+    Inspect dbOpen():
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (c):
+            Let answer be loadOn(c, dir).
+            Let closed be pgClose(c).
+            Return answer.
+    Return a new Err with error "no connection".
+
+## To loadOn (c: PgConn, dir: Text) -> Result of Text and Text:
+    Inspect loadLines(c, dir + "/problems.jsonl", "problems", problemInsertSql()):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (problems):
+            Inspect loadLines(c, dir + "/nodes.jsonl", "nodes", nodeInsertSql()):
+                When Err (e):
+                    Return a new Err with error e.
+                When Ok (nodes):
+                    Let mutable profiles be 0.
+                    Repeat for path in recordFiles(dir):
+                        Inspect loadLines(c, path, "records", profileUpdateSql()):
+                            When Err (e):
+                                Return a new Err with error e.
+                            When Ok (n):
+                                Set profiles to profiles + n.
+                    Inspect pgQueryParams(c, rankSyncSql(), a new Seq of Text):
+                        When Err (e):
+                            Return a new Err with error e.
+                        When Ok (qr):
+                            Return a new Ok with value "loaded {problems} problems, {nodes} nodes and {profiles} atlas profiles from {dir}".
+    Return a new Err with error "unloaded".

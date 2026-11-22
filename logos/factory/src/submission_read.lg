@@ -1,0 +1,119 @@
+# Reading an attempt and keeping its artifacts
+
+Import CoordinatorWire from "./coordinator_wire.lg".
+Import RecordsDecode from "./records_decode.lg".
+Import ArtifactRules from "./artifact_rules.lg".
+
+A posted attempt is a closed JSON object: its flat head by a derived codec, the
+attempt and trail entry by the factory's closed decoders (`records_decode.lg`),
+the artifacts as flat records, the draft as a flat record or `null`. Artifacts
+are kept under `MACSAD_RESULTS_DIR` (`/var/lib/macsad/results` by default) at the
+path their content's hash names, written beside it and renamed in, before the
+attempt's transaction: a stored artifact nobody references is harmless, and an
+attempt that references a missing one is not.
+
+## A SubmissionHead has:
+    a unitId, which is Text.
+    a token, which is Int.
+    a holder, which is Text.
+    a secret, which is Text.
+
+## Note
+The draft a submission carries, if it carries one.
+
+## To draftOf (v: Json) -> Result of Option of StatementDraft and Text:
+    Let d be jsonGet(v, "draft").
+    If jsonIsNull(d):
+        Return a new Ok with value none.
+    Inspect jsonNoExtraKeys(d, ["document", "goalName", "route"]):
+        When Err (e):
+            Return a new Err with error "draft: " + e.
+        When Ok (closed):
+            Inspect fromJson_StatementDraft(jsonSerialize(d)):
+                When Err (e):
+                    Return a new Err with error "draft: " + e.
+                When Ok (draft):
+                    Return a new Ok with value (some draft).
+    Return a new Err with error "draft: unreadable".
+
+## Note
+The parts after the head, each through its codec.
+
+## To submissionFrom (v: Json, head: SubmissionHead) -> Result of AttemptSubmission and Text:
+    Inspect decodeAttempt(jsonGet(v, "attempt")):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (attempt):
+            Inspect decodeTrailEntry(jsonGet(v, "entry")):
+                When Err (e):
+                    Return a new Err with error e.
+                When Ok (entry):
+                    Inspect fromJsonSeq_ArtifactUpload(jsonSerialize(jsonGet(v, "artifacts"))):
+                        When Err (e):
+                            Return a new Err with error "artifacts: " + e.
+                        When Ok (artifacts):
+                            Inspect draftOf(v):
+                                When Err (e):
+                                    Return a new Err with error e.
+                                When Ok (draft):
+                                    Let mutable s be a new AttemptSubmission with unitId head's unitId and token head's token and holder head's holder and secret head's secret.
+                                    Set s's attempt to attempt.
+                                    Set s's entry to entry.
+                                    Set s's artifacts to artifacts.
+                                    Set s's draft to draft.
+                                    Return a new Ok with value s.
+    Return a new Err with error "unreadable submission".
+
+## Note
+A submission read from its body.
+
+## To readSubmission (body: Text) -> Result of AttemptSubmission and Text:
+    Inspect jsonParseStrict(body):
+        When JErr (m):
+            Return a new Err with error "not JSON: " + m.
+        When JOk (v):
+            Inspect jsonNoExtraKeys(v, ["unitId", "token", "holder", "secret", "attempt", "entry", "artifacts", "draft"]):
+                When Err (e):
+                    Return a new Err with error e.
+                When Ok (closed):
+                    Inspect fromJson_SubmissionHead(body):
+                        When Err (e):
+                            Return a new Err with error e.
+                        When Ok (head):
+                            Return submissionFrom(v, head).
+    Return a new Err with error "unreadable submission".
+
+## To resultsRoot () -> Text:
+    Inspect get("MACSAD_RESULTS_DIR"):
+        When Some (v):
+            If trim(v) is not equal to "":
+                Return trim(v).
+        When None:
+            Return "/var/lib/macsad/results".
+    Return "/var/lib/macsad/results".
+
+## Note
+The artifacts written, or why one could not be.
+
+## To storeArtifacts (xs: Seq of ArtifactUpload) -> Result of Int and Text:
+    Let root be resultsRoot().
+    Let mutable written be 0.
+    Repeat for a in xs:
+        Let path be artifactPath(root, a's sha256).
+        If fileExists(path) is equal to false:
+            Inspect makeDirs(root + "/artifacts/" + charAtText(a's sha256, 1) + charAtText(a's sha256, 2)):
+                When Err (e):
+                    Return a new Err with error "cannot make the artifact directory: " + e.
+                When Ok (made):
+                    Let ready be made.
+            Inspect write(path + ".part", a's text):
+                When Err (e):
+                    Return a new Err with error "cannot write artifact {a's name}: " + e.
+                When Ok (done):
+                    Let staged be done.
+            Inspect renameFile(path + ".part", path):
+                When Err (e):
+                    Return a new Err with error "cannot place artifact {a's name}: " + e.
+                When Ok (done):
+                    Set written to written + 1.
+    Return a new Ok with value written.

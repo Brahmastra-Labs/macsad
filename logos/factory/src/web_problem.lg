@@ -1,0 +1,96 @@
+# Problem records
+
+What the website shows on a problem's page: the problem as its source gave it,
+its OPDP profile, where it stands in the factory, and its formal statements.
+Fields a source does not provide are the empty text (a page cannot hold an
+optional field, LOGOS_ISSUES.md 11), so the page shows them as absent rather
+than as zero.
+
+## Note
+One problem. `stage` and `rankBp` (its rank in basis points) are its node's; the block after them is the
+problem as ingested; the OPDP block is the atlas profile (`opdp_profile.lg`), empty for a
+problem the atlas does not cover. `attempts` counts every recorded attempt,
+`claimed` the ones whose worker reported a proof, and `attested` the verdicts the
+trusted verifier signed. `trailCheck` is what re-hashing the trail found:
+`intact`, `empty`, or the first broken link.
+
+## A ProblemView has:
+    an id, which is Text.
+    a title, which is Text.
+    a status, which is Text.
+    a stage, which is Text.
+    a rankBp, which is Int.
+    a source, which is Text.
+    a cohort, which is Text.
+    a collection, which is Text.
+    a category, which is Text.
+    a statementInformal, which is Text.
+    a leanStatement, which is Text.
+    a leanModule, which is Text.
+    a leanDeclaration, which is Text.
+    an externalKey, which is Text.
+    a crossRef, which is Text.
+    a difficultyLabel, which is Text.
+    a difficulty, which is Text.
+    a tier, which is Text.
+    an aiFit, which is Text.
+    an aiDifficulty, which is Text.
+    a tractability, which is Text.
+    a progress, which is Text.
+    a formalization, which is Text.
+    a verification, which is Text.
+    a toolLeverage, which is Text.
+    a route, which is Text.
+    an effortHours, which is Text.
+    an explanation, which is Text.
+    an attempts, which is Int.
+    a claimed, which is Int.
+    an attested, which is Int.
+    a spentMicros, which is Int.
+    a trailLength, which is Int.
+    a deadEnds, which is Int.
+    an openUnits, which is Int.
+    a trailCheck, which is Text.
+
+## Note
+One formal statement of a problem: its LOGOS kernel document, the goal a proof
+must prove, the hash a proof is bound to, how it was made (route A from Lean, B
+from an informal problem through Lean, C directly) and how its review stands.
+
+## A StatementRow has:
+    an id, which is Text.
+    a goalName, which is Text.
+    a sha256, which is Text.
+    a reviewState, which is Text.
+    a route, which is Text.
+    an author, which is Text.
+    a model, which is Text.
+    a createdAt, which is Int.
+    a document, which is Text.
+
+## Note
+One node below a problem: a statement, or a lemma a decomposition left open or
+proved. `parentId` is the node it hangs from, so the rows draw as a tree.
+
+## A LemmaRow has:
+    an id, which is Text.
+    a parentId, which is Text.
+    a kind, which is Text.
+    a label, which is Text.
+    a stage, which is Text.
+    a depth, which is Int.
+
+## Note
+One verdict of the trusted verifier: what it judged, against which statement and
+document hashes, with which pinned toolchain, and when.
+
+## A ResultRow has:
+    an id, which is Text.
+    a subjectKind, which is Text.
+    a subjectId, which is Text.
+    a verdictKind, which is Text.
+    a verifier, which is Text.
+    a statementSha, which is Text.
+    a documentSha, which is Text.
+    a toolchainSha, which is Text.
+    a createdAt, which is Int.

@@ -1,0 +1,92 @@
+# Granting a lease
+
+Import WorkRecord from "./work_record.lg".
+Import TrailDigest from "./trail_digest.lg".
+Import CoordinatorDb from "./coordinator_db.lg".
+Import CoordinatorWire from "./coordinator_wire.lg".
+Import DbGrant from "./db_grant.lg".
+Import DbTrail from "./db_trail.lg".
+Import StageRules from "./stage_rules.lg".
+Import LeaseSecret from "./lease_secret.lg".
+Import OpdpImportRules from "./opdp_import_rules.lg".
+Import LoadRules from "./load_rules.lg".
+
+A claimed unit made into the grant a worker receives: the records, the trail
+digest the model will read, the head the attempt's entry will chain from, and the
+lease's secret. Leasing work on a problem moves its node forward as far as work
+in progress (`stage_rules.lg`); the move is conditional on the stage it read, so
+two leases on one problem cannot move it twice.
+
+## To refusedGrant (reason: Text) -> LeaseGrant:
+    Return a new LeaseGrant with granted false and reason reason and secret "" and lease none and unit none and problem none and statement none and strategy none and trailDigest "" and trailSeq 0 and trailHead "".
+
+## Note
+The grant for the unit `unitId` just claimed under `token`, on an open connection.
+
+## To grantOn (c: PgConn, unitId: Text, token: Int, key: Text) -> Result of LeaseGrant and Text:
+    Inspect dbCellOn(c, grantSql(), [unitId, excerptContext()]):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (text):
+            Let v be jsonParse(text).
+            Inspect fromJson_WorkUnit(jsonSerialize(jsonGet(v, "unit"))):
+                When Err (e):
+                    Return a new Err with error "unit: " + e.
+                When Ok (unit):
+                    Inspect fromJson_Lease(jsonSerialize(jsonGet(v, "lease"))):
+                        When Err (e):
+                            Return a new Err with error "lease: " + e.
+                        When Ok (lease):
+                            Let mutable g be refusedGrant("").
+                            Set g's granted to true.
+                            Set g's secret to leaseSecret(key, unitId, token).
+                            Set g's lease to some lease.
+                            Set g's unit to some unit.
+                            Set g's deadEnds to intOfJson(jsonGet(v, "deadEnds")).
+                            Set g's context to textOfJson(jsonGet(v, "context")).
+                            Let moved be moveStage(c, unit's problemId, textOfJson(jsonGet(v, "stage")), unit's kind).
+                            Return grantParts(c, v, g, unit's problemId).
+    Return a new Err with error "no grant".
+
+## Note
+The problem, statement, strategy and trail of a grant.
+
+## To grantParts (c: PgConn, v: Json, g: LeaseGrant, problemId: Text) -> Result of LeaseGrant and Text:
+    Let mutable out be g.
+    Inspect optionalProblem(jsonGet(v, "problem")):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (p):
+            Set out's problem to p.
+    Inspect optionalStatement(jsonGet(v, "statement")):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (s):
+            Set out's statement to s.
+    Inspect optionalStrategy(jsonGet(v, "strategy")):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (s):
+            Set out's strategy to s.
+    Inspect trailOn(c, problemId):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (trail):
+            Set out's trailDigest to trailDigest(problemId, trail, 5).
+            Set out's trailSeq to intOfJson(jsonGet(v, "headSeq")).
+            Set out's trailHead to textOfJson(jsonGet(v, "headHash")).
+    Return a new Ok with value out.
+
+## Note
+A problem's node moved to the stage a lease of `kind` puts it in, if it moves.
+
+## To moveStage (c: PgConn, problemId: Text, current: Text, kind: Text) -> Bool:
+    Let next be stageOnLease(current, kind).
+    If next is equal to current:
+        Return false.
+    Inspect pgQueryParams(c, "UPDATE factory.node SET stage = $2 WHERE problem_id = $1 AND kind = 'problem' AND stage = $3", [problemId, next, current]):
+        When Ok (qr):
+            Return true.
+        When Err (e):
+            Return false.
+    Return false.

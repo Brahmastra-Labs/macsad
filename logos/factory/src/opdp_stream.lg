@@ -1,0 +1,59 @@
+# OPDP stream
+
+Import ProblemRecord from "./problem_record.lg".
+Import NodeRecord from "./node_record.lg".
+Import RankScore from "./rank_score.lg".
+Import WireRead from "./wire_read.lg".
+Import OpdpRow from "./opdp_row.lg".
+Import AtlasGraph from "./atlas_graph.lg".
+Import OpdpProfile from "./opdp_profile.lg".
+Import OpdpImportRules from "./opdp_import_rules.lg".
+Import LoadRules from "./load_rules.lg".
+
+One atlas record projected once into the rows it adds: the problem and its rank
+through the factory's own `opdp_row.lg` and `atlas_graph.lg`, the nodes of the
+graph above it (cohort, source collection, category, parents first), its own node,
+and its profile (`opdp_profile.lg`). The rows are small and returned by value;
+the batch they join is the caller's.
+
+## A RecordRows has:
+    a problem, which is Text.
+    an innerIds, which is Seq of Text.
+    an inner, which is Seq of Text.
+    a leaf, which is Text.
+    a profile, which is Text.
+    a ranked, which is Bool.
+
+## Note
+The rows of one parsed record, under the cohort its dataset version names. A
+record without the scores the scheduler reads is still imported, ranked as an
+unprofiled problem of its category, and counted.
+
+## To projectRecord (v: Json, cohortLabels: Map of Text to Text) -> RecordRows:
+    Let category be slugOr(v, "classification.category").
+    Let mutable inputs be unprofiledInputs("informal", category).
+    Let mutable ranked be true.
+    Inspect opdpRankInputs(v):
+        When Ok (r):
+            Set inputs to r.
+        When Err (e):
+            Set ranked to false.
+    Let cohort be cohortKeyOf(textAt(jsonGet(v, "implementation"), "dataset_version")).
+    Let row be opdpRowFrom(v, cohort, inputs).
+    Let mutable p be row's problem.
+    Set p's cohort to cohort.
+    Let rank be rowRank(row).
+    Let cohortId be cohortNodeId(cohort).
+    Let collectionId be collectionNodeId(cohort, row's collectionSlug).
+    Let categoryId be categoryNodeId(cohort, row's collectionSlug, row's categorySlug).
+    Let mutable cohortLabel be cohort.
+    If cohortLabels contains cohort:
+        Set cohortLabel to item cohort of cohortLabels.
+    Let n1 be toJson_Node(rankedNode(cohortId, none, none, "cohort", cohortLabel, rank)).
+    Let n2 be toJson_Node(rankedNode(collectionId, some cohortId, none, "collection", row's collectionLabel, rank)).
+    Let n3 be toJson_Node(rankedNode(categoryId, some collectionId, none, "category", row's categoryLabel, rank)).
+    Let mutable out be a new RecordRows with problem toJson_Problem(p) and innerIds [cohortId, collectionId, categoryId] and inner [n1, n2, n3].
+    Set out's leaf to toJson_Node(rankedNode(problemNodeId(p's id), some categoryId, some p's id, "problem", p's title, rank)).
+    Set out's profile to "{{\"id\":" + jsonQuote(p's id) + ",\"p\":" + opdpProfile(v) + "}}".
+    Set out's ranked to ranked.
+    Return out.

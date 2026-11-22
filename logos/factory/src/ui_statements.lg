@@ -1,0 +1,49 @@
+# Statement section
+
+Import WebProblem from "./web_problem.lg".
+Import WebFormat from "./web_format.lg".
+
+A problem's formal statements, fetched when the section appears: each a LOGOS
+kernel document with its goal, its hash, how it was made and how its review
+stands, the accepted one first.
+
+## Component StatementSection (pid: Text)
+
+State:
+    Let rows be a new Seq of StatementRow.
+    Let status be "loading".
+
+Actions:
+    When this component appears:
+        Get "/api/v1/problem/statements?id=" + urlEncode(pid) as Seq of StatementRow, then arrived.
+
+    To arrived (answer: Result of Seq of StatementRow and HttpError):
+        Inspect answer:
+            When Ok (list):
+                Set rows to list.
+                Set status to "loaded".
+            When Err (e):
+                Set status to e's message.
+
+View:
+    <div class="card">
+      <h2>Formal statements</h2>
+      {for each s in rows, keyed by s's id:}
+        <div class="statement">
+          <div class="statement-head">
+            <span class="chip review-{s's reviewState}">{s's reviewState}</span>
+            <span class="chip">route {s's route}</span>
+            <span class="chip kind">goal {s's goalName}</span>
+            <span class="hash">sha256 {shortHash(s's sha256)}</span>
+            <span class="entry-meta">{s's author} · {s's model} · {formatStamp(s's createdAt)}</span>
+          </div>
+          <pre class="doc">{s's document}</pre>
+        </div>
+      {else:}
+        {if status is equal to "loaded":}
+          <p class="empty" id="no-statements">No formal statement yet: the problem is waiting for a formalize unit.</p>
+        {else:}
+          <p class="empty">{status}</p>
+        {end}
+      {end}
+    </div>

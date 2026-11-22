@@ -1,22 +1,49 @@
 # Factory
 
+Import ApiBounds from "./api_bounds.lg".
+Import ArtifactRules from "./artifact_rules.lg".
 Import AtlasGraph from "./atlas_graph.lg".
 Import AtlasIngest from "./atlas_ingest.lg".
 Import AtlasPrepare from "./atlas_prepare.lg".
 Import AtlasScan from "./atlas_scan.lg".
 Import AttemptRecord from "./attempt_record.lg".
+Import AttemptRules from "./attempt_rules.lg".
 Import Budget from "./budget.lg".
 Import ChatReply from "./chat_reply.lg".
 Import ChatRequest from "./chat_request.lg".
 Import Conventions from "./conventions.lg".
+Import Coordinator from "./coordinator.lg".
+Import CoordinatorDb from "./coordinator_db.lg".
+Import CoordinatorWire from "./coordinator_wire.lg".
 Import Cost from "./cost.lg".
+Import DbBoard from "./db_board.lg".
+Import DbClaim from "./db_claim.lg".
+Import DbConfig from "./db_config.lg".
+Import DbGrant from "./db_grant.lg".
+Import DbGraph from "./db_graph.lg".
+Import DbIntake from "./db_intake.lg".
+Import DbLoad from "./db_load.lg".
+Import DbProblem from "./db_problem.lg".
+Import DbProblemParts from "./db_problem_parts.lg".
+Import DbTrail from "./db_trail.lg".
 Import Extraction from "./extraction.lg".
+Import Heartbeat from "./heartbeat.lg".
 Import HostFiles from "./host_files.lg".
 Import HostTools from "./host_tools.lg".
+Import HttpAnswers from "./http_answers.lg".
 Import IngestFc from "./ingest_fc.lg".
+Import IntakeFollow from "./intake_follow.lg".
+Import IntakePolicy from "./intake_policy.lg".
+Import IntakeRecord from "./intake_record.lg".
+Import IntakeRun from "./intake_run.lg".
+Import IntakeWrite from "./intake_write.lg".
 Import KernelBlocks from "./kernel_blocks.lg".
 Import KernelReport from "./kernel_report.lg".
 Import KernelVerdict from "./kernel_verdict.lg".
+Import LeaseGrant from "./lease_grant.lg".
+Import LeaseSecret from "./lease_secret.lg".
+Import LeaseWire from "./lease_wire.lg".
+Import LoadRules from "./load_rules.lg".
 Import Local from "./local.lg".
 Import LocalAttempt from "./local_attempt.lg".
 Import LocalPlan from "./local_plan.lg".
@@ -27,7 +54,13 @@ Import ManifestEntry from "./manifest_entry.lg".
 Import ModelPrice from "./model_price.lg".
 Import MscCategory from "./msc_category.lg".
 Import NodeRecord from "./node_record.lg".
+Import OpdpImport from "./opdp_import.lg".
+Import OpdpImportRules from "./opdp_import_rules.lg".
+Import OpdpPlan from "./opdp_plan.lg".
+Import OpdpProfile from "./opdp_profile.lg".
 Import OpdpRow from "./opdp_row.lg".
+Import OpdpRun from "./opdp_run.lg".
+Import OpdpStream from "./opdp_stream.lg".
 Import ProblemRecord from "./problem_record.lg".
 Import PromptRoles from "./prompt_roles.lg".
 Import PromptTasks from "./prompt_tasks.lg".
@@ -47,12 +80,21 @@ Import Replay from "./replay.lg".
 Import Roles from "./roles.lg".
 Import RolesIngest from "./roles_ingest.lg".
 Import RolesVerify from "./roles_verify.lg".
+Import RoutesAttempt from "./routes_attempt.lg".
+Import RoutesLease from "./routes_lease.lg".
+Import RoutesProblem from "./routes_problem.lg".
+Import RoutesRead from "./routes_read.lg".
 Import Selftest from "./selftest.lg".
 Import SelftestLive from "./selftest_live.lg".
 Import SelftestPolicy from "./selftest_policy.lg".
 Import SelftestRecords from "./selftest_records.lg".
 Import SelftestSources from "./selftest_sources.lg".
+Import SmokeBuild from "./smoke_build.lg".
+Import SmokeHttp from "./smoke_http.lg".
+Import SmokeRun from "./smoke_run.lg".
+Import StageRules from "./stage_rules.lg".
 Import SubmissionPolicy from "./submission_policy.lg".
+Import SubmissionRead from "./submission_read.lg".
 Import TrailDigest from "./trail_digest.lg".
 Import TrailMemory from "./trail_memory.lg".
 Import TrailRecord from "./trail_record.lg".
@@ -60,14 +102,13 @@ Import VerdictRecord from "./verdict_record.lg".
 Import Verifier from "./verifier.lg".
 Import VernacularCommand from "./vernacular_command.lg".
 Import VernacularNames from "./vernacular_names.lg".
+Import WebBoard from "./web_board.lg".
+Import WebGraph from "./web_graph.lg".
+Import WebProblem from "./web_problem.lg".
 Import WireNumber from "./wire_number.lg".
 Import WireRead from "./wire_read.lg".
 Import WireShape from "./wire_shape.lg".
 Import WorkRecord from "./work_record.lg".
-
-The entry of the MaCSad math factory. It imports every module once, as the
-pinned compiler-scope workaround the macsad projects share requires, and hands
-the arguments to `roles.lg`, which decides what runs.
 
 ## Main
 

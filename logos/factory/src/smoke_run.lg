@@ -1,0 +1,89 @@
+# Smoke check: the scenario
+
+Import CoordinatorWire from "./coordinator_wire.lg".
+Import SmokeHttp from "./smoke_http.lg".
+Import SmokeBuild from "./smoke_build.lg".
+Import LoadRules from "./load_rules.lg".
+
+`factory coordinator smoke <base-url>` drives a running coordinator through the
+whole worker protocol on the fixture problem `smoke:coordinator`
+(`tests/fixtures/coordinator/smoke`, loaded with `coordinator load`): a lease
+and its heartbeats, a recorded attempt, a stale repost refused, a known dead end
+refused, an attempt resealed onto a head it did not see, a statement proposed and
+reviewed twice until it is queued for the verifier, and the trail re-hashed
+intact. It writes only to the fixture's trail, and it is meant for a development
+or staging database, never the public one.
+
+## A SmokeLog has:
+    a lines, which is Seq of Text.
+    a failures, which is Int.
+
+## To smokeStep (log: SmokeLog, ok: Bool, what: Text) -> SmokeLog:
+    Let mutable out be log.
+    If ok:
+        Push "ok      " + what to out's lines.
+    Otherwise:
+        Push "FAILED  " + what to out's lines.
+        Set out's failures to out's failures + 1.
+    Return out.
+
+## Note
+One attempt posted on a fresh lease of `kinds`; the log says whether it was
+answered `expect`.
+
+## To smokeAttempt (base: Text, log: SmokeLog, holder: Text, kinds: Text, verdict: Text, seed: Text, expect: Text) -> SmokeLog:
+    Inspect smokeLease(base, holder, kinds, "smoke:coordinator"):
+        When Err (e):
+            Return smokeStep(log, false, holder + " leases a " + kinds + " unit: " + e).
+        When Ok (g):
+            Let mutable draft be none.
+            If kinds is equal to "formalize" and verdict is equal to "verified":
+                Set draft to smokeDraft().
+            Let o be smokePost(base, smokeSubmission(g, holder, verdict, seed, g's trailSeq, g's trailHead, draft)).
+            Let mutable ok be o's receipt's outcome is equal to expect.
+            If expect is equal to "awaiting_verifier" and kinds is equal to "review":
+                Set ok to o's status is equal to 201.
+            Return smokeStep(log, ok, holder + " posts a " + verdict + " " + kinds + " attempt: answered {o's status} " + o's receipt's outcome).
+    Return log.
+
+## To coordinatorSmoke (base: Text) -> Result of Text and Text:
+    Let mutable log be a new SmokeLog.
+    Let health be smokeCall("GET", base + "/api/v1/health", "").
+    Set log to smokeStep(log, health's status is equal to 200, "the coordinator is healthy ({health's status})").
+    Let seed be "{now()}".
+    Inspect smokeLease(base, "smoke-a", "formalize", "smoke:coordinator"):
+        When Err (e):
+            Set log to smokeStep(log, false, "smoke-a leases the fixture problem: " + e).
+        When Ok (g):
+            Set log to smokeStep(log, smokeHeartbeat(base, g, "smoke-a", g's secret), "a heartbeat with the lease secret keeps it alive").
+            Set log to smokeStep(log, smokeHeartbeat(base, g, "smoke-a", repeatText("0", 64)) is equal to false, "a heartbeat with a forged secret does not").
+            Let body be smokeSubmission(g, "smoke-a", "rejected", seed + "-wall", g's trailSeq, g's trailHead, none).
+            Let first be smokePost(base, body).
+            Set log to smokeStep(log, first's status is equal to 201 and first's receipt's followUnit is not equal to "", "a rejected attempt is recorded and queues a retry").
+            Let again be smokePost(base, body).
+            Set log to smokeStep(log, again's status is equal to 409 and again's receipt's outcome is equal to "stale_lease", "the same attempt posted again is a stale lease").
+            Set log to smokeResealed(base, log, g, seed).
+            Set log to smokeAttempt(base, log, "smoke-c", "review", "verified", seed + "-review-c", "awaiting_verifier").
+            Set log to smokeAttempt(base, log, "smoke-d", "review", "verified", seed + "-review-d", "awaiting_verifier").
+    Let problem be smokeCall("GET", base + "/api/v1/problem?id=smoke:coordinator", "").
+    Let check be textOfJson(jsonGet(jsonParse(problem's body), "trailCheck")).
+    Set log to smokeStep(log, check is equal to "intact", "the fixture's trail re-hashes intact ({check})").
+    If log's failures is greater than 0:
+        Return a new Err with error join(log's lines, "\n") + "\n{log's failures} step(s) failed".
+    Return a new Ok with value join(log's lines, "\n") + "\nevery step passed".
+
+## Note
+The retry, leased by another contributor: the failed approach again is a dead
+end, and a statement built against the head the first lease saw is resealed
+onto the newer head.
+
+## To smokeResealed (base: Text, log: SmokeLog, stale: LeaseGrant, seed: Text) -> SmokeLog:
+    Inspect smokeLease(base, "smoke-b", "formalize", "smoke:coordinator"):
+        When Err (e):
+            Return smokeStep(log, false, "smoke-b leases the retry: " + e).
+        When Ok (g):
+            Let wall be smokePost(base, smokeSubmission(g, "smoke-b", "rejected", seed + "-wall", g's trailSeq, g's trailHead, none)).
+            Let mutable out be smokeStep(log, wall's status is equal to 409 and wall's receipt's outcome is equal to "dead_end", "the failed approach tried again is a dead end").
+            Let o be smokePost(base, smokeSubmission(g, "smoke-b", "verified", seed + "-statement", stale's trailSeq, stale's trailHead, smokeDraft())).
+            Return smokeStep(out, o's status is equal to 201 and o's receipt's resealed, "a statement built on an old head is resealed onto the new one ({o's status})").
+    Return log.

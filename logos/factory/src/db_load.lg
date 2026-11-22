@@ -1,0 +1,117 @@
+# Loading ingested problems
+
+Import ProblemRecord from "./problem_record.lg".
+Import NodeRecord from "./node_record.lg".
+Import OpdpProfile from "./opdp_profile.lg".
+Import LoadRules from "./load_rules.lg".
+
+The ingest roles write what a source holds as lines of JSON: `problems.jsonl`
+(one `Problem` a line), `nodes.jsonl` (the graph, parents first) and, for the
+OPDP atlas, `records*.jsonl` (one atlas record a line). This puts them into the
+coordinator's database. Every line is decoded with the wire contract's codec
+before it is sent, so a line that is not a `Problem` or a `Node` stops the load
+and names its file and line. Rows go up five hundred at a time as one JSON array
+parameter, unpacked by PostgreSQL itself, and loading the same directory twice
+changes nothing but what may change: a problem's status and a node's rank.
+Stages, statements and trails are the factory's own and are never touched.
+
+## Note
+How many lines go up in one statement.
+
+## To loadBatchSize () -> Int:
+    Return 500.
+
+## Note
+The statements that place a batch, each reading the JSON array in `$1`.
+
+## To problemInsertSql () -> Text:
+    Let mutable q be ["INSERT INTO factory.problem (id, title, source, cohort, collection, category, statement_informal, lean_statement,"].
+    Push "lean_module, lean_declaration, external_key, cross_ref, status) SELECT e->>'id', e->>'title', e->>'source', e->>'cohort'," to q.
+    Push "e->>'collection', e->>'category', e->>'statementInformal', e->>'leanStatement', e->>'leanModule', e->>'leanDeclaration'," to q.
+    Push "e->>'externalKey', e->>'crossRef', e->>'status' FROM jsonb_array_elements($1::jsonb) AS e" to q.
+    Push "ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status" to q.
+    Return join(q, " ").
+
+## To nodeInsertSql () -> Text:
+    Let mutable q be ["INSERT INTO factory.node (id, parent_id, kind, label, problem_id, stage, rank)"].
+    Push "SELECT e->>'id', e->>'parentId', e->>'kind', e->>'label', e->>'problemId', e->>'stage', (e->>'rank')::int" to q.
+    Push "FROM jsonb_array_elements($1::jsonb) AS e ON CONFLICT (id) DO UPDATE SET rank = EXCLUDED.rank" to q.
+    Return join(q, " ").
+
+## To profileUpdateSql () -> Text:
+    Return "UPDATE factory.problem p SET opdp = e->'p' FROM jsonb_array_elements($1::jsonb) AS e WHERE p.id = e->>'id'".
+
+## To rankSyncSql () -> Text:
+    Return "UPDATE factory.problem p SET rank = n.rank FROM factory.node n WHERE n.problem_id = p.id AND n.kind = 'problem' AND p.rank <> n.rank".
+
+## Note
+What one line sends, after it passes its file's check: a problem or a node as it
+is, an atlas record as its profile keyed by the problem it profiles. Escaped NUL
+characters are replaced first (`load_rules.lg`).
+
+## To loadLine (kind: Text, raw: Text) -> Result of Text and Text:
+    Let line be withoutNul(raw).
+    If kind is equal to "problems":
+        Inspect fromJson_Problem(line):
+            When Ok (p):
+                Return a new Ok with value line.
+            When Err (e):
+                Return a new Err with error e.
+    If kind is equal to "nodes":
+        Inspect fromJson_Node(line):
+            When Ok (n):
+                Return a new Ok with value line.
+            When Err (e):
+                Return a new Err with error e.
+    Inspect jsonParseStrict(line):
+        When JOk (v):
+            If opdpProblemId(v) is equal to "":
+                Return a new Err with error "an atlas record without an integer problem_id".
+            Return a new Ok with value "{{\"id\":" + jsonQuote(opdpProblemId(v)) + ",\"p\":" + opdpProfile(v) + "}}".
+        When JErr (m):
+            Return a new Err with error m.
+    Return a new Err with error "unreadable line".
+
+## Note
+One batch sent as a JSON array: how many lines it carried.
+
+## To sendBatch (c: PgConn, sql: Text, batch: Seq of Text) -> Result of Int and Text:
+    If length of batch is equal to 0:
+        Return a new Ok with value 0.
+    Inspect pgQueryParams(c, sql, ["[" + join(batch, ",") + "]"]):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (qr):
+            Return a new Ok with value (length of batch).
+    Return a new Err with error "unsent".
+
+## Note
+Every line of a file sent with `sql` in batches. Answers how many lines went up.
+
+## To loadLines (c: PgConn, path: Text, kind: Text, sql: Text) -> Result of Int and Text:
+    Inspect read(path):
+        When Err (e):
+            Return a new Err with error "cannot read {path}: " + e.
+        When Ok (text):
+            Let mutable batch be a new Seq of Text.
+            Let mutable sent be 0.
+            Let mutable lineNo be 0.
+            Let all be lines(text).
+            Let total be length of all.
+            Repeat for line in all:
+                Set lineNo to lineNo + 1.
+                If trim(line) is not equal to "":
+                    Inspect loadLine(kind, line):
+                        When Err (e):
+                            Return a new Err with error "{path}:{lineNo}: " + e.
+                        When Ok (out):
+                            Push out to batch.
+                If length of batch is at least loadBatchSize() or lineNo is equal to total:
+                    Inspect sendBatch(c, sql, batch):
+                        When Err (e):
+                            Return a new Err with error "{path} near line {lineNo}: " + e.
+                        When Ok (n):
+                            Set sent to sent + n.
+                    Set batch to a new Seq of Text.
+            Return a new Ok with value sent.
+    Return a new Err with error "unread".

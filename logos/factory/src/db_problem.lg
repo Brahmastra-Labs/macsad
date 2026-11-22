@@ -1,0 +1,95 @@
+# Problem queries
+
+Import CoordinatorDb from "./coordinator_db.lg".
+Import WebProblem from "./web_problem.lg".
+
+One problem as its page shows it, read in one statement: the problem, its node's
+stage and rank, its OPDP profile (empty for a problem the atlas does not cover),
+and the counts of its attempts, claims, attestations, spend, trail, dead ends and
+open units.
+
+## Note
+The OPDP profile fields the page shows, as the profile and the record name them.
+
+## To profileFieldNames () -> Seq of Text:
+    Return ["difficultyLabel", "difficulty", "tier", "aiFit", "aiDifficulty", "tractability", "progress", "formalization", "verification", "toolLeverage", "route", "effortHours", "explanation"].
+
+## To profileFieldsSql () -> Text:
+    Let mutable parts be a new Seq of Text.
+    Repeat for f in profileFieldNames():
+        Push "'" + f + "', coalesce(p.opdp->>'" + f + "', '')" to parts.
+    Return join(parts, ", ").
+
+## Note
+The statement: `$1` is the problem id. It answers the empty text for a problem the
+coordinator does not hold.
+
+## To problemViewSql () -> Text:
+    Let mutable q be ["SELECT coalesce((SELECT json_build_object('id', p.id, 'title', p.title, 'source', p.source, 'cohort', p.cohort,"].
+    Push "'collection', p.collection, 'category', p.category, 'status', p.status, 'stage', coalesce(n.stage, 'ranked'), 'rankBp', p.rank," to q.
+    Push "'statementInformal', p.statement_informal, 'leanStatement', coalesce(p.lean_statement, ''), 'leanModule', coalesce(p.lean_module, '')," to q.
+    Push "'leanDeclaration', coalesce(p.lean_declaration, ''), 'externalKey', coalesce(p.external_key, ''), 'crossRef', coalesce(p.cross_ref, '')," to q.
+    Push profileFieldsSql() + "," to q.
+    Push "'attempts', (SELECT count(*) FROM factory.attempt a WHERE a.problem_id = p.id)," to q.
+    Push "'claimed', (SELECT count(*) FROM factory.attempt a WHERE a.problem_id = p.id AND a.verdict_kind = 'verified')," to q.
+    Push "'attested', (SELECT count(*) FROM factory.attestation t JOIN factory.statement s ON s.sha256 = t.statement_sha" to q.
+    Push "WHERE s.problem_id = p.id AND t.verdict_kind = 'verified')," to q.
+    Push "'spentMicros', (SELECT coalesce(sum(a.cost_micros), 0) FROM factory.attempt a WHERE a.problem_id = p.id)," to q.
+    Push "'trailLength', (SELECT count(*) FROM factory.trail_entry t WHERE t.problem_id = p.id)," to q.
+    Push "'deadEnds', (SELECT count(*) FROM factory.dead_end d WHERE d.problem_id = p.id)," to q.
+    Push "'openUnits', (SELECT count(*) FROM factory.work_unit u WHERE u.problem_id = p.id AND u.state IN ('ready', 'leased'))," to q.
+    Push "'trailCheck', '')::text FROM factory.problem p LEFT JOIN factory.node n ON n.problem_id = p.id AND n.kind = 'problem'" to q.
+    Push "WHERE p.id = $1), '')" to q.
+    Return join(q, " ").
+
+## Note
+One problem, or `none` for a problem the coordinator does not hold.
+
+## To problemView (id: Text) -> Result of Option of ProblemView and Text:
+    Inspect dbCell(problemViewSql(), [id]):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (text):
+            If text is equal to "":
+                Return a new Ok with value none.
+            Inspect fromJson_ProblemView(text):
+                When Err (e):
+                    Return a new Err with error "ProblemView: " + e.
+                When Ok (v):
+                    Return a new Ok with value (some v).
+    Return a new Err with error "no answer".
+
+## Note
+A list statement answering the empty text when `$1` names no problem, so an
+unknown problem is told apart from one with an empty list.
+
+## To ofKnownProblem (sql: Text) -> Text:
+    Return "SELECT CASE WHEN EXISTS (SELECT 1 FROM factory.problem WHERE id = $1) THEN (" + sql + ") ELSE '' END".
+
+## Note
+A problem's statements, the accepted one first, then newest first.
+
+## To statementRowsSql () -> Text:
+    Let mutable q be ["SELECT coalesce(json_agg(json_build_object('id', s.id, 'sha256', s.sha256, 'goalName', s.goal_name, 'route', s.route,"].
+    Push "'reviewState', s.review_state, 'author', s.author, 'model', s.model," to q.
+    Push "'createdAt', (extract(epoch FROM s.created_at) * 1000)::bigint, 'document', s.document)" to q.
+    Push "ORDER BY (s.review_state = 'accepted') DESC, s.created_at DESC), '[]')::text FROM factory.statement s WHERE s.problem_id = $1" to q.
+    Return join(q, " ").
+
+## To statementRows (id: Text) -> Result of Text and Text:
+    Inspect dbCell(ofKnownProblem(statementRowsSql()), [id]):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (text):
+            Return canonStatementRows(text).
+    Return a new Err with error "no answer".
+
+## To canonStatementRows (text: Text) -> Result of Text and Text:
+    If text is equal to "":
+        Return a new Ok with value "".
+    Inspect fromJsonSeq_StatementRow(text):
+        When Err (e):
+            Return a new Err with error "StatementRow: " + e.
+        When Ok (rows):
+            Return a new Ok with value toJsonSeq_StatementRow(rows).
+    Return a new Err with error "unread".

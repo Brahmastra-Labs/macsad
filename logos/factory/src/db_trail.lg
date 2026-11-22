@@ -1,0 +1,82 @@
+# Trail queries
+
+Import TrailRecord from "./trail_record.lg".
+Import RecordsDecode from "./records_decode.lg".
+Import CoordinatorDb from "./coordinator_db.lg".
+
+A problem's trail exactly as it is stored: every entry, oldest first, read back
+into the wire contract's `TrailEntry` through its decoder, so the entries a
+worker or an auditor receives are the bytes the hash chain seals, and the chain
+can be checked again by anyone holding them (`verifyTrail` in `trail_record.lg`).
+
+## Note
+The statement: `$1` the problem, `$2` how many entries at most, from the first.
+
+## To trailEntriesSql () -> Text:
+    Let mutable q be ["SELECT coalesce(json_agg(json_build_object('seq', t.seq, 'ts', t.ts, 'problemId', t.problem_id, 'stage', t.stage,"].
+    Push "'kind', t.kind, 'contributor', t.contributor, 'model', t.model, 'strategyId', t.strategy_id, 'promptSha', t.prompt_sha," to q.
+    Push "'approachFingerprint', t.approach_fingerprint, 'artifactShas', to_json(t.artifact_shas), 'verdict', t.verdict," to q.
+    Push "'exitCode', t.exit_code, 'diagnostics', t.diagnostics, 'costMicros', t.cost_micros, 'summary', t.summary," to q.
+    Push "'nextSuggestions', to_json(t.next_suggestions), 'prevHash', t.prev_hash, 'hash', t.hash) ORDER BY t.seq), '[]')::text" to q.
+    Push "FROM (SELECT * FROM factory.trail_entry WHERE problem_id = $1 ORDER BY seq LIMIT $2::int) t" to q.
+    Return join(q, " ").
+
+## Note
+How many entries a trail read holds at most. A trail longer than this is read to
+this length; its digest says how many entries it has in all.
+
+## To trailReadLimit () -> Int:
+    Return 5000.
+
+## Note
+The entries in a JSON array, each through the contract's decoder.
+
+## To entriesOf (text: Text) -> Result of Seq of TrailEntry and Text:
+    Let mutable out be a new Seq of TrailEntry.
+    Inspect jsonParseStrict(text):
+        When JErr (m):
+            Return a new Err with error m.
+        When JOk (v):
+            Inspect jsonArray(v):
+                When Err (e):
+                    Return a new Err with error e.
+                When Ok (elems):
+                    Repeat for e in elems:
+                        Inspect decodeTrailEntry(e):
+                            When Err (m):
+                                Return a new Err with error m.
+                            When Ok (entry):
+                                Push entry to out.
+    Return a new Ok with value out.
+
+## Note
+A problem's trail on an open connection, and on a connection of its own.
+
+## To trailOn (c: PgConn, problemId: Text) -> Result of Seq of TrailEntry and Text:
+    Inspect dbCellOn(c, trailEntriesSql(), [problemId, "{trailReadLimit()}"]):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (text):
+            Return entriesOf(text).
+    Return a new Err with error "no answer".
+
+## To problemTrail (problemId: Text) -> Result of Seq of TrailEntry and Text:
+    Inspect dbOpen():
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (c):
+            Let answer be trailOn(c, problemId).
+            Let closed be pgClose(c).
+            Return answer.
+    Return a new Err with error "no connection".
+
+## Note
+What re-hashing a trail finds: `intact`, `empty`, or the first broken link.
+
+## To trailCheckOf (trail: Seq of TrailEntry) -> Text:
+    If length of trail is equal to 0:
+        Return "empty".
+    Let broken be verifyTrail(trail).
+    If broken is equal to "":
+        Return "intact".
+    Return broken.

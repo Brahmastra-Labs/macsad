@@ -1,0 +1,83 @@
+# OPDP import: the run
+
+Import CoordinatorDb from "./coordinator_db.lg".
+Import DbLoad from "./db_load.lg".
+Import OpdpImport from "./opdp_import.lg".
+Import OpdpStream from "./opdp_stream.lg".
+Import OpdpPlan from "./opdp_plan.lg".
+
+The import from the pinned release to the checked counts, on one connection.
+
+## To importOpdp (pinPath: Text, atlasPath: Text, workDir: Text) -> Result of Text and Text:
+    Let t0 be now().
+    Inspect checkedPin(pinPath, atlasPath):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (pin):
+            Inspect toolOutput("sh", ["-c", prepareSteps(), "sh", atlasPath, workDir]):
+                When Err (e):
+                    Return a new Err with error e.
+                When Ok (prepared):
+                    Inspect dbOpen():
+                        When Err (e):
+                            Return a new Err with error e.
+                        When Ok (c):
+                            Let answer be importOn(c, pin, workDir, t0).
+                            Let closed be pgClose(c).
+                            Return answer.
+    Return a new Err with error "not imported".
+
+## Note
+Every piece of the prepared release read, projected and written, then the ranks
+copied, the units planned and the counts checked.
+
+## To importOn (c: PgConn, pin: Json, workDir: Text, t0: Int) -> Result of Text and Text:
+    Let labels be cohortLabels(pin).
+    Let mutable carry be a new PieceCarry.
+    Inspect listDir(workDir + "/parts"):
+        When Err (e):
+            Return a new Err with error "no prepared pieces: " + e.
+        When Ok (names):
+            Repeat for name in names:
+                Inspect read(workDir + "/parts/" + name):
+                    When Err (e):
+                        Return a new Err with error "cannot read piece " + name + ": " + e.
+                    When Ok (text):
+                        Inspect importPiece(c, text, carry, labels):
+                            When Err (e):
+                                Return a new Err with error e.
+                            When Ok (next):
+                                Set carry to next.
+    Let t1 be now().
+    Inspect pgQueryParams(c, rankSyncSql(), a new Seq of Text):
+        When Err (e):
+            Return a new Err with error "ranks: " + e.
+        When Ok (qr):
+            Let synced be qr.
+    Inspect dbCellOn(c, "WITH made AS (" + planAllSql() + " RETURNING id) SELECT count(*)::text FROM made", a new Seq of Text):
+        When Err (e):
+            Return a new Err with error "planning: " + e.
+        When Ok (planned):
+            Inspect dbCellOn(c, countsSql(), a new Seq of Text):
+                When Err (e):
+                    Return a new Err with error e.
+                When Ok (countsText):
+                    Let counts be jsonParse(countsText).
+                    Let wrong be countsCheck(counts, pin).
+                    Let line be "imported {carry's records} records ({carry's unranked} without rank inputs) in {t1 - t0} ms; planned {planned} units; " + countsText.
+                    If wrong is not equal to "":
+                        Return a new Err with error line + "; " + wrong.
+                    Return a new Ok with value line.
+    Return a new Err with error "unimported".
+
+## Note
+One ready unit for every open problem that has none, from any source: what the
+board needs after a load.
+
+## To planOpenProblems () -> Result of Text and Text:
+    Inspect dbCell("WITH made AS (" + planAllSql() + " RETURNING id) SELECT count(*)::text FROM made", a new Seq of Text):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (n):
+            Return a new Ok with value "planned " + n + " units".
+    Return a new Err with error "unplanned".

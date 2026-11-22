@@ -1,0 +1,108 @@
+# Stage rules
+
+How a problem moves through the factory when its work moves, and what work the
+coordinator queues next. The coordinator alone creates units, and it creates them
+here: from the kind of the unit that just finished and the verdict its attempt
+reported. Worker reports move a problem forward only as far as work in progress;
+settling it — solved, refuted, partial — is the trusted verifier's attestation, and
+the schema refuses a solved node without one.
+
+## Note
+The stages no worker report leaves: the verifier settled them, or found the
+formal statement wrong.
+
+## To isSettledStage (stage: Text) -> Bool:
+    Return ["solved", "refuted", "partial", "invalid_formalization"] contains stage.
+
+## Note
+The kinds that work on a formal statement rather than produce one.
+
+## To isProgressKind (kind: Text) -> Bool:
+    Return ["prove", "decompose", "special_case", "counterexample", "repair"] contains kind.
+
+## Note
+A node's stage once a unit of `kind` is leased on it.
+
+## To stageOnLease (current: Text, kind: Text) -> Text:
+    If isSettledStage(current):
+        Return current.
+    If kind is equal to "formalize" and current is equal to "ranked":
+        Return "formalizing".
+    If isProgressKind(kind) and current is equal to "formalized":
+        Return "in_progress".
+    Return current.
+
+## Note
+The unit the coordinator queues after an attempt of `kind` reported `verdict`,
+or the empty text for none. A claimed proof queues nothing here: its `verify`
+unit is the intake's, and progress waits for the verifier. A rejected proof is
+repaired, a rejected repair tried afresh, a proof resting on an admitted lemma
+decomposed, and infrastructure trouble retried as it was.
+
+## To followUpKind (kind: Text, verdict: Text) -> Text:
+    If verdict is equal to "infrastructure" or verdict is equal to "budget_exhausted":
+        Return kind.
+    If kind is equal to "formalize":
+        If verdict is equal to "verified":
+            Return "review".
+        Return "formalize".
+    If isProgressKind(kind) is equal to false or verdict is equal to "verified":
+        Return "".
+    If verdict is equal to "admitted_axiom":
+        Return "decompose".
+    If kind is equal to "prove":
+        Return "repair".
+    Return "prove".
+
+## Note
+What the reviews of a statement add up to. Two independent reviews must agree
+before a statement goes to the kernel for acceptance, and two rejections retire it;
+anything between asks for another review.
+
+## To reviewOutcome (accepts: Int, rejects: Int) -> Text:
+    If rejects is at least 2:
+        Return "reject".
+    If accepts is at least 2 and accepts is greater than rejects:
+        Return "accept".
+    Return "needs_review".
+
+## Note
+Whether a problem may be marked solved: only on a verified attestation of its
+accepted statement.
+
+## To mayMarkSolved (attested: Bool, statementAccepted: Bool) -> Bool:
+    Return attested and statementAccepted.
+
+## Test: stage rules move a problem forward only while it is open
+
+Expect that stageOnLease("ranked", "formalize") is equal to "formalizing".
+Expect that stageOnLease("formalized", "prove") is equal to "in_progress".
+Expect that stageOnLease("solved", "prove") is equal to "solved".
+Expect that stageOnLease("ranked", "prove") is equal to "ranked".
+Expect that isSettledStage("in_progress") is equal to false.
+
+## Test: stage rules queue the next unit from the verdict
+
+Expect that followUpKind("prove", "rejected") is equal to "repair".
+Expect that followUpKind("repair", "refused_submission") is equal to "prove".
+Expect that followUpKind("prove", "admitted_axiom") is equal to "decompose".
+Expect that followUpKind("prove", "verified") is equal to "".
+Expect that followUpKind("repair", "infrastructure") is equal to "repair".
+Expect that followUpKind("formalize", "verified") is equal to "review".
+Expect that followUpKind("formalize", "rejected") is equal to "formalize".
+Expect that followUpKind("review", "verified") is equal to "".
+
+## Test: stage rules need two agreeing reviews
+
+Expect that reviewOutcome(2, 0) is equal to "accept".
+Expect that reviewOutcome(1, 0) is equal to "needs_review".
+Expect that reviewOutcome(2, 2) is equal to "reject".
+Expect that reviewOutcome(2, 1) is equal to "accept".
+
+## Test: stage rules settle a problem only on an attestation
+
+For all booleans attested and accepted:
+    Let may be mayMarkSolved(attested, accepted).
+    Expect that may is equal to (attested and accepted).
+    If attested is equal to false:
+        Expect that may is equal to false.

@@ -1,0 +1,85 @@
+# OPDP import rules
+
+The rules of importing the whole OPDP atlas, kept apart from the reading and the
+writing so each is a fact anyone can check. The release is one line of JSON; the
+importer starts a new line before every `{"problem_id":` (a quote that is not
+escaped never occurs inside a JSON string, so the break always falls between
+tokens) and then reads the lines back into records, joining any line a nested
+object split until the text parses.
+
+## Note
+A record's cohort, from the dataset version that added it to the atlas.
+
+## To cohortKeyOf (version: Text) -> Text:
+    Let versions be ["1.2.0", "1.5.0", "1.6.0", "1.7.0", "1.8.0"].
+    Let keys be ["unsolvedmath", "aim", "oberwolfach", "mathdb", "proofatlas"].
+    Let mutable i be 0.
+    Repeat for v in versions:
+        Set i to i + 1.
+        If v is equal to version:
+            Return item i of keys.
+    Return "opdp-" + version.
+
+## Note
+Whether a line ends the header (the release's notes hold record-shaped objects
+too, so records are only read after the line that opens the records array),
+whether a line begins a record, and the record text a buffer of lines holds once
+its separator is dropped: the comma before the next record, or the bracket and
+brace that close the array and the document after the last.
+
+## To opensRecords (line: Text) -> Bool:
+    Return endsWith(trimEnd(line), "\"records\":[").
+
+## To isRecordStart (line: Text) -> Bool:
+    Return startsWith(line, "{{\"problem_id\":").
+
+## To recordCandidate (buffer: Text) -> Text:
+    Let t be trimEnd(buffer).
+    If endsWith(t, "]}}"):
+        Return removeSuffix(t, "]}}").
+    Return removeSuffix(t, ",").
+
+## Note
+A MathDB record holds a public-list excerpt, not a statement; it must be
+completed from its cited source before it can be formalized, and MathDB's terms
+cap detail fetches, so it is never fetched in bulk. Its unit waits behind full
+statements at a quarter of its rank, and its worker is told why.
+
+## To isExcerptOnly (textMode: Text) -> Bool:
+    Return textMode is equal to "mathdb_public_list_excerpt".
+
+## To excerptDivisor () -> Int:
+    Return 4.
+
+## To unitPriority (rank: Int, excerpt: Bool) -> Int:
+    If excerpt:
+        Return rank / excerptDivisor().
+    Return rank.
+
+## To excerptContext () -> Text:
+    Return "This statement is a MathDB public-list excerpt, not a complete problem. Complete it from its cited source first; never fetch MathDB pages in bulk.".
+
+## Test: opdp import names each dataset version a cohort
+
+Expect that cohortKeyOf("1.2.0") is equal to "unsolvedmath".
+Expect that cohortKeyOf("1.7.0") is equal to "mathdb".
+Expect that cohortKeyOf("1.8.0") is equal to "proofatlas".
+Expect that cohortKeyOf("2.0.0") is equal to "opdp-2.0.0".
+
+## Test: opdp import reads records back from their lines
+
+Expect that isRecordStart("{{\"problem_id\":7,\"title\":\"x\"}},") is equal to true.
+Expect that isRecordStart("{{\"format_name\":\"x\"") is equal to false.
+Expect that opensRecords("{{\"problem_id\":\"Stable id\"}}]}},\"records\":[") is equal to true.
+Expect that opensRecords("{{\"problem_id\":7}},") is equal to false.
+Expect that recordCandidate("{{\"problem_id\":7}},") is equal to "{{\"problem_id\":7}}".
+Expect that recordCandidate("{{\"problem_id\":7}}]}}") is equal to "{{\"problem_id\":7}}".
+Expect that jsonValid(recordCandidate("{{\"problem_id\":7,\"a\":[1]}}]}}\n")) is equal to true.
+
+## Test: opdp import puts excerpts behind full statements
+
+For all booleans excerpt:
+    Let p be unitPriority(8000, excerpt).
+    Expect that p is at most 8000.
+    Expect that (p is equal to 8000) is equal to (excerpt is equal to false).
+    Expect that isExcerptOnly("mathdb_public_list_excerpt") is equal to true.

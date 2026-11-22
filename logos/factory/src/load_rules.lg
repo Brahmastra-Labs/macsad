@@ -1,0 +1,120 @@
+# Load rules and JSON cells
+
+The rules the loader applies to a line of ingested JSON before PostgreSQL sees
+it, and the total reads of the JSON the coordinator itself asked PostgreSQL to
+build.
+
+PostgreSQL text cannot hold the character U+0000, and real atlas records do:
+OCR of a scanned problem list left `\u0000` in a few statements. The loader writes
+each such escape as `\ufffd`, the replacement character, so the statement keeps
+its length and its reader sees where something was lost. The scan reads JSON
+escapes in pairs, so an escaped backslash followed by the letters `u0000` is
+left alone. A cell the coordinator built has the coordinator's own shape, so a
+missing member there means zero, the empty text or false; input from the network
+is never read that way.
+
+## Note
+The JSON text `line` with every escaped U+0000 written as an escaped U+FFFD.
+
+## To withoutNul (line: Text) -> Text:
+    If line contains "u0000" is equal to false:
+        Return line.
+    Let bs be text_bytes(line).
+    Let n be length of bs.
+    Let mutable out be a new Seq of Int.
+    Let mutable i be 1.
+    While i is at most n:
+        Let b be item i of bs.
+        If b is equal to 92 and i is less than n:
+            Let mutable isNul be false.
+            If i + 5 is at most n:
+                Let zeros be item (i + 2) of bs is equal to 48 and item (i + 3) of bs is equal to 48 and item (i + 4) of bs is equal to 48.
+                Set isNul to item (i + 1) of bs is equal to 117 and zeros and item (i + 5) of bs is equal to 48.
+            If isNul:
+                Repeat for c in text_bytes("\\ufffd"):
+                    Push c to out.
+                Set i to i + 6.
+            Otherwise:
+                Push b to out.
+                Push item (i + 1) of bs to out.
+                Set i to i + 2.
+        Otherwise:
+            Push b to out.
+            Set i to i + 1.
+    Return text_from_bytes(out).
+
+## Note
+Whether a file name is one of a directory's atlas record files: `records.jsonl`,
+or a piece of a split release such as `records-0007.jsonl`.
+
+## To isRecordFile (name: Text) -> Bool:
+    Return startsWith(name, "records") and endsWith(name, ".jsonl") and (name contains "/") is equal to false.
+
+## Test: load rules replace an escaped nul and nothing else
+
+Expect that withoutNul("{{\"t\":\"a\\u0000b\"}}") is equal to "{{\"t\":\"a\\ufffdb\"}}".
+Expect that withoutNul("{{\"t\":\"plain\"}}") is equal to "{{\"t\":\"plain\"}}".
+Expect that withoutNul("{{\"t\":\"\\u0000\\u0000\"}}") is equal to "{{\"t\":\"\\ufffd\\ufffd\"}}".
+Expect that jsonValid(withoutNul("{{\"t\":\"x\\u0000\"}}")) is equal to true.
+
+## Test: load rules know the record files
+
+Expect that isRecordFile("records.jsonl") is equal to true.
+Expect that isRecordFile("records-0007.jsonl") is equal to true.
+Expect that isRecordFile("problems.jsonl") is equal to false.
+
+## Test: load rules leave an escaped backslash before u0000 alone
+
+For all booleans escapedBackslash:
+    Let mutable line be "{{\"t\":\"\\u0000\"}}".
+    If escapedBackslash:
+        Set line to "{{\"t\":\"\\\\u0000\"}}".
+    Let out be withoutNul(line).
+    Expect that (out is equal to line) is equal to escapedBackslash.
+    Expect that jsonValid(out) is equal to true.
+
+## To intOfJson (v: Json) -> Int:
+    Inspect jsonInt(v):
+        When Ok (n):
+            Return n.
+        When Err (e):
+            Return 0.
+    Return 0.
+
+## To textOfJson (v: Json) -> Text:
+    Inspect jsonString(v):
+        When Ok (t):
+            Return t.
+        When Err (e):
+            Return "".
+    Return "".
+
+## To boolOfJson (v: Json) -> Bool:
+    Inspect jsonBool(v):
+        When Ok (b):
+            Return b.
+        When Err (e):
+            Return false.
+    Return false.
+
+## Test: json cells read what the coordinator built
+
+Let v be jsonParse("{{\"n\": 7, \"t\": \"x\", \"b\": true}}").
+Expect that intOfJson(jsonGet(v, "n")) is equal to 7.
+Expect that textOfJson(jsonGet(v, "t")) is equal to "x".
+Expect that boolOfJson(jsonGet(v, "b")) is equal to true.
+
+## Test: json cells answer the empty value for a missing member
+
+Let v be jsonParse("{{}}").
+Expect that intOfJson(jsonGet(v, "n")) is equal to 0.
+Expect that textOfJson(jsonGet(v, "t")) is equal to "".
+Expect that intOfJson(jsonParse("\"7\"")) is equal to 0.
+
+## Test: json cells read a boolean as it is
+
+For all booleans b:
+    Let mutable doc be "false".
+    If b:
+        Set doc to "true".
+    Expect that boolOfJson(jsonParse(doc)) is equal to b.

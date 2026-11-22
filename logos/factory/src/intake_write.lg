@@ -1,0 +1,102 @@
+# Intake writes
+
+Import AttemptRecord from "./attempt_record.lg".
+Import TrailRecord from "./trail_record.lg".
+Import VerdictRecord from "./verdict_record.lg".
+Import CoordinatorDb from "./coordinator_db.lg".
+
+The rows an accepted attempt adds, on the connection of its transaction: the
+attempt, its trail entry, the dead end when its approach failed, the
+contributor's spend, and the end of the lease. Every statement is parameterized;
+times arrive as Unix milliseconds and are stored as timestamps.
+
+## To attemptInsertSql () -> Text:
+    Let mutable q be ["INSERT INTO factory.attempt (id, unit_id, problem_id, contributor, model, strategy_id, prompt_sha, response_sha,"].
+    Push "document_sha, approach_fingerprint, verdict_kind, verdict, cost_micros, started_at, finished_at)" to q.
+    Push "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, nullif($9, ''), $10, $11, $12::jsonb, $13::bigint," to q.
+    Push "to_timestamp($14::bigint / 1000.0), to_timestamp($15::bigint / 1000.0))" to q.
+    Return join(q, " ").
+
+## To entryInsertSql () -> Text:
+    Let mutable q be ["INSERT INTO factory.trail_entry (problem_id, seq, ts, stage, kind, contributor, model, strategy_id, prompt_sha,"].
+    Push "approach_fingerprint, artifact_shas, verdict, exit_code, diagnostics, cost_micros, summary, next_suggestions, prev_hash, hash)" to q.
+    Push "VALUES ($1, $2::bigint, $3::bigint, $4, $5, $6, $7, $8, $9, $10, ARRAY(SELECT jsonb_array_elements_text($11::jsonb)), $12," to q.
+    Push "$13::int, $14, $15::bigint, $16, ARRAY(SELECT jsonb_array_elements_text($17::jsonb)), $18, $19)" to q.
+    Return join(q, " ").
+
+## Note
+A list of texts as a JSON array, for an array column.
+
+## To textsJson (xs: Seq of Text) -> Text:
+    Let mutable parts be a new Seq of Text.
+    Repeat for x in xs:
+        Push jsonQuote(x) to parts.
+    Return "[" + join(parts, ",") + "]".
+
+## Note
+The attempt row, under the coordinator's id for it.
+
+## To insertAttempt (c: PgConn, id: Text, a: Attempt) -> Result of Bool and Text:
+    Let mutable ps be [id, a's unitId, a's problemId, a's contributor, a's model, a's strategyId, a's promptSha, a's responseSha].
+    Push a's documentSha to ps.
+    Push a's approachFingerprint to ps.
+    Push attemptVerdictKind(a's verdict) to ps.
+    Push toJson_Verdict(a's verdict) to ps.
+    Push "{a's costMicros}" to ps.
+    Push "{a's startedAt}" to ps.
+    Push "{a's finishedAt}" to ps.
+    Return runOn(c, attemptInsertSql(), ps).
+
+## Note
+The trail entry row, sealed as it will be stored.
+
+## To insertEntry (c: PgConn, e: TrailEntry) -> Result of Bool and Text:
+    Let mutable ps be [e's problemId, "{e's seq}", "{e's ts}", e's stage, e's kind, e's contributor, e's model, e's strategyId, e's promptSha].
+    Push e's approachFingerprint to ps.
+    Push textsJson(e's artifactShas) to ps.
+    Push e's verdict to ps.
+    Push "{e's exitCode}" to ps.
+    Push e's diagnostics to ps.
+    Push "{e's costMicros}" to ps.
+    Push e's summary to ps.
+    Push textsJson(e's nextSuggestions) to ps.
+    Push e's prevHash to ps.
+    Push e's hash to ps.
+    Return runOn(c, entryInsertSql(), ps).
+
+## Note
+A statement run for its effect.
+
+## To runOn (c: PgConn, sql: Text, params: Seq of Text) -> Result of Bool and Text:
+    Inspect pgQueryParams(c, sql, params):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (qr):
+            Return a new Ok with value true.
+    Return a new Err with error "unrun".
+
+## Note
+The approach recorded as a dead end, the spend added, and the lease ended. The
+end is refused by the schema unless the token is still the unit's, which the
+locked read already saw; a refusal here is an error that undoes everything.
+
+## To closeAttempt (c: PgConn, a: Attempt, attemptId: Text, failed: Bool, token: Int) -> Result of Bool and Text:
+    If failed:
+        Let sql be "INSERT INTO factory.dead_end (problem_id, approach_fingerprint, first_attempt_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING".
+        Inspect runOn(c, sql, [a's problemId, a's approachFingerprint, attemptId]):
+            When Err (e):
+                Return a new Err with error e.
+            When Ok (done):
+                Let recorded be done.
+    Inspect runOn(c, "UPDATE factory.contributor SET spent_micros = spent_micros + $2::bigint WHERE id = $1", [a's contributor, "{a's costMicros}"]):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (done):
+            Let spent be done.
+    Inspect dbCellOn(c, "SELECT factory.finish_unit($1, $2::bigint, 'done')::text", [a's unitId, "{token}"]):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (finished):
+            If finished is not equal to "true":
+                Return a new Err with error "the lease on {a's unitId} moved on while the attempt was recorded".
+    Return a new Ok with value true.

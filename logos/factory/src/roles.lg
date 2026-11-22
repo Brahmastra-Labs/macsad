@@ -7,17 +7,18 @@ Import RolesIngest from "./roles_ingest.lg".
 Import RolesVerify from "./roles_verify.lg".
 Import HostFiles from "./host_files.lg".
 Import Selftest from "./selftest.lg".
+Import Coordinator from "./coordinator.lg".
 
 The MaCSad math factory is one program with one role per process; which role
 runs is the first argument. Every role prints what it did and fails when it did
-not do it. The distributed roles (`worker`, `coordinator`) need the coordinator's
-routes and database, built beside this in the same project.
+not do it. `coordinator` serves the coordinator's routes and website over the
+database and runs its import, load, plan and smoke commands; `worker` comes next.
 
 ## To usage () -> Text:
     Let a be ["usage: factory <role> …", "  ingest fc <manifest.json> <out-dir>", "  ingest opdp <atlas.json | atlas.json.gz> <out-dir> [chunk-mb]"].
     Let b be ["  verifier judge <statement.kernel> <goal> <submission.kernel>", "  verifier statement <statement.kernel> <goal>", "  verifier reference"].
     Let c be ["  local seed <workspace>", "  local answer <workspace> <problem-id> <answer-file> [cost-micros]", "  selftest [--live]"].
-    Return joinLines(a + b + c + ["  reference", "  local <workspace> <problem-id> [attempts]", "  worker | coordinator"]).
+    Return joinLines(a + b + c + ["  reference", "  local <workspace> <problem-id> [attempts]", "  coordinator [load <dir> | import-opdp <pin> <atlas> <work> | plan | smoke <url>]", "  worker"]).
 
 ## Note
 The argument at a position, the program's own name first, or the empty text.
@@ -76,6 +77,15 @@ The role the arguments name, run.
         Return runAnswer(argAt(xs, 4), argAt(xs, 5), argAt(xs, 6), countAt(xs, 7, 0)).
     If argAt(xs, 2) is equal to "local" and length of xs is at least 4:
         Return runLocal(argAt(xs, 3), argAt(xs, 4), countAt(xs, 5, 1)).
-    If argAt(xs, 2) is equal to "worker" or argAt(xs, 2) is equal to "coordinator":
-        Return failed("the " + argAt(xs, 2) + " role needs the coordinator's routes and database; use `local`.\n" + usage()).
+    If role is equal to "coordinator ":
+        Call serveCoordinator with 8080.
+        Return done("the coordinator stopped serving").
+    If argAt(xs, 2) is equal to "coordinator":
+        Inspect coordinatorCommand(xs):
+            When Ok (m):
+                Return done(m).
+            When Err (e):
+                Return failed(e).
+    If argAt(xs, 2) is equal to "worker":
+        Return failed("the worker role is not built yet; use `local`.\n" + usage()).
     Return failed(usage()).

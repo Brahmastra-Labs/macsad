@@ -1,0 +1,67 @@
+# Results and lemmas
+
+Import WebProblem from "./web_problem.lg".
+Import WebFormat from "./web_format.lg".
+
+The verdicts the trusted verifier signed on a problem, and the lemma tree a
+decomposition grew below it, each fetched when its section appears.
+
+## To lemmaIndent (depth: Int) -> Text:
+    Return "padding-left: {(depth - 1) * 20}px".
+
+## Component ResultSection (pid: Text)
+
+State:
+    Let rows be a new Seq of ResultRow.
+
+Actions:
+    When this component appears:
+        Get "/api/v1/problem/results?id=" + urlEncode(pid) as Seq of ResultRow, then arrived.
+
+    To arrived (answer: Result of Seq of ResultRow and HttpError):
+        Inspect answer:
+            When Ok (list):
+                Set rows to list.
+            When Err (e):
+                Set rows to a new Seq of ResultRow.
+
+View:
+    <div class="card">
+      <h2>Verified results</h2>
+      {for each r in rows, keyed by r's id:}
+        <div class="result">
+          <span class="verdict v-{r's verdictKind}">{r's verdictKind}</span> {r's subjectKind} by {r's verifier}, {formatStamp(r's createdAt)}
+          <div class="hash">statement {shortHash(r's statementSha)} · document {shortHash(r's documentSha)} · toolchain {shortHash(r's toolchainSha)}</div>
+        </div>
+      {else:}
+        <p class="empty" id="no-results">The verifier has signed nothing for this problem yet.</p>
+      {end}
+    </div>
+
+## Component LemmaSection (pid: Text)
+
+State:
+    Let rows be a new Seq of LemmaRow.
+
+Actions:
+    When this component appears:
+        Get "/api/v1/problem/lemmas?id=" + urlEncode(pid) as Seq of LemmaRow, then arrived.
+
+    To arrived (answer: Result of Seq of LemmaRow and HttpError):
+        Inspect answer:
+            When Ok (list):
+                Set rows to list.
+            When Err (e):
+                Set rows to a new Seq of LemmaRow.
+
+View:
+    <div class="card">
+      <h2>Lemma tree</h2>
+      <ul class="lemma-tree" id="lemmas">
+        {for each l in rows, keyed by l's id:}
+          <li style={lemmaIndent(l's depth)}><span class="dot s-{l's stage}"></span><span class="chip kind">{l's kind}</span>{l's label}</li>
+        {else:}
+          <li class="empty">No decomposition yet.</li>
+        {end}
+      </ul>
+    </div>

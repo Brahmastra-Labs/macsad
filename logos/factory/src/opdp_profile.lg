@@ -1,0 +1,108 @@
+# OPDP profile
+
+What the website shows about a problem from its OPDP atlas record: difficulty and
+tier, how well it fits current AI, tractability and the probability of progress,
+the burden of formalizing and of verifying it, tool leverage, the recommended
+route, the specialist hours the atlas estimates, and whether its text is a full
+statement or an excerpt. A record is about 10 KB; the
+profile keeps these few fields as display text, and the coordinator stores it in
+the problem's `opdp` column.
+
+Every value is kept as the atlas wrote it (`9.6`, `3-7%`, `T2`): the profile is
+for reading, and the ranking that computes on the same numbers reads them exactly,
+elsewhere. A field the record does not carry is the empty text, never zero.
+
+## Note
+The profile's keys, each with the path of the record field it shows.
+
+## To opdpProfilePaths () -> Seq of Seq of Text:
+    Let mutable out be [["difficultyLabel", "difficulty_label"], ["difficulty", "intrinsic_difficulty.score"], ["tier", "intrinsic_difficulty.tier_code"]].
+    Push ["aiFit", "ai_assessment.fit_label"] to out.
+    Push ["aiDifficulty", "ai_assessment.difficulty_score"] to out.
+    Push ["tractability", "tractability.code"] to out.
+    Push ["progress", "tractability.progress_probability.display_label"] to out.
+    Push ["formalization", "formalization.score"] to out.
+    Push ["verification", "verification.if_true_score"] to out.
+    Push ["toolLeverage", "tool_leverage.score"] to out.
+    Push ["route", "recommended_approach.route_label"] to out.
+    Push ["effortHours", "human_attention.effort.estimated_specialist_hours.display_label"] to out.
+    Push ["explanation", "explanation"] to out.
+    Push ["gate", "assessment_gate.value"] to out.
+    Push ["answerType", "classification.answer_type"] to out.
+    Push ["proposalYear", "evidence.estimated_proposal_year"] to out.
+    Push ["textMode", "source_text.text_mode"] to out.
+    Return out.
+
+## Note
+The value at a dotted path as display text: a string as it is, a number as JSON
+writes it, anything else (absent, null, an object) as the empty text.
+
+## To opdpDisplay (v: Json, path: Text) -> Text:
+    Let mutable here be v.
+    Repeat for step in split(path, "."):
+        Set here to jsonGet(here, step).
+    Inspect here:
+        When JStr (s):
+            Return s.
+        When JNum (n):
+            Return jsonSerialize(here).
+        When JDec (m, sc):
+            Return jsonSerialize(here).
+        Otherwise:
+            Return "".
+    Return "".
+
+## Note
+The profile of one record, as a compact JSON object of texts.
+
+## To opdpProfile (v: Json) -> Text:
+    Let mutable parts be a new Seq of Text.
+    Repeat for pair in opdpProfilePaths():
+        Push jsonQuote(item 1 of pair) + ":" + jsonQuote(opdpDisplay(v, item 2 of pair)) to parts.
+    Return "{{" + join(parts, ",") + "}}".
+
+## Note
+The factory problem id a record profiles (`opdp:116`), or the empty text when the
+record has no integer `problem_id`.
+
+## To opdpProblemId (v: Json) -> Text:
+    Inspect jsonGet(v, "problem_id"):
+        When JNum (n):
+            Return "opdp:{n}".
+        Otherwise:
+            Return "".
+    Return "".
+
+## Note
+A small record in the atlas's shape, for the tests.
+
+## To opdpSampleRecord (withTractability: Bool) -> Text:
+    Let mutable t be "".
+    If withTractability:
+        Set t to ",\"tractability\":{{\"code\":\"T2\",\"progress_probability\":{{\"display_label\":\"3-7%\"}}}}".
+    Return "{{\"problem_id\":116,\"difficulty_label\":\"T4 Hard\",\"intrinsic_difficulty\":{{\"score\":9.6,\"tier_code\":\"T4\"}},\"tool_leverage\":{{\"score\":8}}" + t + "}}".
+
+## Test: opdp profiles keep the atlas display values
+
+Let v be jsonParse(opdpSampleRecord(true)).
+Expect that opdpProblemId(v) is equal to "opdp:116".
+Expect that opdpDisplay(v, "intrinsic_difficulty.score") is equal to "9.6".
+Expect that opdpDisplay(v, "tool_leverage.score") is equal to "8".
+Expect that opdpDisplay(v, "tractability.progress_probability.display_label") is equal to "3-7%".
+Expect that opdpDisplay(v, "intrinsic_difficulty") is equal to "".
+Let profile be jsonParse(opdpProfile(v)).
+Expect that jsonSerialize(jsonGet(profile, "tier")) is equal to "\"T4\"".
+Expect that jsonSerialize(jsonGet(profile, "route")) is equal to "\"\"".
+Expect that length of opdpProfilePaths() is equal to 17.
+
+## Test: opdp profiles have no id without an integer problem id
+
+Expect that opdpProblemId(jsonParse("{{\"problem_id\":\"116\"}}")) is equal to "".
+Expect that opdpProblemId(jsonParse("[]")) is equal to "".
+
+## Test: opdp profiles show an absent field as empty
+
+For all booleans present:
+    Let profile be opdpProfile(jsonParse(opdpSampleRecord(present))).
+    Expect that jsonValid(profile) is equal to true.
+    Expect that (profile contains "\"progress\":\"3-7%\"") is equal to present.

@@ -1,0 +1,85 @@
+# Claiming units
+
+Import CoordinatorDb from "./coordinator_db.lg".
+
+A worker's lease, taken from the database in one statement. Without a focus the
+schema's own `factory.claim_unit` takes it: expired leases return to the board,
+and the best-priority ready unit of the asked kinds is leased under a fresh,
+larger fencing token, skipping any unit another claim holds. With a focus the
+same claim is made over the units whose problem is the focus or lies in it (its
+cohort, collection or category).
+
+When nothing fits, the coordinator plans: it queues units for the best-ranked
+open problems that have none, and claims again. The board therefore never runs
+dry while open problems remain, and is never planned further ahead than workers
+ask.
+
+## Note
+A PostgreSQL array literal of kinds. The kinds have been checked against the
+leasable vocabulary, so none holds a comma, a brace or a quote.
+
+## To kindsArray (kinds: Seq of Text) -> Text:
+    Return "{{" + join(kinds, ",") + "}}".
+
+## Note
+The claimed unit as JSON (`unitId`, `token`), or an empty object for none.
+
+## To claimSql () -> Text:
+    Let mutable q be ["SELECT coalesce((SELECT json_build_object('unitId', c.unit_id, 'token', c.token)"].
+    Push "FROM factory.claim_unit($1, $2::int, $3::text[]) AS c), '{{}}'::json)::text" to q.
+    Return join(q, " ").
+
+## To focusedClaimSql () -> Text:
+    Let mutable q be ["WITH expired AS (UPDATE factory.work_unit w SET state = 'ready', holder = NULL, lease_token = NULL, leased_at = NULL,"].
+    Push "expires_at = NULL, heartbeat_at = NULL WHERE w.state = 'leased' AND w.expires_at < clock_timestamp() RETURNING w.id)," to q.
+    Push "pick AS (SELECT u.id FROM factory.work_unit u JOIN factory.problem p ON p.id = u.problem_id WHERE u.state = 'ready'" to q.
+    Push "AND u.kind = ANY ($3::text[]) AND $4 IN (p.id, p.cohort, p.collection, p.category)" to q.
+    Push "ORDER BY u.priority DESC, u.created_at LIMIT 1 FOR UPDATE OF u SKIP LOCKED)," to q.
+    Push "taken AS (UPDATE factory.work_unit w SET state = 'leased', holder = $1, lease_token = nextval('factory.lease_token')," to q.
+    Push "leased_at = clock_timestamp(), heartbeat_at = clock_timestamp(), expires_at = clock_timestamp() + make_interval(secs => $2::int / 1000.0)" to q.
+    Push "FROM pick WHERE w.id = pick.id RETURNING w.id, w.lease_token)" to q.
+    Push "SELECT coalesce((SELECT json_build_object('unitId', id, 'token', lease_token) FROM taken), '{{}}'::json)::text" to q.
+    Return join(q, " ").
+
+## Note
+Units for the best-ranked open problems without one: `prove` for a problem with
+an accepted statement, `formalize` for one with no statement under review. `$1`
+is how many, `$2` the kinds asked, `$3` the focus or the empty text.
+
+## To planSql () -> Text:
+    Let mutable q be ["INSERT INTO factory.work_unit (id, problem_id, statement_id, kind, priority, state)"].
+    Push "SELECT 'u:' || gen_random_uuid()::text, x.id, x.sid, x.kind, x.rank, 'ready' FROM (SELECT p.id, s.id AS sid, p.rank," to q.
+    Push "CASE WHEN s.id IS NULL THEN 'formalize' ELSE 'prove' END AS kind FROM factory.problem p" to q.
+    Push "LEFT JOIN factory.statement s ON s.problem_id = p.id AND s.review_state = 'accepted'" to q.
+    Push "LEFT JOIN factory.node n ON n.problem_id = p.id AND n.kind = 'problem' WHERE p.status = 'open'" to q.
+    Push "AND coalesce(n.stage, 'ranked') NOT IN ('solved', 'refuted', 'partial', 'invalid_formalization')" to q.
+    Push "AND ($3 = '' OR $3 IN (p.id, p.cohort, p.collection, p.category))" to q.
+    Push "AND NOT EXISTS (SELECT 1 FROM factory.work_unit u WHERE u.problem_id = p.id AND u.state IN ('ready', 'leased'))" to q.
+    Push "AND (s.id IS NOT NULL OR NOT EXISTS (SELECT 1 FROM factory.statement d WHERE d.problem_id = p.id" to q.
+    Push "AND d.review_state IN ('draft', 'reviewing')))) AS x WHERE x.kind = ANY ($2::text[]) ORDER BY x.rank DESC, x.id LIMIT $1::int" to q.
+    Return join(q, " ").
+
+## Note
+One claim on an open connection: the unit and token as JSON, or an empty object.
+
+## To claimOn (c: PgConn, holder: Text, ttlMs: Int, kinds: Seq of Text, focus: Text) -> Result of Text and Text:
+    If focus is equal to "":
+        Return dbCellOn(c, claimSql(), [holder, "{ttlMs}", kindsArray(kinds)]).
+    Return dbCellOn(c, focusedClaimSql(), [holder, "{ttlMs}", kindsArray(kinds), focus]).
+
+## Note
+A claim, planning once and claiming again when the board had nothing that fits.
+
+## To claimOrPlan (c: PgConn, holder: Text, ttlMs: Int, kinds: Seq of Text, focus: Text) -> Result of Text and Text:
+    Inspect claimOn(c, holder, ttlMs, kinds, focus):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (first):
+            If first is not equal to "{{}}":
+                Return a new Ok with value first.
+    Inspect pgQueryParams(c, planSql(), ["8", kindsArray(kinds), focus]):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (planned):
+            Return claimOn(c, holder, ttlMs, kinds, focus).
+    Return a new Err with error "no claim".

@@ -1,0 +1,120 @@
+# Lease requests
+
+What a worker sends to take work and to keep it: flat records with derived codecs,
+read CLOSED, so a field the coordinator does not know is refused, never ignored,
+and a worker built against another contract finds out on its first request.
+
+## Note
+A worker asking for a unit. `holder` is the contributor's id; `kinds` narrows the
+unit kinds it takes, comma-separated, empty for every kind a worker may lease;
+`focus` narrows the problems to a cohort, collection, category or problem id,
+empty for anywhere; `ttlMs` asks for a lease length, zero for the default; and
+`budgetMicros` is what the contributor set aside, shown on the leaderboard.
+
+## A LeaseRequest has:
+    a holder, which is Text.
+    a displayName, which is Text.
+    a kinds, which is Text.
+    a focus, which is Text.
+    a ttlMs, which is Int.
+    a budgetMicros, which is Int.
+
+## Note
+A worker still on its unit, asking for its lease to run on, with the lease's secret.
+## A HeartbeatRequest has:
+    a unitId, which is Text.
+    a token, which is Int.
+    a holder, which is Text.
+    a secret, which is Text.
+    a ttlMs, which is Int.
+
+## Note
+The unit kinds a worker may lease: all but `verify`, which only the trusted
+verifier takes, from the database, so no worker can verify its own claim.
+
+## To leasableKinds () -> Seq of Text:
+    Return ["formalize", "review", "prove", "decompose", "special_case", "counterexample", "repair", "summarize_trail", "link", "improve_strategy"].
+
+## Note
+The kinds a request names, or every leasable kind when it names none.
+## To requestedKinds (kinds: Text) -> Seq of Text:
+    If trim(kinds) is equal to "":
+        Return leasableKinds().
+    Let mutable out be a new Seq of Text.
+    Repeat for k in split(kinds, ","):
+        Push trim(k) to out.
+    Return out.
+
+## Note
+Whether a contributor id has the schema's shape: 1 to 80 of `A-Za-z0-9_.:-`.
+## To isHolderId (t: Text) -> Bool:
+    If length of t is equal to 0 or length of t is greater than 80:
+        Return false.
+    Repeat for b in text_bytes(t):
+        Let letter be (b is at least 97 and b is at most 122) or (b is at least 65 and b is at most 90).
+        If (letter or (b is at least 45 and b is at most 58) or b is equal to 95) is equal to false or b is equal to 47:
+            Return false.
+    Return true.
+
+## Note
+The first thing wrong with a lease request, or the empty text when nothing is.
+## To leaseRequestProblem (r: LeaseRequest) -> Text:
+    If isHolderId(r's holder) is equal to false:
+        Return "holder must be 1 to 80 of A-Za-z0-9_.:-".
+    If length of r's displayName is greater than 120 or length of r's focus is greater than 200:
+        Return "displayName is at most 120 bytes and focus at most 200".
+    If r's budgetMicros is less than 0 or r's ttlMs is less than 0:
+        Return "budgetMicros and ttlMs cannot be negative".
+    Let mutable seen be a new Seq of Text.
+    Repeat for k in requestedKinds(r's kinds):
+        If leasableKinds() contains k is equal to false or seen contains k:
+            Return "kind \"{k}\" is not one a worker may lease, or is repeated".
+        Push k to seen.
+    Return "".
+
+## Note
+A JSON object body, refused when it carries a key not in `keys`.
+## To closedBody (body: Text, keys: Seq of Text) -> Result of Text and Text:
+    Inspect jsonParseStrict(body):
+        When JErr (m):
+            Return a new Err with error "not JSON: " + m.
+        When JOk (v):
+            Inspect jsonNoExtraKeys(v, keys):
+                When Err (e):
+                    Return a new Err with error e.
+                When Ok (fine):
+                    Return a new Ok with value body.
+    Return a new Err with error "unreadable body".
+
+## Test: coordinator lease requests are closed records
+
+Let body be toJson_LeaseRequest(a new LeaseRequest with holder "ada-1" and displayName "Ada" and kinds "prove,repair" and focus "erdos" and ttlMs 0 and budgetMicros 5000000).
+Inspect closedBody(body, ["holder", "displayName", "kinds", "focus", "ttlMs", "budgetMicros"]):
+    When Ok (b):
+        Expect that b is equal to body.
+    When Err (e):
+        Expect that e is equal to "closed".
+Inspect closedBody("{{\"holder\":\"a\",\"extra\":1}}", ["holder"]):
+    When Ok (b):
+        Expect that b is equal to "refused".
+    When Err (e):
+        Expect that e is equal to "unexpected key \"extra\"".
+
+## Test: coordinator lease rules name what is wrong
+
+Let good be a new LeaseRequest with holder "ada-1" and displayName "Ada" and kinds "" and focus "" and ttlMs 0 and budgetMicros 0.
+Expect that leaseRequestProblem(good) is equal to "".
+Expect that requestedKinds("prove, repair") is equal to ["prove", "repair"].
+Expect that length of requestedKinds("") is equal to 10.
+Expect that leaseRequestProblem(a new LeaseRequest with holder "a/b" and displayName "" and kinds "" and focus "" and ttlMs 0 and budgetMicros 0) contains "holder".
+Expect that leaseRequestProblem(a new LeaseRequest with holder "a" and displayName "" and kinds "verify" and focus "" and ttlMs 0 and budgetMicros 0) contains "verify".
+
+## Test: coordinator workers never lease verification
+
+Expect that leasableKinds() contains "verify" is equal to false.
+For all booleans asksVerify:
+    Let mutable kinds be "prove".
+    If asksVerify:
+        Set kinds to "prove,verify".
+    Let r be a new LeaseRequest with holder "w" and displayName "" and kinds kinds and focus "" and ttlMs 0 and budgetMicros 0.
+    Expect that (leaseRequestProblem(r) is equal to "") is equal to (asksVerify is equal to false).

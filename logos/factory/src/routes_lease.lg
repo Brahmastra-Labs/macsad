@@ -1,0 +1,87 @@
+# Lease routes
+
+Import ApiBounds from "./api_bounds.lg".
+Import HttpAnswers from "./http_answers.lg".
+Import LeaseWire from "./lease_wire.lg".
+Import CoordinatorDb from "./coordinator_db.lg".
+Import CoordinatorWire from "./coordinator_wire.lg".
+Import DbClaim from "./db_claim.lg".
+Import LeaseGrant from "./lease_grant.lg".
+Import LoadRules from "./load_rules.lg".
+
+`POST /api/v1/lease` takes a `LeaseRequest` and answers a `LeaseGrant`: a unit
+of work, or `granted: false` with the reason when nothing fits. `POST
+/api/v1/heartbeat` takes a `HeartbeatRequest` and answers a `HeartbeatAnswer`:
+whether the lease is still the worker's, and until when. A contributor is
+recorded the first time they lease; their budget is the one they first gave.
+
+## To contributorSql () -> Text:
+    Let mutable q be ["INSERT INTO factory.contributor (id, display_name, budget_micros, focus) VALUES ($1, $2, $3::bigint, $4)"].
+    Push "ON CONFLICT (id) DO UPDATE SET display_name = EXCLUDED.display_name, focus = EXCLUDED.focus" to q.
+    Return join(q, " ").
+
+## Note
+A lease for a checked request, on an open connection.
+
+## To leaseOn (c: PgConn, r: LeaseRequest, key: Text) -> Result of LeaseGrant and Text:
+    Let mutable name be r's displayName.
+    If trim(name) is equal to "":
+        Set name to r's holder.
+    Inspect pgQueryParams(c, contributorSql(), [r's holder, name, "{r's budgetMicros}", r's focus]):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (qr):
+            Let recorded be qr.
+    Inspect claimOrPlan(c, r's holder, clampTtl(r's ttlMs), requestedKinds(r's kinds), trim(r's focus)):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (claim):
+            If claim is equal to "{{}}":
+                Return a new Ok with value refusedGrant("no ready unit fits these kinds and this focus").
+            Let v be jsonParse(claim).
+            Return grantOn(c, textOfJson(jsonGet(v, "unitId")), intOfJson(jsonGet(v, "token")), key).
+    Return a new Err with error "no lease".
+
+## Route POST /api/v1/lease (request: Request) -> Response:
+    If bodyFits(request's body, leaseBodyLimit()) is equal to false:
+        Return tooLarge(leaseBodyLimit()).
+    Inspect closedBody(request's body, ["holder", "displayName", "kinds", "focus", "ttlMs", "budgetMicros"]):
+        When Err (e):
+            Return badRequest(e).
+        When Ok (body):
+            Inspect fromJson_LeaseRequest(body):
+                When Err (e):
+                    Return badRequest(e).
+                When Ok (r):
+                    If leaseRequestProblem(r) is not equal to "":
+                        Return badRequest(leaseRequestProblem(r)).
+                    Inspect coordLeaseKey():
+                        When Err (e):
+                            Return unavailable(e).
+                        When Ok (key):
+                            Inspect dbOpen():
+                                When Err (e):
+                                    Return unavailable(e).
+                                When Ok (c):
+                                    Let granted be leaseOn(c, r, key).
+                                    Let closed be pgClose(c).
+                                    Inspect granted:
+                                        When Err (e):
+                                            Return unavailable(e).
+                                        When Ok (g):
+                                            Return json(toJson_LeaseGrant(g)).
+    Return unavailable("no answer").
+
+## Route POST /api/v1/heartbeat (request: Request) -> Response:
+    If bodyFits(request's body, heartbeatBodyLimit()) is equal to false:
+        Return tooLarge(heartbeatBodyLimit()).
+    Inspect closedBody(request's body, ["unitId", "token", "holder", "secret", "ttlMs"]):
+        When Err (e):
+            Return badRequest(e).
+        When Ok (body):
+            Inspect fromJson_HeartbeatRequest(body):
+                When Err (e):
+                    Return badRequest(e).
+                When Ok (h):
+                    Return heartbeatAnswer(h).
+    Return unavailable("no answer").

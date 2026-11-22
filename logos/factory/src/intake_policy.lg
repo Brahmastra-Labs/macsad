@@ -1,0 +1,104 @@
+# Attempt intake policy
+
+What the coordinator does with an attempt a worker posts, decided from facts the
+coordinator established itself — never from what the worker says it found.
+
+The facts are checked in order of what is cheapest to fake. A worker whose lease
+lapsed or was handed on (a stale fencing token) changes nothing. An attempt and a
+trail entry that disagree with the unit about the problem change nothing. A trail
+entry whose hash does not seal its own contents is refused. An approach already
+recorded as a dead end on this problem is refused, so no contributor pays twice for
+the same wall. Everything else is recorded, and three things follow from it:
+
+- an entry written against an older head of the trail is RESEALED onto the head (a
+  concurrent attempt got there first; the content is unchanged, its place moves);
+- a failed approach is recorded as a dead end;
+- a claimed proof becomes a `verify` unit for the trusted verifier. A worker's
+  verdict is a claim. The coordinator marks nothing proved on it; only an
+  attestation does, and the schema refuses a solved node without one.
+
+## A IntakeFacts has:
+    a leaseLive, which is Bool.
+    a sameProblem, which is Bool.
+    an entrySealed, which is Bool.
+    an atHead, which is Bool.
+    a deadEnd, which is Bool.
+    a claimedVerified, which is Bool.
+    a failedApproach, which is Bool.
+
+## A IntakeDecision has:
+    an accept, which is Bool.
+    a status, which is Int.
+    an outcome, which is Text.
+    a reseal, which is Bool.
+    a recordDeadEnd, which is Bool.
+    an enqueueVerify, which is Bool.
+
+## Note
+A refusal: nothing is written.
+
+## To refuseIntake (status: Int, outcome: Text) -> IntakeDecision:
+    Return a new IntakeDecision with accept false and status status and outcome outcome and reseal false and recordDeadEnd false and enqueueVerify false.
+
+## Note
+The decision on one attempt.
+
+## To decideIntake (f: IntakeFacts) -> IntakeDecision:
+    If f's leaseLive is equal to false:
+        Return refuseIntake(409, "stale_lease").
+    If f's sameProblem is equal to false:
+        Return refuseIntake(422, "mismatched_problem").
+    If f's entrySealed is equal to false:
+        Return refuseIntake(422, "unsealed_entry").
+    If f's deadEnd:
+        Return refuseIntake(409, "dead_end").
+    Let mutable outcome be "recorded".
+    If f's claimedVerified:
+        Set outcome to "awaiting_verifier".
+    Return a new IntakeDecision with accept true and status 201 and outcome outcome and reseal (f's atHead is equal to false) and recordDeadEnd f's failedApproach and enqueueVerify f's claimedVerified.
+
+## Note
+Every fact true but the ones named, for the tests.
+
+## To factsWith (leaseLive: Bool, deadEnd: Bool, claimedVerified: Bool) -> IntakeFacts:
+    Return a new IntakeFacts with leaseLive leaseLive and sameProblem true and entrySealed true and atHead true and deadEnd deadEnd and claimedVerified claimedVerified and failedApproach false.
+
+## Test: intake records a clean attempt at the head
+
+Let d be decideIntake(factsWith(true, false, false)).
+Expect that d's accept is equal to true.
+Expect that d's status is equal to 201.
+Expect that d's outcome is equal to "recorded".
+Expect that d's reseal is equal to false.
+Expect that d's enqueueVerify is equal to false.
+
+## Test: intake refuses stale leases, mismatches, unsealed entries and dead ends
+
+Expect that decideIntake(factsWith(false, false, true))'s outcome is equal to "stale_lease".
+Expect that decideIntake(factsWith(true, true, false))'s outcome is equal to "dead_end".
+Expect that decideIntake(factsWith(true, true, false))'s status is equal to 409.
+Let mutable f be factsWith(true, false, false).
+Set f's sameProblem to false.
+Expect that decideIntake(f)'s outcome is equal to "mismatched_problem".
+Set f's sameProblem to true.
+Set f's entrySealed to false.
+Expect that decideIntake(f)'s status is equal to 422.
+
+## Test: intake reseals an entry written against an older head
+
+Let mutable f be factsWith(true, false, false).
+Set f's atHead to false.
+Set f's failedApproach to true.
+Let d be decideIntake(f).
+Expect that d's reseal is equal to true.
+Expect that d's recordDeadEnd is equal to true.
+
+## Test: intake never settles a claim and records only with a live lease
+
+For all booleans live and sameProblem and sealed and head and dead and claimed and failed:
+    Let f be a new IntakeFacts with leaseLive live and sameProblem sameProblem and entrySealed sealed and atHead head and deadEnd dead and claimedVerified claimed and failedApproach failed.
+    Let d be decideIntake(f).
+    Expect that d's accept is equal to (live and sameProblem and sealed and dead is equal to false).
+    Expect that d's enqueueVerify is equal to (d's accept and claimed).
+    Expect that d's outcome is not equal to "solved".
+    Expect that (d's accept is equal to false and (d's reseal or d's recordDeadEnd)) is equal to false.
