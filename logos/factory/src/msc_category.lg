@@ -25,25 +25,19 @@ categories, and the rank's expressibility prior reads them alike.
 
 ## Test: MSC subjects map onto the atlas's categories
 
-For each of these cases:
-
-| code | category           |
-|------|--------------------|
-| 3    | "logic"            |
-| 5    | "combinatorics"    |
-| 11   | "number-theory"    |
-| 13   | "algebra"          |
-| 20   | "group-theory"     |
-| 35   | "pde"              |
-| 42   | "analysis"         |
-| 52   | "geometry"         |
-| 55   | "topology"         |
-| 60   | "probability"      |
-| 68   | "computer-science" |
-| 81   | "physics"          |
-| 97   | "miscellaneous"    |
-
-Expect that mscCategory(code) is equal to category.
+Expect that mscCategory(3) is equal to "logic".
+Expect that mscCategory(5) is equal to "combinatorics".
+Expect that mscCategory(11) is equal to "number-theory".
+Expect that mscCategory(13) is equal to "algebra".
+Expect that mscCategory(20) is equal to "group-theory".
+Expect that mscCategory(35) is equal to "pde".
+Expect that mscCategory(42) is equal to "analysis".
+Expect that mscCategory(52) is equal to "geometry".
+Expect that mscCategory(55) is equal to "topology".
+Expect that mscCategory(60) is equal to "probability".
+Expect that mscCategory(68) is equal to "computer-science".
+Expect that mscCategory(81) is equal to "physics".
+Expect that mscCategory(97) is equal to "miscellaneous".
 
 ## Test: number theory and combinatorics are told apart
 

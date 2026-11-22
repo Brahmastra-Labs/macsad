@@ -1,0 +1,115 @@
+# Attestation
+
+The verifier's signed word that a document checked. The trusted verifier re-runs
+the kernel on a submitted document itself, and only what it signs can make a
+problem `solved`: the coordinator's schema refuses a solved node without a
+verified attestation. The signature is ML-DSA-65 (FIPS 204) over the canonical
+payload below, under the context `macsad-attestation-v1`, from a key derived from
+a 32-byte seed the verifier keeps as 64 hex digits; its public key is published
+by its SHA-256, which every attestation names.
+
+## Note
+What an attestation says: what it is about, the statement and document hashes it
+binds, the verdict, who verified with which toolchain, and the signature in hex.
+
+## An Attestation has:
+    an id, which is Text.
+    a subjectKind, which is Text.
+    a subjectId, which is Text.
+    a statementSha, which is Text.
+    a documentSha, which is Text.
+    a verdictKind, which is Text.
+    a verifier, which is Text.
+    a toolchainSha, which is Text.
+    a publicKeySha, which is Text.
+    a signature, which is Text.
+
+## Note
+The seed in a key file: exactly 64 lowercase or uppercase hex digits, surrounding
+whitespace ignored. Anything else is refused, never padded or truncated.
+
+## To seedOf (keyFile: Text) -> Result of Seq of Int and Text:
+    Let t be lower(trim(keyFile)).
+    If length of text_bytes(t) is not equal to 64:
+        Return a new Err with error "the verifier key must be 64 hex digits, not {length of text_bytes(t)} characters".
+    Repeat for b in text_bytes(t):
+        If (b is less than 48 or b is greater than 57) and (b is less than 97 or b is greater than 102):
+            Return a new Err with error "the verifier key is not hex".
+    Return a new Ok with value bytesFromHex(t).
+
+## Note
+The keypair a seed determines: the public key is its first 1,952 bytes and the
+secret key the 4,032 after, as `mldsaKeypair` lays them out.
+
+## To publicKeyOf (seed: Seq of Int) -> Seq of Int:
+    Return items 1 through 1952 of mldsaKeypair(seed).
+
+## To secretKeyOf (seed: Seq of Int) -> Seq of Int:
+    Let kp be mldsaKeypair(seed).
+    Return items 1953 through (length of kp) of kp.
+
+## To publicKeySha (seed: Seq of Int) -> Text:
+    Return bytesToHex(sha256(publicKeyOf(seed))).
+
+## Note
+The bytes an attestation's signature covers: every field but the signature and
+the id, in a fixed order, as canonical JSON.
+
+## To attestationPayload (a: Attestation) -> Text:
+    Let keys be ["schema", "subject_kind", "subject_id", "statement_sha", "document_sha", "verdict_kind", "verifier", "toolchain_sha", "public_key_sha"].
+    Let values be ["macsad-attestation/1", a's subjectKind, a's subjectId, a's statementSha, a's documentSha, a's verdictKind, a's verifier, a's toolchainSha, a's publicKeySha].
+    Let mutable parts be a new Seq of Text.
+    Repeat for i from 1 to length of keys:
+        Push jsonQuote(item i of keys) + ":" + jsonQuote(item i of values) to parts.
+    Return "{{" + join(parts, ",") + "}}".
+
+## Note
+An attestation signed with the key of `seed`; its id is the hash of its payload.
+
+## To signAttestation (a: Attestation, seed: Seq of Int) -> Attestation:
+    Let mutable out be a.
+    Set out's publicKeySha to publicKeySha(seed).
+    Let payload be text_bytes(attestationPayload(out)).
+    Set out's signature to bytesToHex(mldsaSign(secretKeyOf(seed), payload, text_bytes("macsad-attestation-v1"))).
+    Set out's id to "att:" + bytesToHex(sha256(payload)).
+    Return out.
+
+## Note
+Whether an attestation's signature holds under a published public key.
+
+## To attestationHolds (a: Attestation, publicKey: Seq of Int) -> Bool:
+    Let payload be text_bytes(attestationPayload(a)).
+    Return mldsaVerify(publicKey, payload, text_bytes("macsad-attestation-v1"), bytesFromHex(a's signature)) is equal to 1.
+
+## Note
+An unsigned attestation of a verified attempt, for the tests.
+
+## To sampleAttestation () -> Attestation:
+    Let mutable a be a new Attestation with id "" and subjectKind "attempt" and subjectId "a1" and statementSha "ab" and documentSha "cd" and verdictKind "verified".
+    Set a's verifier to "verifier-1".
+    Set a's toolchainSha to "ef".
+    Return a.
+
+## Test: a key file is 64 hex digits and nothing else
+
+Expect that seedOf("  000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1F\n") is equal to a new Ok with value bytesFromHex("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f").
+Expect that seedOf("abc") is equal to a new Err with error "the verifier key must be 64 hex digits, not 3 characters".
+Expect that seedOf("zz02030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f00") is equal to a new Err with error "the verifier key is not hex".
+
+## Test: a signed attestation holds under its key and names it
+
+Let seed be bytesFromHex("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f").
+Let a be signAttestation(sampleAttestation(), seed).
+Expect that attestationHolds(a, publicKeyOf(seed)) is equal to true.
+Expect that a's publicKeySha is equal to bytesToHex(sha256(publicKeyOf(seed))).
+Expect that startsWith(a's id, "att:") is equal to true.
+Expect that attestationPayload(a) contains "\"verdict_kind\":\"verified\"".
+
+## Test: an attestation changed after signing no longer holds
+
+For all booleans changed:
+    Let seed be bytesFromHex("1f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100").
+    Let mutable a be signAttestation(sampleAttestation(), seed).
+    If changed:
+        Set a's verdictKind to "rejected".
+    Expect that attestationHolds(a, publicKeyOf(seed)) is equal to (not changed).

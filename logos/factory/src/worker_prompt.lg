@@ -1,0 +1,111 @@
+# Worker prompt
+
+Import HostFiles from "./host_files.lg".
+Import ProblemRecord from "./problem_record.lg".
+Import NodeRecord from "./node_record.lg".
+Import WorkRecord from "./work_record.lg".
+Import TrailRecord from "./trail_record.lg".
+Import TrailMemory from "./trail_memory.lg".
+Import KernelBlocks from "./kernel_blocks.lg".
+Import ChatRequest from "./chat_request.lg".
+Import Prompts from "./prompts.lg".
+Import LocalSettings from "./local_settings.lg".
+Import LocalPlan from "./local_plan.lg".
+Import CoordinatorWire from "./coordinator_wire.lg".
+Import WorkerClient from "./worker_client.lg".
+
+What a leased unit asks its model, built from the grant alone — the problem, the
+statement, the coordinator's digest of the trail and the strategy — and, for a
+`repair`, from the refused attempt the trail names: its submission and document
+are fetched by hash (the entry lists them as prompt, answer, submission,
+document, verdict) and the refused block is cut out of the document. A grant
+that carries no strategy is worked with the default one for its kind, and
+`MACSAD_MODEL`, when set, names the model whatever the strategy says.
+
+## To grantStrategy (g: LeaseGrant, kind: Text) -> Strategy:
+    Inspect g's strategy:
+        When Some (given):
+            Let mutable s be given.
+            If envOr("MACSAD_MODEL", "") is not equal to "":
+                Set s's model to envOr("MACSAD_MODEL", "").
+            Return s.
+        When None:
+            Let mutable s be defaultStrategy().
+            Set s's id to "default-" + kind + "-v1".
+            Set s's unitKind to kind.
+            Return s.
+    Return defaultStrategy().
+
+## Note
+The statement a grant carries, or an empty one named `goal` for a unit that
+writes the statement (`formalize`).
+
+## To grantStatement (g: LeaseGrant, problemId: Text) -> Statement:
+    Inspect g's statement:
+        When Some (s):
+            Return s.
+        When None:
+            Let mutable s be a new Statement with id "" and problemId problemId and document "" and sha256 "" and goalName "goal" and route "C".
+            Return s.
+    Return a new Statement with problemId problemId and goalName "goal".
+
+## To grantProblem (g: LeaseGrant, problemId: Text) -> Problem:
+    Inspect g's problem:
+        When Some (p):
+            Return p.
+        When None:
+            Return bareProblem(problemId, problemId, "coordinator").
+    Return bareProblem(problemId, problemId, "coordinator").
+
+## Note
+What a repair is shown: the refused submission, the kernel's diagnostics and the
+refused block, from the last attempt on the trail; empty texts when the trail or
+the artifacts cannot be read, so the repair proceeds on the digest alone.
+
+## A RepairContext has:
+    a previous, which is Text.
+    a diagnostics, which is Text.
+    a failedBlock, which is Text.
+
+## To repairContext (base: Text, problemId: Text) -> RepairContext:
+    Let mutable out be a new RepairContext with previous "" and diagnostics "" and failedBlock "".
+    Inspect fetchTrail(base, problemId):
+        When Err (e):
+            Return out.
+        When Ok (trail):
+            Inspect lastAttempt(trail):
+                When None:
+                    Return out.
+                When Some (last):
+                    Set out's diagnostics to last's diagnostics.
+                    If length of last's artifactShas is equal to 5:
+                        Inspect fetchArtifact(base, item 3 of last's artifactShas):
+                            When Ok (text):
+                                Set out's previous to text.
+                            When Err (e):
+                                Set out's previous to "".
+                        Inspect fetchArtifact(base, item 4 of last's artifactShas):
+                            When Ok (doc):
+                                Set out's failedBlock to blockText(doc, failedBlockOf(last's diagnostics)).
+                            When Err (e):
+                                Set out's failedBlock to "".
+    Return out.
+
+## Note
+The request for the leased unit `g` of `kind`, asked of the coordinator at `base`.
+
+## To workerRequest (base: Text, g: LeaseGrant, kind: Text, problemId: Text) -> ChatRequest:
+    Let strategy be grantStrategy(g, kind).
+    Let st be grantStatement(g, problemId).
+    Let mutable c be a new PromptContext with problem grantProblem(g, problemId) and statement st's document and goalName st's goalName.
+    Set c's trailDigest to g's trailDigest.
+    If trim(g's context) is not equal to "":
+        Set c's trailDigest to trim(g's context) + "\n\n" + g's trailDigest.
+    Set c's lemmas to [].
+    Set c's playbook to strategy's playbook.
+    If kind is equal to "repair":
+        Let r be repairContext(base, problemId).
+        Set c's previous to r's previous.
+        Set c's diagnostics to r's diagnostics.
+        Set c's failedBlock to r's failedBlock.
+    Return promptRequest(buildPrompt(kind, c), strategy).

@@ -81,11 +81,13 @@ The model's answer, from the provider the settings name.
     Return a new Err with error "no answer".
 
 ## Note
-The price a call is held at: nothing for a recording or a mock; the listed price
-for OpenRouter, from the cached `models.json`, fetched (no key needed) when absent.
+The price a call is held at: the listed price, from the workspace's cached
+`models.json`, which OpenRouter's model list fills (no key needed) when absent;
+a recording or a mock costs nothing unless the workspace holds that list, which
+prices a replayed run as the live one would be priced.
 
 ## To priceFor (workspace: Text, s: LocalSettings, model: Text) -> Result of ModelPrice and Text:
-    If s's provider is not equal to "openrouter":
+    If s's provider is not equal to "openrouter" and pathExists(workspace + "/models.json") is equal to false:
         Return a new Ok with value freePrice(model).
     If pathExists(workspace + "/models.json") is equal to false:
         Inspect httpCall("GET", modelsUrl(), a new Map of Text to Text, "", 60000):

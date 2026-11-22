@@ -544,6 +544,16 @@ it, so the trigger is size- or content-dependent.
 `pinned-transitive-scope-workaround` the macsad projects already declare in
 `tests/logos-module-manifest.json`.
 
+**Still present in largo 0.11.0** (`/mnt/build/macsad-target/release/largo`,
+sha256 `bdaa1cb2…`, 2026-11-22): with the full factory (core, coordinator,
+worker and verifier) and a `main.lg` importing only `roles.lg`, `largo check`
+fails with ``error: `tooLarge` is used in `main.lg` but not imported there — it
+is defined in `http_answers.lg` `` and the same for `clampOffset`
+(`api_bounds.lg`), `isRecordStart` (`opdp_import_rules.lg`) and
+`openShapeProblem` (`wire_shape.lg`). The entry therefore still imports every
+module, which caps the project at 115 modules under the 120-line file limit
+(`main.lg` is the title, the imports and a one-line `## Main`).
+
 ---
 
 ## 15. One async native anywhere moves the whole program off the VM
@@ -603,7 +613,7 @@ runtime crates. The generated project is kept at `target/release/build` by largo
 
 ---
 
-## 13. A field named like a standard-library function splices that module in, and its own warnings land on the user's file
+## 17. A field named like a standard-library function splices that module in, and its own warnings land on the user's file
 
 A record field (or any word) that happens to be the name of a function in a large
 standard-library module makes the prelude include the module, and the module's own
@@ -639,7 +649,7 @@ Renaming the field to `place` removes both warnings: `rank` is a function of
 `lapack.lg`. **Coordinator workaround.** The website's records name the field
 `rankBp` (the rank in basis points, which is also the more precise name).
 
-## 14. A function passed by name as a value checks, then is an undefined variable at run time
+## 18. A function passed by name as a value checks, then is an undefined variable at run time
 
 ```logos
 ## To canonPairs (text: Text) -> Result of Text and Text:
@@ -671,3 +681,73 @@ Undefined variable: canonPairs
 
 **Coordinator workaround.** No function value is passed; each list route calls its
 own typed reader and shares only the answer helper (`routes_problem.lg`'s `listAnswer`).
+
+---
+
+## 19. `routeQuery()` with no argument passes `largo check` and stops the page mounting; a test's `Navigate` query is not seen
+
+`routeQuery` takes the parameter's name (`routeQuery("id")`), although
+`docs/frontend.md` says `routePath` and `routeQuery` "answer the current path and
+query". Called with no argument it passes `largo check`, and the page then never
+mounts in a test (every selector is "No element matches"). With the name, it
+answers the empty text after a test's `Navigate to "/problem?id=opdp%3A7"`, while
+`the URL` is `/problem?id=opdp%3A7`.
+
+```logos
+## Page /problem
+
+State:
+    Let shown be "none".
+
+Actions:
+    When the page loads:
+        Set shown to routeQuery("id").
+
+    When the route changes:
+        Set shown to routeQuery("id").
+
+View:
+    <p id="shown">[{shown}]</p>
+
+## Test: the route opens the problem it names
+
+Navigate to "/problem?id=opdp%3A7".
+Expect that the URL is equal to "/problem?id=opdp%3A7".
+Expect that the text of "#shown" is equal to "[opdp:7]".
+```
+
+```text
+FAIL  pages/app.lg › the route opens the problem it names
+      Expected that … is "[opdp:7]".        (it is "[]")
+```
+
+**Coordinator workaround.** The problem page reads `routeQuery("id")` when it
+loads (a real browser has the query) and also offers a form that opens a problem
+by id, which is what its tests drive.
+
+## 20. `Given that … answers … with <name>` takes no variable, only a literal
+
+A JSON body held in a `Let` and named in `Given that GET "…" answers 200 with body.`
+answers nothing the page can decode; the same text written as the literal works.
+Long bodies are therefore written as multi-line `"""…"""` literals in place, which
+the source-line limit also asks for.
+
+---
+
+## 21. On the tree-walker, the same standard-library call is twenty times slower inside a large program
+
+Measured with `largo run --interpret` on one 10 KB OPDP record and one 8 MB piece
+of the release, both programs containing `runProcess` (so both on the tree-walker):
+
+| call | small program (3 modules) | the factory (≈120 modules) |
+|---|---|---|
+| `jsonParseStrict` of a 10 KB record | 3 ms | 94 ms |
+| `lines` of an 8 MB text | 1.0 s | 14.0 s |
+
+No user function shadows a standard-library name (checked by listing both). The
+cost per call grows with the program, not with the data.
+
+**Consequence.** `factory coordinator import-opdp` reads the 102,819 records at
+about seven a second (about four hours) inside the factory, where the same loop in
+a small program would take minutes; with `largo build --release` failing
+(§16) there is no compiled alternative yet.

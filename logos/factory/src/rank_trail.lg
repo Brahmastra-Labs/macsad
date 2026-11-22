@@ -50,20 +50,14 @@ problem the atlas gives no tractability, which is never scheduled automatically.
 
 ## Test: the trail factor rewards progress and punishes repeated walls
 
-For each of these cases:
-
-| verified | repeats | factor |
-|----------|---------|--------|
-| 0        | 0       | 100    |
-| 1        | 0       | 110    |
-| 5        | 0       | 130    |
-| 0        | 1       | 100    |
-| 0        | 2       | 85     |
-| 0        | 4       | 55     |
-| 0        | 9       | 40     |
-| 2        | 3       | 90     |
-
-Expect that trailFactor(a new TrailSignals with verified verified and repeats repeats) is equal to factor.
+Expect that trailFactor(a new TrailSignals with verified 0 and repeats 0) is equal to 100.
+Expect that trailFactor(a new TrailSignals with verified 1 and repeats 0) is equal to 110.
+Expect that trailFactor(a new TrailSignals with verified 5 and repeats 0) is equal to 130.
+Expect that trailFactor(a new TrailSignals with verified 0 and repeats 1) is equal to 100.
+Expect that trailFactor(a new TrailSignals with verified 0 and repeats 2) is equal to 85.
+Expect that trailFactor(a new TrailSignals with verified 0 and repeats 4) is equal to 55.
+Expect that trailFactor(a new TrailSignals with verified 0 and repeats 9) is equal to 40.
+Expect that trailFactor(a new TrailSignals with verified 2 and repeats 3) is equal to 90.
 
 ## Test: record 116 drops five percent after one repeated failure and one verified attempt
 

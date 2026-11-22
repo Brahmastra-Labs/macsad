@@ -6,7 +6,6 @@ Import ChatRequest from "./chat_request.lg".
 Import ChatReply from "./chat_reply.lg".
 Import Budget from "./budget.lg".
 Import ModelPrice from "./model_price.lg".
-Import Cost from "./cost.lg".
 Import Replay from "./replay.lg".
 Import IngestFc from "./ingest_fc.lg".
 Import AtlasScan from "./atlas_scan.lg".
