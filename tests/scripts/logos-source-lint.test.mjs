@@ -169,52 +169,14 @@ test("the checked-in policy is exact and the repository baseline is admitted onl
       locations,
       removalCondition,
     })),
-    [
-      {
-        rule: "scoped-css-preferred-length",
-        fingerprint: "2203aa427bb0f1098bf1352a312e82e837bbb615f49f8056d11a099970733344",
-        locations: ["logos/admin/src/admin_app.lg:13"],
-        removalCondition:
-          "Split navigation and shell layout into cohesive imported Components before this exact CSS string receives any product change.",
-      },
-      {
-        rule: "scoped-css-preferred-length",
-        fingerprint: "cb03a1de16b4f14d5911e5e7b5ab388b528d3008de161c3ef89f7060e297e2aa",
-        locations: ["logos/admin/src/board_workspace.lg:16"],
-        removalCondition:
-          "Extract the metrics, draft form, and board lanes into responsibility-owned imported Components before modifying this CSS.",
-      },
-      {
-        rule: "duplicate-scoped-css",
-        fingerprint: "2297746d7c4c40121b0f3f3e8a73a2d24500e43bedd36cd8bacba86980ec9335",
-        locations: [
-          "logos/admin/src/read_only_panels.lg:8",
-          "logos/admin/src/read_only_panels.lg:17",
-          "logos/admin/src/read_only_panels.lg:26",
-        ],
-        removalCondition:
-          "Replace the copies only after LOGOS provides tested shared scoped styles or the panels become one parameterized Component.",
-      },
-      {
-        rule: "scoped-css-preferred-length",
-        fingerprint: "5b0df9be2bf60d3653449636bfa2bf2f8061414f43a819198ba46ba5bfce9429",
-        locations: ["logos/public-site/src/research_ledger.lg:13"],
-        removalCondition:
-          "Extract the section heading, publication cards, and pipeline rail into imported Components before changing this exact CSS.",
-      },
-    ],
+    [],
   );
   const result = lintLogosSources();
   assert.deepEqual(result.failures, []);
-  assert.equal(result.filesChecked, 177);
+  assert.equal(result.filesChecked, 189);
   assert.deepEqual(
     result.activeDebt.map(({ rule }) => rule).sort(),
-    [
-      "duplicate-scoped-css",
-      "scoped-css-preferred-length",
-      "scoped-css-preferred-length",
-      "scoped-css-preferred-length",
-    ],
+    [],
   );
 });
 

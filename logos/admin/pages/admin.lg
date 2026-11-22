@@ -1,0 +1,27 @@
+# Administrative workspace preview
+
+Import AdminShell from "../src/admin_shell.lg".
+
+The Page mounts the presentation shell with the board policy's current outcomes
+as explicit inputs: six phases, and Closed refusing ordinary work. The policy
+itself is tested in its import-free leaves, which a Page must not import; the
+production root in src/admin_app.lg binds those leaves to this same shell.
+
+## Page /admin
+View:
+    <AdminShell columnCount={6} closedWorkAccepted={false}/>
+
+## Test: administrative navigation opens the research record
+Click "#nav-research".
+Expect that the text of "h2" is equal to "Claims travel with evidence.".
+
+## Test: local question staging retains the draft and explains persistence
+Type "Find a minimal counterexample" into "#research-draft".
+Click "#stage-draft".
+Expect that the value of "#research-draft" is equal to "Find a minimal counterexample".
+Expect that the text of "#draft-status" is equal to "Draft staged in this browser only — no command was sent".
+
+## Test: board preserves all six terminal-policy lanes
+Expect that the count of ".column" is equal to 6.
+Expect that the count of ".card" is equal to 2.
+Expect that the text of ".closed-rule" is equal to "Closed work is terminal unless an authorized reopen command succeeds.".

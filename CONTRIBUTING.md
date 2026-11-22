@@ -6,7 +6,7 @@ acceptance test, and work RED → GREEN → REFACTOR. Run the complete gate befo
 handing off a change:
 
 ```bash
-LOGOS_WORKSPACE=/path/to/the/exact/locked/logicaffeine-private \
+LOGOS_WORKSPACE=/path/to/the/exact/locked/logicaffeine \
 bash scripts/quality-gate.sh
 ```
 

@@ -1,8 +1,8 @@
 # Original ledger observation decoder
 
 Import AlejandroJsonFields from "./alejandro_json_fields.lg".
-Import AlejandroProvenance from "./alejandro_provenance.lg".
 Import AlejandroLedgerRow from "./alejandro_ledger_row.lg".
+Import AlejandroProvenance from "./alejandro_provenance.lg".
 
 ## An AlejandroLedger has:
     a caseId, which is Text.
@@ -11,6 +11,7 @@ Import AlejandroLedgerRow from "./alejandro_ledger_row.lg".
     a recorded, which is Json.
 ## To decodeAlejandroLedgerObject (object: Json, expectedCase: Text, digest: Text) -> Result of AlejandroLedger and Text:
     Inspect jsonNoExtraKeys(object, ["case", "lean", "lean_compiles", "declarations"]):
+        When Ok (accepted): Let _ be accepted.
         When Err (failure):
             Return a new Err with error failure.
     Repeat for key in ["case", "lean"]:
@@ -27,6 +28,7 @@ Import AlejandroLedgerRow from "./alejandro_ledger_row.lg".
             Return a new Err with error failure.
         When Ok (field):
             Inspect jsonBool(field):
+                When Ok (accepted): Let _ be accepted.
                 When Err (failure):
                     Return a new Err with error failure.
     Let mutable rows be a new Seq of Json.

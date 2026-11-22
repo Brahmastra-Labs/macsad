@@ -1,0 +1,85 @@
+# Public topic selection
+
+## To publicTopicAllowed (topicName: Text) -> Bool:
+    Repeat for allowed in ["All", "Mathematics", "Computer science", "Methods"]:
+        If topicName is equal to allowed:
+            Return true.
+    Return false.
+
+## Component ResearchSelection
+
+State:
+    Let topic be "All".
+
+Actions:
+    To choose (topicName: Text):
+        If publicTopicAllowed(topicName):
+            Set topic to topicName.
+
+View:
+    <div class="topic-selection">
+      <div class="filters" role="group" aria-label="Research topics">
+        <button id="topic-all" class="filter" on-click={choose("All")}>All</button>
+        <button id="topic-mathematics" class="filter" on-click={choose("Mathematics")}>Mathematics</button>
+        <button id="topic-computing" class="filter" on-click={choose("Computer science")}>Computer science</button>
+        <button id="topic-methods" class="filter" on-click={choose("Methods")}>Methods</button>
+      </div>
+      <p id="selected-topic" class="badge" aria-live="polite">Selected: {topic}</p>
+    </div>
+
+Style:
+    .filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 24px 0;
+    }
+    .filter {
+        padding: 8px 12px;
+        color: #34505c;
+        background: transparent;
+        border: 1px solid #c9c6bc;
+        border-radius: 999px;
+        font: 700 11px/1 inherit;
+        cursor: pointer;
+    }
+    .filter:hover {
+        color: #f8f4e8;
+        background: #153c4b;
+        border-color: #153c4b;
+    }
+    .badge {
+        padding: 6px 8px;
+        color: #12687a;
+        background: #e4f2f3;
+        border-radius: 6px;
+        font: 800 9px/1 ui-monospace, monospace;
+        letter-spacing: .1em;
+    }
+    button:focus-visible {
+        outline: 3px solid #16758a;
+        outline-offset: 3px;
+    }
+
+## Test: Public topic selection mounts its honest initial state
+    Mount ResearchSelection.
+    Expect that the text of "#selected-topic" is equal to "Selected: All".
+    Expect that the count of "button.filter" is equal to 4.
+
+## Test: Public topic filters update mounted selection
+    Mount ResearchSelection.
+    Click "#topic-mathematics".
+    Expect that the text of "#selected-topic" is equal to "Selected: Mathematics".
+    Click "#topic-computing".
+    Expect that the text of "#selected-topic" is equal to "Selected: Computer science".
+    Click "#topic-methods".
+    Expect that the text of "#selected-topic" is equal to "Selected: Methods".
+    Click "#topic-all".
+    Expect that the text of "#selected-topic" is equal to "Selected: All".
+
+## Test: Topic choices stay within the public catalog
+    For all booleans admitted:
+        Let mutable choice be "Administrative controls".
+        If admitted:
+            Set choice to "Mathematics".
+        Expect that publicTopicAllowed(choice) is equal to admitted.

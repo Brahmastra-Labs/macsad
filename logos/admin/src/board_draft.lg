@@ -1,0 +1,27 @@
+# Local research question draft
+
+Drafting remains local; no command is sent or durable case implied.
+
+## Component BoardDraft
+State:
+    Let draftTitle be "".
+    Let draftState be "Nothing staged yet".
+Actions:
+    To stage:
+        Set draftState to "Draft staged in this browser only — no command was sent".
+View:
+    <section class="draft-panel">
+      <div class="field"><label for="research-draft">Draft a research question</label>
+        <input id="research-draft" type="text" aria-label="Draft a research question" bind={draftTitle}>
+      </div>
+      <button id="stage-draft" class="draft-action" on-click={stage}>Stage local draft</button>
+      <p id="draft-status" class="draft-truth" role="status">{draftState}</p>
+    </section>
+Style:
+    .draft-panel { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(210px,100%),1fr)); gap: 12px; align-items: end;
+      margin-bottom: 24px; padding: 16px; background: #fffdf7; border: 1px solid #d8d3c6; border-radius: 14px; }
+    label { display: block; margin-bottom: 7px; color: #35464f; font-size: 12px; font-weight: 700; }
+    input { box-sizing: border-box; width: 100%; min-height: 42px; padding: 10px 12px; color: #19333f; background: #fff; border: 1px solid #c8c5bb; border-radius: 8px; }
+    .draft-action { min-height: 42px; padding: 10px 16px; color: #102c3b; background: #d8ff72; border: 1px solid #bbdf5a; border-radius: 9px; font-weight: 800; cursor: pointer; }
+    .draft-truth { grid-column: 1 / -1; color: #52616a; font-size: 12px; }
+    button:focus-visible, input:focus-visible { outline: 3px solid #16758a; outline-offset: 3px; }
