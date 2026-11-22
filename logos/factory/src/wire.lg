@@ -1,0 +1,424 @@
+# Wire
+
+Typed reading of JSON documents, on top of the standard library's `json.lg`.
+
+The factory's own records travel through the codecs LOGOS DERIVES from their
+`## A … has:` blocks (`toJson_Problem`, `fromJson_Problem`, …). Two kinds of
+document cannot: a record holding a `Seq` field (the derive encodes one but writes
+no decoder for it — see `LOGOS_ISSUES.md`), and the foreign documents the factory
+ingests (the OPDP atlas, the formalization-lab manifest, OpenRouter replies, the
+kernel's `--json` reports). Both are read here, and they are read the same way:
+
+1. the SHAPE is checked once, all of it — every required field present with the
+   type it must have, and no field nobody declared — and the first violation is
+   the error;
+2. the fields are then read by total accessors that cannot fail, because step 1
+   already established what they would have failed on.
+
+Checking first and reading second keeps a decoder a flat list of fields instead
+of a staircase of nested `Inspect`s, and it means a document is never half-read:
+either every field was what the contract says, or nothing was taken from it.
+
+## Note
+A field specification is `name:kind`. The kinds are the JSON shapes the factory
+reads: `text`, `int`, `bool`, `texts` (an array of strings), `object`, `array`,
+`opttext` and `optint` (the value or `null`), and `any` (present, any value).
+
+## To fieldKind (spec: Text) -> Text:
+    Let parts be split(spec, ":").
+    If length of parts is at least 2:
+        Return item 2 of parts.
+    Return "any".
+
+## Note
+The field name of a `name:kind` specification.
+
+## To fieldName (spec: Text) -> Text:
+    Let parts be split(spec, ":").
+    Return item 1 of parts.
+
+## Note
+Whether every element of a JSON array is a string.
+
+## To allStrings (elems: Seq of Json) -> Bool:
+    Repeat for e in elems:
+        Inspect e:
+            When JStr (s):
+                Let ignored be s.
+            Otherwise:
+                Return false.
+    Return true.
+
+## Note
+Whether a JSON value has the shape a kind names. Unknown kinds match nothing, so a
+mistyped specification fails loudly instead of accepting everything.
+
+## To hasKind (v: Json, kind: Text) -> Bool:
+    If kind is equal to "any":
+        Return true.
+    Inspect v:
+        When JNull:
+            Return kind is equal to "opttext" or kind is equal to "optint".
+        When JBool (b):
+            Return kind is equal to "bool".
+        When JNum (n):
+            Return kind is equal to "int" or kind is equal to "optint".
+        When JDec (m, sc):
+            Return false.
+        When JStr (s):
+            Return kind is equal to "text" or kind is equal to "opttext".
+        When JArr (elems):
+            If kind is equal to "array":
+                Return true.
+            If kind is equal to "texts":
+                Return allStrings(elems).
+            Return false.
+        When JObj (entries):
+            Return kind is equal to "object".
+    Return false.
+
+## Note
+The first way `v` breaks the closed shape `specs`, or `""` when it has exactly that
+shape: an object, carrying every specified field with its kind, and nothing else.
+
+## To shapeProblem (v: Json, specs: Seq of Text) -> Text:
+    Let mutable names be a new Seq of Text.
+    Repeat for spec in specs:
+        Push fieldName(spec) to names.
+    Inspect jsonNoExtraKeys(v, names):
+        When Err (e):
+            Return e.
+        When Ok (fine):
+            Let ignored be fine.
+    Repeat for spec in specs:
+        Let name be fieldName(spec).
+        Let kind be fieldKind(spec).
+        If jsonHas(v, name) is equal to false:
+            Return "missing field \"{name}\"".
+        If hasKind(jsonGet(v, name), kind) is equal to false:
+            Return "field \"{name}\" is not {kind}".
+    Return "".
+
+## Note
+The same check for an OPEN shape: the specified fields must be there with their
+kinds, and other fields are allowed. Foreign documents grow fields between releases
+(the OPDP README asks importers to tolerate them), so they are read open.
+
+## To openShapeProblem (v: Json, specs: Seq of Text) -> Text:
+    Inspect v:
+        When JObj (entries):
+            Let ignored be entries.
+        Otherwise:
+            Return "expected a JSON object".
+    Repeat for spec in specs:
+        Let name be fieldName(spec).
+        Let kind be fieldKind(spec).
+        If jsonHas(v, name) is equal to false:
+            Return "missing field \"{name}\"".
+        If hasKind(jsonGet(v, name), kind) is equal to false:
+            Return "field \"{name}\" is not {kind}".
+    Return "".
+
+## Note
+The text under `key`, or `""` when it is absent or not a string. Total: call it after
+a shape check has established the field.
+
+## To textAt (v: Json, key: Text) -> Text:
+    Inspect jsonGet(v, key):
+        When JStr (s):
+            Return s.
+        Otherwise:
+            Return "".
+    Return "".
+
+## Note
+The integer under `key`, or `0` when it is absent or not an integer.
+
+## To intAt (v: Json, key: Text) -> Int:
+    Inspect jsonGet(v, key):
+        When JNum (n):
+            Return n.
+        Otherwise:
+            Return 0.
+    Return 0.
+
+## Note
+The boolean under `key`, or `false` when it is absent or not a boolean.
+
+## To boolAt (v: Json, key: Text) -> Bool:
+    Inspect jsonGet(v, key):
+        When JBool (b):
+            Return b.
+        Otherwise:
+            Return false.
+    Return false.
+
+## Note
+The strings of the array under `key`, in order; non-strings are skipped and an absent
+field is the empty list.
+
+## To textsAt (v: Json, key: Text) -> Seq of Text:
+    Let mutable out be a new Seq of Text.
+    Inspect jsonGet(v, key):
+        When JArr (elems):
+            Repeat for e in elems:
+                Inspect e:
+                    When JStr (s):
+                        Push s to out.
+                    Otherwise:
+                        Let ignored be e.
+        Otherwise:
+            Return out.
+    Return out.
+
+## Note
+The text under `key` when it is a string, `none` when it is `null` or absent. This is
+how the factory keeps a missing value apart from an empty one.
+
+## To optTextAt (v: Json, key: Text) -> Option of Text:
+    Inspect jsonGet(v, key):
+        When JStr (s):
+            Return some s.
+        Otherwise:
+            Return none.
+    Return none.
+
+## Note
+The value at a dotted path through nested objects (`"tractability.score"`), or
+`JNull` when any step is missing.
+
+## To jsonPath (v: Json, path: Text) -> Json:
+    Let mutable here be v.
+    Repeat for step in split(path, "."):
+        Set here to jsonGet(here, step).
+    Return here.
+
+## Note
+Ten to the power `k`, for `k` at least zero.
+
+## To tenTo (k: Int) -> Int:
+    Let mutable out be 1.
+    Repeat for i from 1 to k:
+        Set out to out * 10.
+    Return out.
+
+## Note
+A JSON number as an exact integer count of `10^-digits` units: `5.4` at two digits is
+`540`, `0.25` at four digits is `2500`, `7` at two digits is `700`.
+
+The atlas stores its scores as short decimals and the factory computes on integers,
+so this is the one door between them. It is EXACT: a number with more decimals
+than `digits` is refused rather than rounded, because a rank computed from a
+silently rounded input is a rank nobody can reproduce from the source.
+
+## To jsonScaled (v: Json, digits: Int) -> Result of Int and Text:
+    Inspect v:
+        When JNum (n):
+            Return a new Ok with value (n * tenTo(digits)).
+        When JDec (m, sc):
+            Let places be 0 - sc.
+            If places is greater than digits:
+                Return a new Err with error "{jsonSerialize(v)} has more than {digits} decimals".
+            Return a new Ok with value (m * tenTo(digits - places)).
+        Otherwise:
+            Return a new Err with error "expected a JSON number, found {jsonSerialize(v)}".
+    Return a new Err with error "expected a JSON number".
+
+## Note
+A non-negative JSON number as a count of `10^-digits` units, rounded UP when it is
+finer than that: `0.0000012` at six digits is `2`. This is the door for money
+coming IN — a provider's reported cost, a price per token — where rounding down
+would let a budget be overspent one fraction of a micro-dollar at a time, and
+rounding up only ever keeps a little in reserve.
+
+## To jsonScaledCeil (v: Json, digits: Int) -> Result of Int and Text:
+    Inspect v:
+        When JNum (n):
+            If n is less than 0:
+                Return a new Err with error "{n} is negative".
+            Return a new Ok with value (n * tenTo(digits)).
+        When JDec (m, sc):
+            If m is less than 0:
+                Return a new Err with error "{jsonSerialize(v)} is negative".
+            Let places be 0 - sc.
+            If places is at most digits:
+                Return a new Ok with value (m * tenTo(digits - places)).
+            Let unit be tenTo(places - digits).
+            Let mutable q be m / unit.
+            If m % unit is greater than 0:
+                Set q to q + 1.
+            Return a new Ok with value q.
+        Otherwise:
+            Return a new Err with error "expected a JSON number, found {jsonSerialize(v)}".
+    Return a new Err with error "expected a JSON number".
+
+## Note
+A decimal written as TEXT (`"0.0000025"`, `"2.5e-06"`) — the way OpenRouter
+publishes its prices — as a count of `10^-digits` units, rounded up. The text is
+read by the JSON number grammar, so exactly the spellings JSON allows are allowed.
+
+## To decimalTextScaledCeil (t: Text, digits: Int) -> Result of Int and Text:
+    Inspect jsonTryParse(trim(t)):
+        When JOk (v):
+            Inspect v:
+                When JNum (n):
+                    Return jsonScaledCeil(v, digits).
+                When JDec (m, sc):
+                    Return jsonScaledCeil(v, digits).
+                Otherwise:
+                    Return a new Err with error "\"{t}\" is not a number".
+        When JErr (e):
+            Return a new Err with error "\"{t}\" is not a number".
+    Return a new Err with error "\"{t}\" is not a number".
+
+## Note
+An arbitrary integer folded onto `0 … size - 1`, so a property test can range over
+every integer and still speak about amounts that cannot be negative.
+
+## To foldTo (n: Int, size: Int) -> Int:
+    Let m be n % size.
+    If m is less than 0:
+        Return m + size.
+    Return m.
+
+## Note
+Parse a document strictly (a duplicated key is an error, never a silent overwrite)
+into a `Result`, so callers compose it with the rest of their decoding.
+
+## To parseStrict (text: Text) -> Result of Json and Text:
+    Inspect jsonParseStrict(text):
+        When JOk (v):
+            Return a new Ok with value v.
+        When JErr (m):
+            Return a new Err with error m.
+    Return a new Err with error "unparsed".
+
+## Test: a field specification splits into its name and kind
+
+Expect that fieldName("seq:int") is equal to "seq".
+Expect that fieldKind("seq:int") is equal to "int".
+Expect that fieldKind("payload") is equal to "any".
+
+## Test: a closed shape accepts exactly its fields
+
+Let v be jsonParse("{{\"a\": \"x\", \"n\": 3, \"ok\": true, \"tags\": [\"p\", \"q\"], \"m\": null}}").
+Expect that shapeProblem(v, ["a:text", "n:int", "ok:bool", "tags:texts", "m:opttext"]) is equal to "".
+
+## Test: a closed shape names the first thing wrong with a document
+
+Let v be jsonParse("{{\"a\": \"x\", \"n\": \"3\"}}").
+Expect that shapeProblem(v, ["a:text", "n:int"]) is equal to "field \"n\" is not int".
+Expect that shapeProblem(v, ["a:text", "n:text", "z:int"]) is equal to "missing field \"z\"".
+Expect that shapeProblem(v, ["a:text"]) is equal to "unexpected key \"n\"".
+Expect that shapeProblem(jsonParse("[1]"), ["a:text"]) is equal to "expected a JSON object".
+
+## Test: an array of strings is texts, and a mixed array is not
+
+Let v be jsonParse("{{\"good\": [\"a\"], \"bad\": [\"a\", 1], \"none\": []}}").
+Expect that hasKind(jsonGet(v, "good"), "texts") is equal to true.
+Expect that hasKind(jsonGet(v, "bad"), "texts") is equal to false.
+Expect that hasKind(jsonGet(v, "none"), "texts") is equal to true.
+Expect that hasKind(jsonGet(v, "bad"), "array") is equal to true.
+
+## Test: an open shape tolerates fields it does not name
+
+Let v be jsonParse("{{\"a\": \"x\", \"extra\": 1}}").
+Expect that openShapeProblem(v, ["a:text"]) is equal to "".
+Expect that openShapeProblem(v, ["b:text"]) is equal to "missing field \"b\"".
+
+## Test: total accessors read what a shape check established
+
+Let v be jsonParse("{{\"a\": \"x\", \"n\": -4, \"ok\": true, \"tags\": [\"p\", \"q\"], \"m\": null}}").
+Expect that textAt(v, "a") is equal to "x".
+Expect that intAt(v, "n") is equal to -4.
+Expect that boolAt(v, "ok") is equal to true.
+Expect that textsAt(v, "tags") is equal to ["p", "q"].
+Expect that optTextAt(v, "m") is none.
+Expect that optTextAt(v, "a") is equal to some "x".
+Expect that textAt(v, "missing") is equal to "".
+
+## Test: a dotted path walks nested objects
+
+Let v be jsonParse("{{\"t\": {{\"p\": {{\"low\": 0.4}}}}}}").
+Expect that jsonSerialize(jsonPath(v, "t.p.low")) is equal to "0.4".
+Expect that jsonIsNull(jsonPath(v, "t.q.low")) is equal to true.
+
+## Test: decimals become exact scaled integers
+
+For each of these cases:
+
+| doc     | digits | scaled |
+|---------|--------|--------|
+| "5.4"   | 3      | 5400   |
+| "0.25"  | 4      | 2500   |
+| "7"     | 3      | 7000   |
+| "0.07"  | 4      | 700    |
+| "-1.5"  | 1      | -15    |
+
+Inspect jsonScaled(jsonParse(doc), digits):
+    When Ok (n):
+        Expect that n is equal to scaled.
+    When Err (e):
+        Expect that e is equal to "no error".
+
+## Test: a decimal finer than the scale is refused, not rounded
+
+Inspect jsonScaled(jsonParse("0.125"), 2):
+    When Ok (n):
+        Expect that n is equal to -1.
+    When Err (e):
+        Expect that e is equal to "0.125 has more than 2 decimals".
+
+## Test: money coming in is rounded up, never down
+
+For each of these cases:
+
+| doc          | digits | scaled |
+|--------------|--------|--------|
+| "0.0000012"  | 6      | 2      |
+| "0.000001"   | 6      | 1      |
+| "0.00000100" | 6      | 1      |
+| "1.5"        | 6      | 1500000|
+| "3"          | 6      | 3000000|
+| "1e-7"       | 6      | 1      |
+| "0"          | 6      | 0      |
+
+Inspect jsonScaledCeil(jsonParse(doc), digits):
+    When Ok (n):
+        Expect that n is equal to scaled.
+    When Err (e):
+        Expect that e is equal to "no error".
+
+## Test: a negative amount of money coming in is refused
+
+Inspect jsonScaledCeil(jsonParse("-0.5"), 6):
+    When Ok (n):
+        Expect that n is equal to 0.
+    When Err (e):
+        Expect that e is equal to "-0.5 is negative".
+
+## Test: a price written as text is read by the JSON number grammar
+
+Inspect decimalTextScaledCeil("0.0000025", 12):
+    When Ok (n):
+        Expect that n is equal to 2500000.
+    When Err (e):
+        Expect that e is equal to "no error".
+Inspect decimalTextScaledCeil("2.5e-06", 12):
+    When Ok (n):
+        Expect that n is equal to 2500000.
+    When Err (e):
+        Expect that e is equal to "no error".
+Inspect decimalTextScaledCeil("free", 12):
+    When Ok (n):
+        Expect that n is equal to -1.
+    When Err (e):
+        Expect that e is equal to "\"free\" is not a number".
+
+## Test: a strict parse refuses a duplicated key
+
+Inspect parseStrict("{{\"a\": 1, \"a\": 2}}"):
+    When Ok (v):
+        Expect that jsonSerialize(v) is equal to "refused".
+    When Err (e):
+        Expect that e contains "duplicate".

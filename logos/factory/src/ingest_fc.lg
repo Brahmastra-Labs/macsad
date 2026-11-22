@@ -1,0 +1,322 @@
+# Ingest: formalization-lab
+
+Alejandro's formalization lab pins 200 open problems, each a Lean statement at an
+exact upstream commit: 194 from formal-conjectures, the rest from two other
+public repositories. This adapter reads its `manifest.json` into factory problems
+and the nodes of the atlas graph that hold them.
+
+Each manifest entry becomes one problem, `op:<id>` (`op:OP001`): the lab's own
+identity for the PINNED STATEMENT, which is narrower than the upstream file it
+came from — formal-conjectures' `fc:ErdosProblems/10` holds several variants, and
+OP022 is one of them. The upstream key is kept as the problem's `externalKey`, so
+a formal-conjectures adapter and this one meet on it rather than duplicating
+work; an Erdős problem also carries `erdos:<n>` as its `crossRef`, the handle the
+atlas's own Erdős records share.
+
+Every entry has a Lean statement and none has a LOGOS one, so each problem starts
+`ranked`, waiting for a `formalize` unit (route A, then route C), and its rank is
+the atlas's median prior raised for having a formal statement (`unprofiledInputs`
+in `rank.lg`). The lab's `source-reported-open` is recorded as `open`.
+
+Import Wire.
+Import Shared.
+Import Rank.
+
+## Note
+The cohort every manifest problem belongs to: the graph's root for this source.
+
+## To labCohort () -> Text:
+    Return "formalization-lab-200".
+
+## Note
+The atlas category an MSC 2020 top-level subject falls under, so problems from
+every source sit in one vocabulary of categories and the rank's expressibility
+prior reads them alike.
+
+## To mscCategory (code: Int) -> Text:
+    If code is equal to 3:
+        Return "logic".
+    If code is equal to 5:
+        Return "combinatorics".
+    If code is equal to 11:
+        Return "number-theory".
+    If code is equal to 14:
+        Return "algebraic-geometry".
+    If code is equal to 20 or code is equal to 22:
+        Return "group-theory".
+    If code is equal to 35:
+        Return "pde".
+    If code is equal to 37:
+        Return "dynamical-systems".
+    If code is at least 51 and code is at most 53:
+        Return "geometry".
+    If code is at least 54 and code is at most 57:
+        Return "topology".
+    If code is equal to 60 or code is equal to 62:
+        Return "probability".
+    If code is equal to 68 or code is equal to 90 or code is equal to 91 or code is equal to 94:
+        Return "computer-science".
+    If code is at least 70 and code is at most 86:
+        Return "physics".
+    If [6, 8, 12, 13, 15, 16, 17, 18, 19] contains code:
+        Return "algebra".
+    If code is at least 26 and code is at most 49:
+        Return "analysis".
+    If code is equal to 58:
+        Return "analysis".
+    Return "miscellaneous".
+
+## Note
+The fields of a manifest entry the adapter reads. Entries carry many more (the
+lab's audit trail of each statement); they are read OPEN, and the source keeps
+them.
+
+## To manifestEntryShape () -> Seq of Text:
+    Return ["id:text", "problem_key:text", "title:text", "collection:text", "repository:text", "statement:text", "declaration:text", "lean_module:text", "status:text", "ams_subjects:array"].
+
+## Note
+The upstream identity of an entry: formal-conjectures' own `fc:` key, or
+`<repository>:<key>` for the other repositories.
+
+## To externalKeyOf (entry: Json) -> Text:
+    Let key be textAt(entry, "problem_key").
+    If startsWith(key, "fc:"):
+        Return key.
+    Return textAt(entry, "repository") + ":" + key.
+
+## Note
+The Erdős handle of an entry, when the lab recorded an Erdős problem number.
+
+## To crossRefOf (entry: Json) -> Option of Text:
+    If jsonHas(entry, "external_status") is equal to false:
+        Return none.
+    Let number be textAt(jsonGet(entry, "external_status"), "problem_number").
+    If number is equal to "" or textAt(entry, "collection") is not equal to "ErdosProblems":
+        Return none.
+    Return some ("erdos:" + number).
+
+## Note
+The category of an entry: its first AMS subject, as an atlas category.
+
+## To categoryOf (entry: Json) -> Text:
+    Inspect jsonGet(entry, "ams_subjects"):
+        When JArr (codes):
+            If length of codes is greater than 0:
+                Inspect item 1 of codes:
+                    When JNum (code):
+                        Return mscCategory(code).
+                    Otherwise:
+                        Return "miscellaneous".
+        Otherwise:
+            Return "miscellaneous".
+    Return "miscellaneous".
+
+## Note
+One manifest entry as a factory problem.
+
+## To manifestProblem (entry: Json) -> Result of Problem and Text:
+    Let problem be openShapeProblem(entry, manifestEntryShape()).
+    If problem is not equal to "":
+        Let named be textAt(entry, "id").
+        Return a new Err with error "manifest entry {named}: " + problem.
+    Return a new Ok with value (a new Problem with id ("op:" + textAt(entry, "id")) and title textAt(entry, "title") and source "formalization-lab" and cohort labCohort() and collection textAt(entry, "collection") and category categoryOf(entry) and statementInformal "" and leanStatement (some textAt(entry, "statement")) and leanModule (some textAt(entry, "lean_module")) and leanDeclaration (some textAt(entry, "declaration")) and externalKey (some externalKeyOf(entry)) and crossRef crossRefOf(entry) and status problemStatus(textAt(entry, "status"))).
+
+## Note
+What an ingest produced: the problems, and the graph nodes that hold them —
+each node once, parents before children.
+
+## An Ingested has:
+    a problems, which is Seq of Problem.
+    a nodes, which is Seq of Node.
+
+## Note
+The node id of a cohort, a collection and a problem.
+
+## To cohortNodeId (cohort: Text) -> Text:
+    Return "cohort:" + cohort.
+
+## Note
+The node id of a collection within a cohort.
+
+## To collectionNodeId (cohort: Text, collection: Text) -> Text:
+    Return "collection:" + cohort + "/" + collection.
+
+## Note
+The node id of a problem.
+
+## To problemNodeId (problemId: Text) -> Text:
+    Return "problem:" + problemId.
+
+## Note
+A problem's scheduling rank before anything has been tried on it.
+
+## To manifestRank (p: Problem) -> Int:
+    Return priority(unprofiledInputs("lean", p's category), noSignals()).
+
+## Note
+The whole manifest: every entry as a problem, under its collection, under the
+lab's cohort. A collection's rank is its best problem's, so the graph orders its
+branches by where the most promising work is. The entries must be unique by id,
+and the manifest must hold the problems it says it does.
+
+## To ingestManifest (text: Text) -> Result of Ingested and Text:
+    Inspect parseStrict(text):
+        When Err (e):
+            Return a new Err with error "the manifest is not JSON: " + e.
+        When Ok (doc):
+            Inspect jsonGet(doc, "problems"):
+                When JArr (entries):
+                    Let mutable problems be a new Seq of Problem.
+                    Let mutable seen be a new Set of Text.
+                    Let mutable collections be a new Seq of Text.
+                    Let mutable best be a new Map of Text to Int.
+                    Repeat for entry in entries:
+                        Inspect manifestProblem(entry):
+                            When Err (e):
+                                Return a new Err with error e.
+                            When Ok (p):
+                                If seen contains p's id:
+                                    Return a new Err with error "the manifest lists {p's id} twice".
+                                Add p's id to seen.
+                                Push p to problems.
+                                Let home be p's collection.
+                                If collections contains home is equal to false:
+                                    Push home to collections.
+                                    Set best at home to 0.
+                                If manifestRank(p) is greater than item home of best:
+                                    Set best at home to manifestRank(p).
+                    Let cohort be labCohort().
+                    Let mutable nodes be a new Seq of Node.
+                    Let mutable top be 0.
+                    Repeat for c in collections:
+                        If item c of best is greater than top:
+                            Set top to item c of best.
+                    Push (a new Node with id cohortNodeId(cohort) and parentId none and problemId none and kind "cohort" and label "Formalization lab: 200 pinned open statements" and stage "ranked" and rank top) to nodes.
+                    Repeat for c in collections:
+                        Push (a new Node with id collectionNodeId(cohort, c) and parentId (some cohortNodeId(cohort)) and problemId none and kind "collection" and label c and stage "ranked" and rank (item c of best)) to nodes.
+                    Repeat for p in problems:
+                        Push (a new Node with id problemNodeId(p's id) and parentId (some collectionNodeId(cohort, p's collection)) and problemId (some p's id) and kind "problem" and label p's title and stage "ranked" and rank manifestRank(p)) to nodes.
+                    Return a new Ok with value (a new Ingested with problems problems and nodes nodes).
+                Otherwise:
+                    Return a new Err with error "the manifest has no problems array".
+    Return a new Err with error "unreadable manifest".
+
+## Note
+Two entries in the manifest's own shape, trimmed to the fields the adapter reads
+plus one it does not: OP001 from formal-conjectures and OP022, an Erdős problem
+with its external status.
+
+## To sampleManifest () -> Text:
+    Return "{{\"schema_version\":1,\"problems\":[{{\"ams_subjects\":[11],\"collection\":\"Arxiv\",\"declaration\":\"Arxiv.«0912.2382».curling_number_conjecture\",\"id\":\"OP001\",\"lean_module\":\"FormalConjectures.Arxiv.«0912.2382».CurlingNumberConjecture\",\"problem_key\":\"fc:Arxiv/0912.2382/CurlingNumberConjecture\",\"repository\":\"formal-conjectures\",\"statement\":\"theorem curling_number_conjecture (S₀ : List ℤ) (h : S₀ ≠ []) : ∃ m, k (S S₀ m) = 1\",\"status\":\"source-reported-open\",\"title\":\"Arxiv / CurlingNumberConjecture / curling_number_conjecture\",\"reviewed_on\":\"2026-09-17\"}},{{\"ams_subjects\":[5,11],\"collection\":\"ErdosProblems\",\"declaration\":\"Erdos10.erdos_10.variants.granville_soundararajan_odd\",\"external_status\":{{\"problem_number\":\"10\",\"state\":\"open\"}},\"id\":\"OP022\",\"lean_module\":\"FormalConjectures.ErdosProblems.«10»\",\"problem_key\":\"fc:ErdosProblems/10\",\"repository\":\"formal-conjectures\",\"statement\":\"theorem erdos_10.variants.granville_soundararajan_odd : True\",\"status\":\"source-reported-open\",\"title\":\"ErdosProblems / 10 / granville_soundararajan_odd\"}}]}}".
+
+## Test: MSC subjects map onto the atlas's categories
+
+For each of these cases:
+
+| code | category             |
+|------|----------------------|
+| 3    | "logic"              |
+| 5    | "combinatorics"      |
+| 11   | "number-theory"      |
+| 13   | "algebra"            |
+| 20   | "group-theory"       |
+| 35   | "pde"                |
+| 42   | "analysis"           |
+| 52   | "geometry"           |
+| 55   | "topology"           |
+| 60   | "probability"        |
+| 68   | "computer-science"   |
+| 81   | "physics"            |
+| 97   | "miscellaneous"      |
+
+Expect that mscCategory(code) is equal to category.
+
+## Test: a manifest entry becomes a problem with its Lean statement and upstream key
+
+Inspect ingestManifest(sampleManifest()):
+    When Ok (got):
+        Let p be item 1 of got's problems.
+        Expect that p's id is equal to "op:OP001".
+        Expect that p's source is equal to "formalization-lab".
+        Expect that p's cohort is equal to "formalization-lab-200".
+        Expect that p's collection is equal to "Arxiv".
+        Expect that p's category is equal to "number-theory".
+        Expect that p's leanDeclaration is equal to some "Arxiv.«0912.2382».curling_number_conjecture".
+        Expect that p's leanStatement is equal to some "theorem curling_number_conjecture (S₀ : List ℤ) (h : S₀ ≠ []) : ∃ m, k (S S₀ m) = 1".
+        Expect that p's externalKey is equal to some "fc:Arxiv/0912.2382/CurlingNumberConjecture".
+        Expect that p's crossRef is none.
+    When Err (e):
+        Expect that e is equal to "no error".
+
+## Test: an Erdős entry carries its cross-reference
+
+Inspect ingestManifest(sampleManifest()):
+    When Ok (got):
+        Let p be item 2 of got's problems.
+        Expect that p's id is equal to "op:OP022".
+        Expect that p's crossRef is equal to some "erdos:10".
+        Expect that p's category is equal to "combinatorics".
+    When Err (e):
+        Expect that e is equal to "no error".
+
+## Test: the graph is the cohort, its collections and their problems, parents first
+
+Inspect ingestManifest(sampleManifest()):
+    When Ok (got):
+        Let mutable seenIds be a new Seq of Text.
+        Repeat for n in got's nodes:
+            Push n's id to seenIds.
+        Expect that seenIds is equal to ["cohort:formalization-lab-200", "collection:formalization-lab-200/Arxiv", "collection:formalization-lab-200/ErdosProblems", "problem:op:OP001", "problem:op:OP022"].
+        Let root be item 1 of got's nodes.
+        Expect that root's parentId is none.
+        Let leaf be item 4 of got's nodes.
+        Expect that leaf's parentId is equal to some "collection:formalization-lab-200/Arxiv".
+        Expect that leaf's stage is equal to "ranked".
+        Expect that leaf's problemId is equal to some "op:OP001".
+        Expect that (item 1 of got's problems)'s status is equal to "open".
+        Expect that leaf's rank is equal to priority(unprofiledInputs("lean", "number-theory"), noSignals()).
+        Expect that root's rank is at least leaf's rank.
+    When Err (e):
+        Expect that e is equal to "no error".
+
+## Test: a manifest that lists a problem twice is refused
+
+Let twice be "{{\"problems\":[" + "{{\"ams_subjects\":[11],\"collection\":\"A\",\"declaration\":\"d\",\"id\":\"OP1\",\"lean_module\":\"m\",\"problem_key\":\"fc:x\",\"repository\":\"r\",\"statement\":\"s\",\"status\":\"open\",\"title\":\"t\"}}," + "{{\"ams_subjects\":[11],\"collection\":\"A\",\"declaration\":\"d\",\"id\":\"OP1\",\"lean_module\":\"m\",\"problem_key\":\"fc:x\",\"repository\":\"r\",\"statement\":\"s\",\"status\":\"open\",\"title\":\"t\"}}" + "]}}".
+Inspect ingestManifest(twice):
+    When Ok (got):
+        Expect that length of got's problems is equal to 0.
+    When Err (e):
+        Expect that e is equal to "the manifest lists op:OP1 twice".
+
+## Test: an entry missing its Lean statement is refused by name
+
+Inspect ingestManifest("{{\"problems\":[{{\"id\":\"OP9\",\"title\":\"t\"}}]}}"):
+    When Ok (got):
+        Expect that length of got's problems is equal to 0.
+    When Err (e):
+        Expect that e is equal to "manifest entry OP9: missing field \"problem_key\"".
+
+## Test: a non-formal-conjectures entry is keyed by its repository
+
+Let v be jsonParse("{{\"problem_key\":\"integer-complexity\",\"repository\":\"open-problems-lab\"}}").
+Expect that externalKeyOf(v) is equal to "open-problems-lab:integer-complexity".
+
+## Test: the real manifest yields its 200 problems
+
+This test may use the real filesystem.
+Inspect read("/home/tristen/logicaffeine/logs/alejandro200/references/formalization-lab/open-problems/manifest.json"):
+    When Ok (text):
+        Inspect ingestManifest(text):
+            When Ok (got):
+                Expect that length of got's problems is equal to 200.
+                Expect that (item 1 of got's problems)'s id is equal to "op:OP001".
+                Expect that (item 200 of got's problems)'s externalKey is equal to some "open-conjecture-formalizations:one-third-two-thirds".
+                Let mutable erdos be 0.
+                Repeat for p in got's problems:
+                    If p's crossRef is not none:
+                        Set erdos to erdos + 1.
+                Expect that erdos is equal to 45.
+            When Err (e):
+                Expect that e is equal to "no error".
+    When Err (e):
+        Expect that e is equal to "readable".

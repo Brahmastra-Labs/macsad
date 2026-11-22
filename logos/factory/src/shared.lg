@@ -1,0 +1,612 @@
+# Shared
+
+The wire contract of the MaCSad factory: every record that a worker, the
+coordinator, the verifier and the website hand each other.
+
+Declaring each shape ONCE is what makes the wire a contract. The JSON between
+the parts is derived from these blocks (`toJson_Problem` out, `fromJson_Problem`
+back in), so nobody writes a serializer and nobody can forget to update one.
+
+Import Wire.
+
+## Note
+Two conventions hold everywhere on this wire.
+
+Money is an `Int` of MICRO-DOLLARS: one dollar is 1,000,000. A model's price, a
+reservation, a contributor's budget and an attempt's cost are all micro-dollars, so
+a budget check is integer comparison and a ledger sums exactly.
+
+Scores are `Int`s in BASIS POINTS of their scale: 10,000 is the top of the scale.
+A probability of 0.4 is 4,000; an atlas score of 5.4 on its 0–10 scale is 5,400.
+One unit for every score is what lets the scheduler add them.
+
+Time is an `Int` of Unix milliseconds, the value `now()` answers.
+
+## Note
+A problem, from any source, under one identity.
+
+`id` names the problem across the whole factory: `opdp:116` for atlas record 116,
+`op:OP001` for formalization-lab statement OP001, `fc:Arxiv/0912.2382/CurlingNumberConjecture`
+for a formal-conjectures file. `source` says which adapter produced it, and
+`cohort → collection → category` is where it sits in the atlas graph.
+
+The Lean fields are present only when a formal statement exists (`none` for an
+informal-only atlas record — never an empty string pretending to be one).
+`externalKey` is the identity the source itself uses, and `crossRef` is a
+source-independent handle (`erdos:10`) that lets the link stage join the same
+problem across sources.
+
+## A Problem has:
+    an id, which is Text.
+    a title, which is Text.
+    a source, which is Text.
+    a cohort, which is Text.
+    a collection, which is Text.
+    a category, which is Text.
+    a statementInformal, which is Text.
+    a leanStatement, which is Option of Text.
+    a leanModule, which is Option of Text.
+    a leanDeclaration, which is Option of Text.
+    an externalKey, which is Option of Text.
+    a crossRef, which is Option of Text.
+    a status, which is Text.
+
+## Note
+One node of the atlas graph: a cohort, a collection, a category, a problem, a
+statement of a problem, or a lemma on the way to a proof.
+
+`parentId` is `none` at a root, and `problemId` names the problem of a problem,
+statement or lemma node (`none` above the problems). `stage` is where the node
+stands in the factory's state machine, and `rank` is its scheduling priority in
+basis points. The vocabularies match the coordinator's schema
+(`database/migrations/0004_factory.sql`), which enforces them.
+
+## A Node has:
+    an id, which is Text.
+    a parentId, which is Option of Text.
+    a problemId, which is Option of Text.
+    a kind, which is Text.
+    a label, which is Text.
+    a stage, which is Text.
+    a rank, which is Int.
+
+## Note
+A formal statement of a problem, as a LOGOS kernel-vernacular document.
+
+The document defines `goalName` as a `Prop`: a proof is accepted only as a theorem
+whose type is exactly that name, checked in a document that begins with this one
+byte for byte. `sha256` is the hex digest of `document`, and it is what an accepted
+proof is bound to. `route` says how the statement was made: `A` translated from a
+Lean statement, `B` an informal problem given a Lean statement first, `C` written
+directly in the kernel vernacular.
+
+## A Statement has:
+    an id, which is Text.
+    a problemId, which is Text.
+    a document, which is Text.
+    a sha256, which is Text.
+    a goalName, which is Text.
+    a route, which is Text.
+    a reviewState, which is Text.
+    an author, which is Text.
+    a model, which is Text.
+    a createdAt, which is Int.
+
+## Note
+One unit of work on the board. Only the coordinator creates units; a worker takes
+one through a lease.
+
+## A WorkUnit has:
+    an id, which is Text.
+    a problemId, which is Text.
+    a statementId, which is Option of Text.
+    a parentUnitId, which is Option of Text.
+    a kind, which is Text.
+    a priority, which is Int.
+    a state, which is Text.
+    a createdAt, which is Int.
+
+## Note
+The one live claim on a unit. `token` is the fencing token: every lease the
+coordinator grants on a unit carries a larger one, and a result posted under a
+smaller token than the unit's current lease is refused, so a worker whose lease
+expired cannot overwrite the work of the worker that took the unit next.
+
+## A Lease has:
+    a unitId, which is Text.
+    a holder, which is Text.
+    a token, which is Int.
+    a grantedAt, which is Int.
+    an expiresAt, which is Int.
+    a heartbeatAt, which is Int.
+
+## Note
+What the kernel and the acceptance policy said about one document.
+
+`kind` is one of `verified`, `rejected`, `admitted_axiom` or `infrastructure`.
+`block` is the first refused block, 1-based as the kernel counts blocks (comments
+included), and `0` when no block was refused. `axioms` is the closure
+`Print Axioms` reported for the proof, and `detail` is the policy's reason in words.
+
+## A Verdict has:
+    a kind, which is Text.
+    a block, which is Int.
+    an error, which is Text.
+    an axioms, which is Seq of Text.
+    a detail, which is Text.
+
+## Note
+One model call and what became of it.
+
+## An Attempt has:
+    an id, which is Text.
+    a unitId, which is Text.
+    a problemId, which is Text.
+    a contributor, which is Text.
+    a model, which is Text.
+    a strategyId, which is Text.
+    a promptSha, which is Text.
+    a responseSha, which is Text.
+    a documentSha, which is Text.
+    an approachFingerprint, which is Text.
+    a verdict, which is Verdict.
+    a costMicros, which is Int.
+    a startedAt, which is Int.
+    a finishedAt, which is Int.
+
+## Note
+One entry of a problem's trail: the append-only, hash-chained memory every later
+attempt reads first.
+
+`seq` counts from 1 within a problem, `prevHash` is the previous entry's `hash`
+(64 zeros before the first), and `hash` seals everything else — see `trail.lg`.
+`approachFingerprint` identifies the approach, so a failed one is not tried again.
+
+## A TrailEntry has:
+    a seq, which is Int.
+    a ts, which is Int.
+    a problemId, which is Text.
+    a stage, which is Text.
+    a kind, which is Text.
+    a contributor, which is Text.
+    a model, which is Text.
+    a strategyId, which is Text.
+    a promptSha, which is Text.
+    an approachFingerprint, which is Text.
+    an artifactShas, which is Seq of Text.
+    a verdict, which is Text.
+    an exitCode, which is Int.
+    a diagnostics, which is Text.
+    a costMicros, which is Int.
+    a summary, which is Text.
+    a nextSuggestions, which is Seq of Text.
+    a prevHash, which is Text.
+    a hash, which is Text.
+
+## Note
+A lemma in the shared library, deduplicated by the hash of its statement.
+
+`status` is `verified` when its proof passed the acceptance policy, and
+`retracted` if the verifier later withdraws it. An `Axiom` a decomposition leaves
+open is not a lemma: it is a child node, proved or not like any other.
+
+## A Lemma has:
+    an id, which is Text.
+    a name, which is Text.
+    a statement, which is Text.
+    a statementSha, which is Text.
+    a problemId, which is Text.
+    a documentSha, which is Text.
+    a status, which is Text.
+    an axioms, which is Seq of Text.
+
+## Note
+A strategy is versioned data, never code: the playbook a unit kind is attacked
+with, the model, and the sampling budget. Strategies evolve; the kernel, the
+acceptance policy and the budget caps do not.
+
+## A Strategy has:
+    an id, which is Text.
+    a version, which is Int.
+    a parentId, which is Option of Text.
+    a unitKind, which is Text.
+    a model, which is Text.
+    a temperatureBp, which is Int.
+    a maxTokens, which is Int.
+    a playbook, which is Text.
+    a contextRules, which is Text.
+    a status, which is Text.
+    a createdAt, which is Int.
+
+## Note
+Someone running a worker. The OpenRouter key never appears here: it stays in the
+contributor's own container, and only spend is reported.
+
+## A Contributor has:
+    an id, which is Text.
+    a displayName, which is Text.
+    a budgetMicros, which is Int.
+    a spentMicros, which is Int.
+    a focus, which is Text.
+    a joinedAt, which is Int.
+
+## Note
+The vocabularies of the kind and state fields, each written once.
+
+## To nodeKinds () -> Seq of Text:
+    Return ["root", "cohort", "collection", "category", "problem", "statement", "lemma"].
+
+## Note
+What a unit of work may ask for.
+
+## To unitKinds () -> Seq of Text:
+    Return ["formalize", "review", "prove", "decompose", "special_case", "counterexample", "repair", "summarize_trail", "link", "improve_strategy", "verify"].
+
+## Note
+The four verdicts, in the order the acceptance policy decides between them.
+
+## To verdictKinds () -> Seq of Text:
+    Return ["verified", "rejected", "admitted_axiom", "infrastructure"].
+
+## Note
+A unit's life on the board.
+
+## To unitStates () -> Seq of Text:
+    Return ["ready", "leased", "done", "failed", "cancelled"].
+
+## Note
+A node's stage in the factory: ranked, being given a formal statement, formalized,
+worked on, and finally settled — solved, refuted, or progress modulo admitted
+lemmas — or found to be formalized wrongly.
+
+## To nodeStages () -> Seq of Text:
+    Return ["ranked", "formalizing", "formalized", "in_progress", "partial", "solved", "refuted", "invalid_formalization"].
+
+## Note
+A statement's review: written, under review, accepted (one per problem), rejected,
+or replaced by a better one.
+
+## To reviewStates () -> Seq of Text:
+    Return ["draft", "reviewing", "accepted", "rejected", "superseded"].
+
+## Note
+What the coordinator records a problem's status as, whatever words its source
+uses: the formalization lab's `source-reported-open` and the atlas's `open` and
+`partially_solved` are `open`; a source that says solved is `solved_upstream`; the
+atlas's `ill_posed` gate is `ill_posed`; anything else is `unknown`, never a guess.
+
+## To problemStatus (sourceStatus: Text) -> Text:
+    If ["open", "source-reported-open", "partially_solved", "source_claimed_open", "status_unclear"] contains sourceStatus:
+        Return "open".
+    If sourceStatus is equal to "solved":
+        Return "solved_upstream".
+    If sourceStatus is equal to "ill_posed":
+        Return "ill_posed".
+    If sourceStatus is equal to "disputed":
+        Return "disputed".
+    Return "unknown".
+
+## Note
+The verdict kind the coordinator's attempt table records: the four verdicts, with
+a rejection made before the kernel ran told apart as `refused_submission`.
+
+## To attemptVerdictKind (v: Verdict) -> Text:
+    If v's kind is equal to "rejected" and v's block is equal to 0 and v's detail is equal to "the submission was refused before the kernel saw it":
+        Return "refused_submission".
+    Return v's kind.
+
+## Note
+The lowercase hex SHA-256 of a text's UTF-8 bytes. Every hash in the factory is
+this function, so a hash computed by a worker, by the coordinator and by the
+verifier agree by construction.
+
+## To sha256Hex (t: Text) -> Text:
+    Return bytesToHex(sha256(text_bytes(t))).
+
+## Note
+Micro-dollars as a reader expects money: `1250` is `$0.001250`, `5000000` is
+`$5.000000`. All six decimals are kept, because a cost rounded for display is a
+cost that no longer adds up.
+
+## To formatMicros (micros: Int) -> Text:
+    Let mutable sign be "".
+    Let mutable n be micros.
+    If micros is less than 0:
+        Set sign to "-".
+        Set n to 0 - micros.
+    Let dollars be n / 1000000.
+    Let rest be n % 1000000.
+    Return sign + "$" + "{dollars}" + "." + zfill("{rest}", 6).
+
+## Note
+A verdict built from its parts, so a caller names what it means.
+
+## To newVerdict (kind: Text, block: Int, error: Text, axioms: Seq of Text, detail: Text) -> Verdict:
+    Return a new Verdict with kind kind and block block and error error and axioms axioms and detail detail.
+
+## Note
+The specification of a `Verdict`'s JSON shape. The derived encoder writes it; this
+reads it back (the derive gives a record with a `Seq` field no decoder).
+
+## To verdictShape () -> Seq of Text:
+    Return ["kind:text", "block:int", "error:text", "axioms:texts", "detail:text"].
+
+## Note
+A `Verdict` read back from its JSON value.
+
+## To decodeVerdict (v: Json) -> Result of Verdict and Text:
+    Let problem be shapeProblem(v, verdictShape()).
+    If problem is not equal to "":
+        Return a new Err with error "Verdict: " + problem.
+    Return a new Ok with value newVerdict(textAt(v, "kind"), intAt(v, "block"), textAt(v, "error"), textsAt(v, "axioms"), textAt(v, "detail")).
+
+## Note
+An `Attempt`'s JSON shape: its verdict nests as an object.
+
+## To attemptShape () -> Seq of Text:
+    Return ["id:text", "unitId:text", "problemId:text", "contributor:text", "model:text", "strategyId:text", "promptSha:text", "responseSha:text", "documentSha:text", "approachFingerprint:text", "verdict:object", "costMicros:int", "startedAt:int", "finishedAt:int"].
+
+## Note
+An `Attempt` read back from its JSON value.
+
+## To decodeAttempt (v: Json) -> Result of Attempt and Text:
+    Let problem be shapeProblem(v, attemptShape()).
+    If problem is not equal to "":
+        Return a new Err with error "Attempt: " + problem.
+    Inspect decodeVerdict(jsonGet(v, "verdict")):
+        When Err (e):
+            Return a new Err with error "Attempt: " + e.
+        When Ok (verdict):
+            Return a new Ok with value (a new Attempt with id textAt(v, "id") and unitId textAt(v, "unitId") and problemId textAt(v, "problemId") and contributor textAt(v, "contributor") and model textAt(v, "model") and strategyId textAt(v, "strategyId") and promptSha textAt(v, "promptSha") and responseSha textAt(v, "responseSha") and documentSha textAt(v, "documentSha") and approachFingerprint textAt(v, "approachFingerprint") and verdict verdict and costMicros intAt(v, "costMicros") and startedAt intAt(v, "startedAt") and finishedAt intAt(v, "finishedAt")).
+    Return a new Err with error "Attempt: unreadable".
+
+## Note
+A `TrailEntry`'s JSON shape.
+
+## To trailEntryShape () -> Seq of Text:
+    Return ["seq:int", "ts:int", "problemId:text", "stage:text", "kind:text", "contributor:text", "model:text", "strategyId:text", "promptSha:text", "approachFingerprint:text", "artifactShas:texts", "verdict:text", "exitCode:int", "diagnostics:text", "costMicros:int", "summary:text", "nextSuggestions:texts", "prevHash:text", "hash:text"].
+
+## Note
+A `TrailEntry` read back from its JSON value.
+
+## To decodeTrailEntry (v: Json) -> Result of TrailEntry and Text:
+    Let problem be shapeProblem(v, trailEntryShape()).
+    If problem is not equal to "":
+        Return a new Err with error "TrailEntry: " + problem.
+    Return a new Ok with value (a new TrailEntry with seq intAt(v, "seq") and ts intAt(v, "ts") and problemId textAt(v, "problemId") and stage textAt(v, "stage") and kind textAt(v, "kind") and contributor textAt(v, "contributor") and model textAt(v, "model") and strategyId textAt(v, "strategyId") and promptSha textAt(v, "promptSha") and approachFingerprint textAt(v, "approachFingerprint") and artifactShas textsAt(v, "artifactShas") and verdict textAt(v, "verdict") and exitCode intAt(v, "exitCode") and diagnostics textAt(v, "diagnostics") and costMicros intAt(v, "costMicros") and summary textAt(v, "summary") and nextSuggestions textsAt(v, "nextSuggestions") and prevHash textAt(v, "prevHash") and hash textAt(v, "hash")).
+
+## Note
+A `Lemma`'s JSON shape.
+
+## To lemmaShape () -> Seq of Text:
+    Return ["id:text", "name:text", "statement:text", "statementSha:text", "problemId:text", "documentSha:text", "status:text", "axioms:texts"].
+
+## Note
+A `Lemma` read back from its JSON value.
+
+## To decodeLemma (v: Json) -> Result of Lemma and Text:
+    Let problem be shapeProblem(v, lemmaShape()).
+    If problem is not equal to "":
+        Return a new Err with error "Lemma: " + problem.
+    Return a new Ok with value (a new Lemma with id textAt(v, "id") and name textAt(v, "name") and statement textAt(v, "statement") and statementSha textAt(v, "statementSha") and problemId textAt(v, "problemId") and documentSha textAt(v, "documentSha") and status textAt(v, "status") and axioms textsAt(v, "axioms")).
+
+## Note
+Each `Seq`-bearing record read from JSON text, for the callers that hold text.
+
+## To readTrailEntry (text: Text) -> Result of TrailEntry and Text:
+    Inspect parseStrict(text):
+        When Err (e):
+            Return a new Err with error "TrailEntry: " + e.
+        When Ok (v):
+            Return decodeTrailEntry(v).
+    Return a new Err with error "TrailEntry: unreadable".
+
+## Note
+An `Attempt` read from its JSON text.
+
+## To readAttempt (text: Text) -> Result of Attempt and Text:
+    Inspect parseStrict(text):
+        When Err (e):
+            Return a new Err with error "Attempt: " + e.
+        When Ok (v):
+            Return decodeAttempt(v).
+    Return a new Err with error "Attempt: unreadable".
+
+## Note
+A `Verdict` read from its JSON text.
+
+## To readVerdict (text: Text) -> Result of Verdict and Text:
+    Inspect parseStrict(text):
+        When Err (e):
+            Return a new Err with error "Verdict: " + e.
+        When Ok (v):
+            Return decodeVerdict(v).
+    Return a new Err with error "Verdict: unreadable".
+
+## Note
+A `Lemma` read from its JSON text.
+
+## To readLemma (text: Text) -> Result of Lemma and Text:
+    Inspect parseStrict(text):
+        When Err (e):
+            Return a new Err with error "Lemma: " + e.
+        When Ok (v):
+            Return decodeLemma(v).
+    Return a new Err with error "Lemma: unreadable".
+
+## Note
+A sample of every record, for the round-trip tests below and the tests of the
+modules that import this one.
+
+## To sampleProblem () -> Problem:
+    Return a new Problem with id "op:OP022" and title "ErdosProblems / 10" and source "formalization-lab" and cohort "formalization-lab-200" and collection "ErdosProblems" and category "number-theory" and statementInformal "" and leanStatement (some "theorem erdos_10 : True") and leanModule (some "FormalConjectures.ErdosProblems.«10»") and leanDeclaration (some "Erdos10.erdos_10") and externalKey (some "fc:ErdosProblems/10") and crossRef (some "erdos:10") and status "open".
+
+## Note
+A sample verdict that carries every field.
+
+## To sampleVerdict () -> Verdict:
+    Return newVerdict("admitted_axiom", 0, "", ["collatz_lemma", "propext"], "rests on collatz_lemma, outside the allowed axioms").
+
+## Note
+A sample trail entry with both of its lists filled.
+
+## To sampleTrailEntry () -> TrailEntry:
+    Return a new TrailEntry with seq 3 and ts 1795000000000 and problemId "opdp:116" and stage "progress" and kind "prove" and contributor "c1" and model "replay/m" and strategyId "s1" and promptSha "ab" and approachFingerprint "fp" and artifactShas ["d1", "d2"] and verdict "rejected" and exitCode 1 and diagnostics "block 3: Tactic error: step 2 (`rfl`)" and costMicros 1250 and summary "rfl does not close Nat_add Zero n" and nextSuggestions ["induct on n"] and prevHash "p" and hash "h".
+
+## Test: a problem round-trips through its derived codec
+
+Let p be sampleProblem().
+Inspect fromJson_Problem(toJson_Problem(p)):
+    When Ok (back):
+        Expect that back is equal to p.
+        Expect that back's leanModule is equal to some "FormalConjectures.ErdosProblems.«10»".
+    When Err (e):
+        Expect that e is equal to "no error".
+
+## Test: an absent Lean statement travels as null, not as an empty string
+
+Let p be a new Problem with id "opdp:116" and title "Gowers Box Norms" and source "opdp" and cohort "UnsolvedMath" and collection "green-problems" and category "combinatorics" and statementInformal "Let p be an odd prime." and leanStatement none and leanModule none and leanDeclaration none and externalKey none and crossRef none and status "open".
+Let j be toJson_Problem(p).
+Expect that j contains "\"leanStatement\":null".
+Inspect fromJson_Problem(j):
+    When Ok (back):
+        Expect that back's leanStatement is none.
+        Expect that back is equal to p.
+    When Err (e):
+        Expect that e is equal to "no error".
+
+## Test: a node, a statement, a unit, a lease, a strategy and a contributor round-trip
+
+Let n be a new Node with id "category:UnsolvedMath/green-problems/combinatorics" and parentId (some "collection:UnsolvedMath/green-problems") and problemId none and kind "category" and label "Combinatorics" and stage "ranked" and rank 4200.
+Inspect fromJson_Node(toJson_Node(n)):
+    When Ok (back):
+        Expect that back is equal to n.
+    When Err (e):
+        Expect that e is equal to "no error".
+Let s be a new Statement with id "stmt:ab" and problemId "opdp:116" and document "Definition goal : Prop := True." and sha256 "ab" and goalName "goal" and route "C" and reviewState "draft" and author "c1" and model "m" and createdAt 5.
+Inspect fromJson_Statement(toJson_Statement(s)):
+    When Ok (back):
+        Expect that back is equal to s.
+    When Err (e):
+        Expect that e is equal to "no error".
+Let u be a new WorkUnit with id "u1" and problemId "opdp:116" and statementId none and parentUnitId (some "u0") and kind "prove" and priority 6100 and state "ready" and createdAt 9.
+Inspect fromJson_WorkUnit(toJson_WorkUnit(u)):
+    When Ok (back):
+        Expect that back is equal to u.
+    When Err (e):
+        Expect that e is equal to "no error".
+Let l be a new Lease with unitId "u1" and holder "c1" and token 7 and grantedAt 10 and expiresAt 70 and heartbeatAt 40.
+Inspect fromJson_Lease(toJson_Lease(l)):
+    When Ok (back):
+        Expect that back is equal to l.
+    When Err (e):
+        Expect that e is equal to "no error".
+Let st be a new Strategy with id "s1" and version 2 and parentId none and unitKind "prove" and model "m" and temperatureBp 2000 and maxTokens 4096 and playbook "Induct first." and contextRules "last 5 attempts" and status "active" and createdAt 1.
+Inspect fromJson_Strategy(toJson_Strategy(st)):
+    When Ok (back):
+        Expect that back is equal to st.
+    When Err (e):
+        Expect that e is equal to "no error".
+Let c be a new Contributor with id "c1" and displayName "Ada" and budgetMicros 5000000 and spentMicros 1250 and focus "erdos" and joinedAt 3.
+Inspect fromJson_Contributor(toJson_Contributor(c)):
+    When Ok (back):
+        Expect that back is equal to c.
+    When Err (e):
+        Expect that e is equal to "no error".
+
+## Test: a verdict round-trips through the derived encoder and its decoder
+
+Let v be sampleVerdict().
+Inspect readVerdict(toJson_Verdict(v)):
+    When Ok (back):
+        Expect that back is equal to v.
+        Expect that back's axioms is equal to ["collatz_lemma", "propext"].
+    When Err (e):
+        Expect that e is equal to "no error".
+
+## Test: a trail entry round-trips with both of its lists
+
+Let t be sampleTrailEntry().
+Inspect readTrailEntry(toJson_TrailEntry(t)):
+    When Ok (back):
+        Expect that back is equal to t.
+        Expect that back's nextSuggestions is equal to ["induct on n"].
+    When Err (e):
+        Expect that e is equal to "no error".
+
+## Test: an attempt round-trips with its nested verdict
+
+Let a be a new Attempt with id "a1" and unitId "u1" and problemId "opdp:116" and contributor "c1" and model "m" and strategyId "s1" and promptSha "p" and responseSha "r" and documentSha "d" and approachFingerprint "fp" and verdict sampleVerdict() and costMicros 900 and startedAt 1 and finishedAt 2.
+Inspect readAttempt(toJson_Attempt(a)):
+    When Ok (back):
+        Expect that back is equal to a.
+        Expect that back's verdict's kind is equal to "admitted_axiom".
+    When Err (e):
+        Expect that e is equal to "no error".
+
+## Test: a lemma round-trips
+
+Let l be a new Lemma with id "lemma:ab" and name "step_one" and statement "forall (n : Nat), Eq Nat n n" and statementSha "ab" and problemId "opdp:116" and documentSha "cd" and status "verified" and axioms [].
+Inspect readLemma(toJson_Lemma(l)):
+    When Ok (back):
+        Expect that back is equal to l.
+    When Err (e):
+        Expect that e is equal to "no error".
+
+## Test: a decoder refuses a document missing a field or carrying an extra one
+
+Inspect readVerdict("{{\"kind\": \"verified\", \"block\": 0, \"error\": \"\", \"axioms\": []}}"):
+    When Ok (v):
+        Expect that v's kind is equal to "refused".
+    When Err (e):
+        Expect that e is equal to "Verdict: missing field \"detail\"".
+Inspect readVerdict("{{\"kind\": \"verified\", \"block\": 0, \"error\": \"\", \"axioms\": [], \"detail\": \"\", \"by\": 1}}"):
+    When Ok (v):
+        Expect that v's kind is equal to "refused".
+    When Err (e):
+        Expect that e is equal to "Verdict: unexpected key \"by\"".
+
+## Test: money prints with all six decimals
+
+For each of these cases:
+
+| micros  | shown       |
+|---------|-------------|
+| 0       | "$0.000000" |
+| 1250    | "$0.001250" |
+| 5000000 | "$5.000000" |
+| 1234567 | "$1.234567" |
+| -42     | "-$0.000042" |
+
+Expect that formatMicros(micros) is equal to shown.
+
+## Test: the vocabularies name every kind exactly once
+
+Expect that length of unitKinds() is equal to 11.
+Expect that unitKinds() contains "improve_strategy".
+Expect that unitKinds() contains "verify".
+Expect that length of nodeKinds() is equal to 7.
+Expect that nodeStages() contains "invalid_formalization".
+Expect that reviewStates() contains "accepted".
+
+## Test: source statuses map onto the coordinator's five
+
+For each of these cases:
+
+| source                 | status            |
+|------------------------|-------------------|
+| "source-reported-open" | "open"            |
+| "open"                 | "open"            |
+| "partially_solved"     | "open"            |
+| "solved"               | "solved_upstream" |
+| "ill_posed"            | "ill_posed"       |
+| "whatever"             | "unknown"         |
+
+Expect that problemStatus(source) is equal to status.
+
+## Test: a refusal before the kernel is its own attempt verdict kind
+
+Expect that attemptVerdictKind(newVerdict("rejected", 0, "x", [], "the submission was refused before the kernel saw it")) is equal to "refused_submission".
+Expect that attemptVerdictKind(newVerdict("rejected", 4, "x", [], "the kernel refused the document")) is equal to "rejected".
+Expect that attemptVerdictKind(sampleVerdict()) is equal to "admitted_axiom".
+Expect that verdictKinds() is equal to ["verified", "rejected", "admitted_axiom", "infrastructure"].

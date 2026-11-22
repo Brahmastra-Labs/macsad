@@ -1,0 +1,6 @@
+[package]
+name = "factory"
+version = "0.1.0"
+description = "The MaCSad math factory: problems in, kernel-checked LOGOS proofs out"
+authors = ["MaCSad"]
+entry = "src/main.lg"

@@ -1,0 +1,210 @@
+# Verifier
+
+The judgement of a submission, start to finish: read it, probe the names it
+declares, check the assembled document with the kernel, apply the acceptance
+policy. A worker runs this to learn how its attempt went; the trusted verifier
+runs exactly the same function on its own pinned toolchain before anything is
+recorded as proved, so the two can only disagree if their toolchains do.
+
+The order is cheapest-first, and each step only runs when the steps before it let
+the submission through: a submission refused by its reading never costs a kernel
+run, and a submission that shadows a name never reaches the kernel at all.
+
+Import Shared.
+Import Submission.
+Import Verdict.
+Import Host.
+Import Reference.
+
+## Note
+What every declared name's probe found, in order, or why the probes could not
+run. The probe of a name checks the preamble followed by `Check <name>.`.
+
+## To probeNames (tc: Toolchain, preamble: Text, names: Seq of Text) -> Result of Seq of Text and Text:
+    Let mutable out be a new Seq of Text.
+    Repeat for name in names:
+        Inspect kernelRun(tc, nameProbeDocument(preamble, name)):
+            When Err (e):
+                Return a new Err with error e.
+            When Ok (run):
+                If run's timedOut:
+                    Push "unknown" to out.
+                Otherwise:
+                    Push probeOutcome(run's exitCode, run's stdout, name) to out.
+    Return a new Ok with value out.
+
+## Note
+The verdict on `submission` as a proof of the statement `statementDoc`, whose goal
+is `goalName`; the proof must be the theorem `proofNameFor(goalName)`.
+
+## To judgeSubmission (tc: Toolchain, statementDoc: Text, goalName: Text, submission: Text) -> Verdict:
+    Let proofName be proofNameFor(goalName).
+    Let problems be submissionProblems(submission, proofName, goalName).
+    If length of problems is greater than 0:
+        Return refusedSubmissionVerdict(problems).
+    Let names be submissionNames(submission).
+    Inspect probeNames(tc, statementDoc, names):
+        When Err (e):
+            Return infrastructureVerdict(e).
+        When Ok (outcomes):
+            Inspect nameProbeVerdict("submission", "the statement or the prelude", names, outcomes):
+                When Some (v):
+                    Return v.
+                When None:
+                    Let document be assembleProofDocument(statementDoc, submission, proofName).
+                    Inspect kernelRun(tc, document):
+                        When Err (e):
+                            Return infrastructureVerdict(e).
+                        When Ok (run):
+                            Return kernelVerdict(run's exitCode, run's stdout, run's timedOut, proofName, goalName).
+    Return infrastructureVerdict("unjudged").
+
+## Note
+The document that checks a statement on its own: the statement and one closing
+`Check <goal>.`, whose output must be `<goal> : Prop`.
+
+## To statementCheckDocument (statementDoc: Text, goalName: Text) -> Text:
+    Return trimEnd(statementDoc) + "\n\n/-! ## Closing check, appended by the factory -/\n\nCheck " + goalName + ".\n".
+
+## Note
+The verdict on a statement document before it can be reviewed: it reads as a
+statement, every name it declares is new to the prelude, it checks, and its goal
+is a proposition. `verified` here means well-formed, never true; whether it says
+what the problem says is the semantic review's question.
+
+## To judgeStatement (tc: Toolchain, statementDoc: Text, goalName: Text) -> Verdict:
+    Let problems be statementProblems(statementDoc, goalName).
+    If length of problems is greater than 0:
+        Return newVerdict("rejected", 0, join(problems, "; "), [], "the statement was refused before the kernel saw it").
+    Let mutable names be a new Seq of Text.
+    Repeat for block in (kernelBlocks(statementDoc))'s items:
+        Repeat for name in declaredNames(block):
+            Push name to names.
+    Inspect probeNames(tc, "", names):
+        When Err (e):
+            Return infrastructureVerdict(e).
+        When Ok (outcomes):
+            Inspect nameProbeVerdict("statement", "the prelude", names, outcomes):
+                When Some (v):
+                    Return v.
+                When None:
+                    Inspect kernelRun(tc, statementCheckDocument(statementDoc, goalName)):
+                        When Err (e):
+                            Return infrastructureVerdict(e).
+                        When Ok (run):
+                            If run's timedOut:
+                                Return infrastructureVerdict("largo ran past its deadline").
+                            Inspect parseKernelReport(run's stdout):
+                                When Err (e):
+                                    Return infrastructureVerdict(e).
+                                When Ok (report):
+                                    If report's checked is equal to false:
+                                        Return newVerdict("rejected", report's failedBlock, report's error, [], "the kernel refused the statement").
+                                    Let n be length of report's outputs.
+                                    If n is equal to 0 or item n of report's outputs is not equal to goalName + " : Prop":
+                                        Return newVerdict("rejected", n, "the goal is not a proposition", [], "the statement's goal must be a Prop").
+                                    Return newVerdict("verified", 0, "", [], "the statement checks and its goal is a proposition").
+    Return infrastructureVerdict("unjudged").
+
+## Note
+Everything wrong with the kernel reference, checked against the kernel itself: a
+positive example that does not check, a failure example that checks or fails with
+another error, a promised prelude name that is not bound. The empty list is the
+reference's licence to be put in front of a model.
+
+## To referenceProblems (tc: Toolchain) -> Seq of Text:
+    Let mutable out be a new Seq of Text.
+    Repeat for e in allExamples():
+        Inspect kernelRun(tc, e's document):
+            When Err (why):
+                Push "{e's name}: " + why to out.
+            When Ok (run):
+                Inspect parseKernelReport(run's stdout):
+                    When Err (why):
+                        Push "{e's name}: " + why to out.
+                    When Ok (report):
+                        If e's expectError is equal to "":
+                            If report's checked is equal to false:
+                                Push "{e's name}: does not check: " + report's error to out.
+                        Otherwise:
+                            If report's checked:
+                                Push "{e's name}: checks, but is shown as a refusal" to out.
+                            Otherwise:
+                                If report's error contains e's expectError is equal to false:
+                                    Push "{e's name}: refused with `{report's error}`, not `{e's expectError}`" to out.
+    Let mutable checks be a new Seq of Text.
+    Repeat for name in referenceNames():
+        Push "Check " + name + "." to checks.
+    Inspect kernelRun(tc, join(checks, "\n\n") + "\n"):
+        When Err (why):
+            Push "prelude names: " + why to out.
+        When Ok (run):
+            Inspect parseKernelReport(run's stdout):
+                When Err (why):
+                    Push "prelude names: " + why to out.
+                When Ok (report):
+                    If report's checked is equal to false:
+                        Push "prelude names: block {report's failedBlock}: " + report's error to out.
+    Return out.
+
+## Test: a statement check document ends with one Check of the goal
+
+Expect that statementCheckDocument("Definition goal : Prop := True.\n", "goal") is equal to "Definition goal : Prop := True.\n\n/-! ## Closing check, appended by the factory -/\n\nCheck goal.\n".
+
+## Test: a refused submission never reaches the kernel
+
+Let v be judgeSubmission(defaultToolchain(), fixtureStatement(), "goal", "Notation \"x\" := Zero.\n\nTheorem proof_of_goal : goal := by intro n; rfl.").
+Expect that v's kind is equal to "rejected".
+Expect that v's error is equal to "block 1 uses `Notation`, which a submission may not use".
+
+## Test: in a sealed world the probes cannot run, and that is infrastructure
+
+Let v be judgeSubmission(defaultToolchain(), fixtureStatement(), "goal", fixtureProof()).
+Expect that v's kind is equal to "infrastructure".
+
+## Test: the four recorded submissions are judged for real
+
+This test may use the real filesystem.
+This test may use the real processes.
+This test may use the real environment.
+Let tc be defaultToolchain().
+Let verified be judgeSubmission(tc, fixtureStatement(), "goal", fixtureProof()).
+Expect that verified's kind is equal to "verified".
+Let wrong be judgeSubmission(tc, fixtureStatement(), "goal", "Theorem proof_of_goal : goal := by intro n; rfl.").
+Expect that wrong's kind is equal to "rejected".
+Expect that wrong's block is equal to 4.
+Let admitted be judgeSubmission(tc, fixtureStatement(), "goal", "Axiom zero_add_axiom : forall (n : Nat), Eq Nat (Nat_add Zero n) n.\n\nTheorem proof_of_goal : goal := by exact zero_add_axiom.").
+Expect that admitted's kind is equal to "admitted_axiom".
+Expect that admitted's axioms is equal to ["zero_add_axiom"].
+Let unparsed be judgeSubmission(tc, fixtureStatement(), "goal", "Theorem proof_of_goal : goal := by intro n; induction n as [ | k ih; rfl.").
+Expect that unparsed's kind is equal to "rejected".
+
+## Test: a submission that shadows a prelude name is caught by its probe
+
+This test may use the real filesystem.
+This test may use the real processes.
+This test may use the real environment.
+Let shadow be "Definition Nat_add : Nat -> Nat -> Nat := fun (a : Nat) => fun (b : Nat) => b.\n\nTheorem proof_of_goal : goal := by intro n; rfl.".
+Let v be judgeSubmission(defaultToolchain(), fixtureStatement(), "goal", shadow).
+Expect that v's kind is equal to "rejected".
+Expect that v's error is equal to "the submission declares Nat_add, which the statement or the prelude already binds".
+
+## Test: statements are judged well-formed or not, for real
+
+This test may use the real filesystem.
+This test may use the real processes.
+This test may use the real environment.
+Let tc be defaultToolchain().
+Expect that (judgeStatement(tc, fixtureStatement(), "goal"))'s kind is equal to "verified".
+Let notProp be judgeStatement(tc, "Definition goal : Nat := Zero.", "goal").
+Expect that notProp's kind is equal to "rejected".
+Let shadowing be judgeStatement(tc, "Definition False : Prop := True.\n\nDefinition goal : Prop := False.", "goal").
+Expect that shadowing's kind is equal to "rejected".
+Expect that shadowing's error is equal to "the statement declares False, which the prelude already binds".
+
+## Test: every example in the kernel reference is what the kernel says it is
+
+This test may use the real filesystem.
+This test may use the real processes.
+This test may use the real environment.
+Expect that referenceProblems(defaultToolchain()) is equal to [].

@@ -1,0 +1,443 @@
+# Trail
+
+Every attempt on a problem leaves an entry on that problem's trail, and the next
+attempt reads the trail before it starts. This is the factory's memory: what was
+tried, with which model and strategy, what the kernel said, and what the attempt
+itself suggested next.
+
+A trail is only worth reading if nobody can quietly rewrite it, so the entries are
+hash-chained. Each entry's `hash` is the SHA-256 of the previous entry's hash
+followed by the entry's canonical body; changing any field of any entry, dropping
+one, or reordering two breaks every hash after it, and `verifyTrail` names the first
+link that no longer holds.
+
+Import Wire.
+Import Shared.
+
+## Note
+The `prevHash` of a problem's first entry: sixty-four zeros, the hash of nothing.
+
+## To trailGenesis () -> Text:
+    Return repeatText("0", 64).
+
+## Note
+A list of texts as a canonical JSON array.
+
+## To canonicalTexts (xs: Seq of Text) -> Text:
+    Let mutable parts be a new Seq of Text.
+    Repeat for x in xs:
+        Push jsonQuote(x) to parts.
+    Return "[" + join(parts, ",") + "]".
+
+## Note
+The canonical body of an entry: the bytes its hash seals.
+
+It is a JSON object of every field except `prevHash` and `hash`, in the order the
+record declares them, with no whitespace, integers in decimal and strings in the
+canonical escaping of `json.lg`'s `jsonQuote`. It is written out field by field
+here, rather than taken from the derived `toJson_TrailEntry`, because a hash must
+not change when the compiler's encoder does: the chain is a long-lived artifact,
+and its format is this function, frozen.
+
+## To canonicalTrailBody (e: TrailEntry) -> Text:
+    Let mutable f be a new Seq of Text.
+    Push "\"seq\":{e's seq}" to f.
+    Push "\"ts\":{e's ts}" to f.
+    Push "\"problemId\":" + jsonQuote(e's problemId) to f.
+    Push "\"stage\":" + jsonQuote(e's stage) to f.
+    Push "\"kind\":" + jsonQuote(e's kind) to f.
+    Push "\"contributor\":" + jsonQuote(e's contributor) to f.
+    Push "\"model\":" + jsonQuote(e's model) to f.
+    Push "\"strategyId\":" + jsonQuote(e's strategyId) to f.
+    Push "\"promptSha\":" + jsonQuote(e's promptSha) to f.
+    Push "\"approachFingerprint\":" + jsonQuote(e's approachFingerprint) to f.
+    Push "\"artifactShas\":" + canonicalTexts(e's artifactShas) to f.
+    Push "\"verdict\":" + jsonQuote(e's verdict) to f.
+    Push "\"exitCode\":{e's exitCode}" to f.
+    Push "\"diagnostics\":" + jsonQuote(e's diagnostics) to f.
+    Push "\"costMicros\":{e's costMicros}" to f.
+    Push "\"summary\":" + jsonQuote(e's summary) to f.
+    Push "\"nextSuggestions\":" + canonicalTexts(e's nextSuggestions) to f.
+    Return "{{" + join(f, ",") + "}}".
+
+## Note
+The hash an entry must carry when it follows an entry whose hash is `prevHash`.
+
+## To trailHash (prevHash: Text, e: TrailEntry) -> Text:
+    Return sha256Hex(prevHash + canonicalTrailBody(e)).
+
+## Note
+The entry `e` sealed as entry number `seq` after `prevHash`: its `seq`, `prevHash`
+and `hash` are set, and nothing else is touched.
+
+## To sealEntry (e: TrailEntry, seq: Int, prevHash: Text) -> TrailEntry:
+    Let mutable out be e.
+    Set out's seq to seq.
+    Set out's prevHash to prevHash.
+    Set out's hash to trailHash(prevHash, out).
+    Return out.
+
+## Note
+The hash the next entry of `trail` must chain from.
+
+## To trailHead (trail: Seq of TrailEntry) -> Text:
+    Let n be length of trail.
+    If n is equal to 0:
+        Return trailGenesis().
+    Return (item n of trail)'s hash.
+
+## Note
+`trail` with `e` sealed onto its end. The caller fills the entry's content; the trail
+decides where it goes and what it chains to, so no caller can number an entry or
+pick its predecessor wrongly.
+
+## To appendToTrail (trail: Seq of TrailEntry, e: TrailEntry) -> Seq of TrailEntry:
+    Let mutable out be copy of trail.
+    Push sealEntry(e, length of trail + 1, trailHead(trail)) to out.
+    Return out.
+
+## Note
+The first broken link of a trail, or `""` when every link holds.
+
+A trail holds when its entries are numbered 1, 2, 3, … in order, all belong to one
+problem, each one's `prevHash` is the hash before it (the genesis hash for the
+first), and each one's `hash` is the hash of its own contents.
+
+## To verifyTrail (trail: Seq of TrailEntry) -> Text:
+    Let mutable prev be trailGenesis().
+    Let mutable i be 0.
+    Repeat for e in trail:
+        Set i to i + 1.
+        If e's seq is not equal to i:
+            Return "entry {i}: seq is {e's seq}, expected {i}".
+        If e's problemId is not equal to (item 1 of trail)'s problemId:
+            Return "entry {i}: belongs to {e's problemId}, not {(item 1 of trail)'s problemId}".
+        If e's prevHash is not equal to prev:
+            Return "entry {i}: prevHash does not match the hash of entry {i - 1}".
+        If e's hash is not equal to trailHash(prev, e):
+            Return "entry {i}: hash does not match its contents".
+        Set prev to e's hash.
+    Return "".
+
+## Note
+The fingerprint of an approach: what was attempted, on which exact statement, with
+which strategy, by which shape of proof.
+
+`skeleton` is the normalized tactic skeleton of the attempt (see `submission.lg`),
+so two attempts that differ only in names or spacing share a fingerprint, and a
+repeated failed approach is recognised as the same approach.
+
+## To approachFingerprint (kind: Text, statementSha: Text, strategyId: Text, skeleton: Text) -> Text:
+    Return sha256Hex(kind + "\n" + statementSha + "\n" + strategyId + "\n" + skeleton).
+
+## Note
+Whether an entry records a model attempt — one that ended in a verdict — rather
+than an event on the trail (a budget stop, an expired lease, a summary).
+
+## To isAttemptEntry (e: TrailEntry) -> Bool:
+    Return verdictKinds() contains e's verdict.
+
+## Note
+Whether `fingerprint` already failed on this trail: an attempt with it ended in
+`rejected`. The coordinator refuses to hand out such an approach again.
+
+## To fingerprintFailed (trail: Seq of TrailEntry, fingerprint: Text) -> Bool:
+    Repeat for e in trail:
+        If e's approachFingerprint is equal to fingerprint and e's verdict is equal to "rejected":
+            Return true.
+    Return false.
+
+## Note
+The reason an attempt failed, reduced to what makes two failures the same: the
+first line of its diagnostics, trimmed, at most 240 bytes.
+
+## To failureReason (e: TrailEntry) -> Text:
+    Let first be item 1 of lines(e's diagnostics).
+    Return shortenText(trim(first), 240).
+
+## Note
+How many times a reason occurs among the reasons seen so far.
+
+## To countOf (reason: Text, reasons: Seq of Text) -> Int:
+    Let mutable n be 0.
+    Repeat for r in reasons:
+        If r is equal to reason:
+            Set n to n + 1.
+    Return n.
+
+## Note
+The distinct failure reasons of a trail, each with how often it occurred, the most
+frequent first and ties in order of first appearance. Each line reads `3× reason`.
+
+## To failureCounts (trail: Seq of TrailEntry) -> Seq of Text:
+    Let mutable all be a new Seq of Text.
+    Repeat for e in trail:
+        If e's verdict is equal to "rejected" or e's verdict is equal to "infrastructure":
+            Push failureReason(e) to all.
+    Let mutable distinct be a new Seq of Text.
+    Repeat for r in all:
+        If distinct contains r is equal to false:
+            Push r to distinct.
+    Let mutable out be a new Seq of Text.
+    Let mutable want be length of all.
+    While want is at least 1:
+        Repeat for r in distinct:
+            If countOf(r, all) is equal to want:
+                Push "{want}× " + r to out.
+        Set want to want - 1.
+    Return out.
+
+## Note
+The largest number of times one failure reason repeats on a trail. The scheduler
+lowers a problem's rank as this grows: the same wall, hit again and again, is the
+signal to try something else or work elsewhere.
+
+## To repeatedFailures (trail: Seq of TrailEntry) -> Int:
+    Let mutable all be a new Seq of Text.
+    Repeat for e in trail:
+        If e's verdict is equal to "rejected":
+            Push failureReason(e) to all.
+    Let mutable most be 0.
+    Repeat for r in all:
+        Let c be countOf(r, all).
+        If c is greater than most:
+            Set most to c.
+    Return most.
+
+## Note
+How many attempts on the trail ended verified.
+
+## To verifiedCount (trail: Seq of TrailEntry) -> Int:
+    Let mutable n be 0.
+    Repeat for e in trail:
+        If e's verdict is equal to "verified":
+            Set n to n + 1.
+    Return n.
+
+## Note
+How many attempts ended in each verdict, and what the trail cost in all.
+
+## To trailTally (trail: Seq of TrailEntry) -> Text:
+    Let mutable attempts be 0.
+    Let mutable rejected be 0.
+    Let mutable admitted be 0.
+    Let mutable infra be 0.
+    Let mutable spent be 0.
+    Repeat for e in trail:
+        Set spent to spent + e's costMicros.
+        If isAttemptEntry(e):
+            Set attempts to attempts + 1.
+        If e's verdict is equal to "rejected":
+            Set rejected to rejected + 1.
+        If e's verdict is equal to "admitted_axiom":
+            Set admitted to admitted + 1.
+        If e's verdict is equal to "infrastructure":
+            Set infra to infra + 1.
+    Return "{length of trail} entries · {attempts} attempts · {verifiedCount(trail)} verified · {rejected} rejected · {admitted} admitted an axiom · {infra} infrastructure · spent " + formatMicros(spent).
+
+## Note
+One attempt as the digest shows it.
+
+## To digestLine (e: TrailEntry) -> Text:
+    Let mutable line be "- #{e's seq} {e's kind}, strategy {e's strategyId}, model {e's model}: {e's verdict}".
+    If e's verdict is not equal to "verified" and e's diagnostics is not equal to "":
+        Set line to line + " — " + failureReason(e).
+    If e's summary is not equal to "":
+        Set line to line + "\n  summary: " + shortenText(e's summary, 400).
+    Return line.
+
+## Note
+What a model reads about a problem's past before attempting it.
+
+The digest is deliberately small and deliberately honest: the tally, the last
+`lastN` attempts (newest first) with what the kernel said about each, every
+distinct failure reason with how often it recurred — so the model sees the walls,
+not just the latest one — and the suggestions earlier attempts left behind,
+de-duplicated. An empty trail says so, so the model knows it is the first.
+
+## To trailDigest (problemId: Text, trail: Seq of TrailEntry, lastN: Int) -> Text:
+    Let mutable out be "Trail of {problemId}: " + trailTally(trail) + ".".
+    If length of trail is equal to 0:
+        Return out + "\nNo attempt has been made yet.".
+    Let mutable recent be a new Seq of Text.
+    Let mutable i be length of trail.
+    While i is at least 1 and length of recent is less than lastN:
+        Let e be item i of trail.
+        If isAttemptEntry(e):
+            Push digestLine(e) to recent.
+        Set i to i - 1.
+    If length of recent is greater than 0:
+        Set out to out + "\n\nLast {length of recent} attempts, newest first:\n" + join(recent, "\n").
+    Let reasons be failureCounts(trail).
+    If length of reasons is greater than 0:
+        Set out to out + "\n\nDistinct failure reasons (times seen):\n- " + join(reasons, "\n- ").
+    Let mutable suggestions be a new Seq of Text.
+    Repeat for e in trail:
+        Repeat for s in e's nextSuggestions:
+            If suggestions contains s is equal to false:
+                Push s to suggestions.
+    If length of suggestions is greater than 0:
+        Set out to out + "\n\nSuggestions left by earlier attempts:\n- " + join(suggestions, "\n- ").
+    Return out.
+
+## Note
+A trail entry with every field empty but the ones an attempt always has, for tests
+and for callers that fill the rest.
+
+## To blankEntry (problemId: Text, kind: Text, verdict: Text, diagnostics: Text) -> TrailEntry:
+    Return a new TrailEntry with seq 0 and ts 0 and problemId problemId and stage "progress" and kind kind and contributor "c1" and model "replay/m" and strategyId "s1" and promptSha "" and approachFingerprint "" and artifactShas [] and verdict verdict and exitCode 0 and diagnostics diagnostics and costMicros 0 and summary "" and nextSuggestions [] and prevHash "" and hash "".
+
+## Note
+A three-entry trail, for the tests.
+
+## To sampleTrail () -> Seq of TrailEntry:
+    Let mutable t be a new Seq of TrailEntry.
+    Set t to appendToTrail(t, blankEntry("opdp:116", "prove", "rejected", "block 2: Tactic error: step 2 (`rfl`): `rfl` does not apply")).
+    Set t to appendToTrail(t, blankEntry("opdp:116", "prove", "rejected", "block 2: Tactic error: step 2 (`rfl`): `rfl` does not apply")).
+    Set t to appendToTrail(t, blankEntry("opdp:116", "repair", "verified", "")).
+    Return t.
+
+## Test: the genesis hash is sixty-four zeros
+
+Expect that length of trailGenesis() is equal to 64.
+Expect that trailGenesis() is equal to "0000000000000000000000000000000000000000000000000000000000000000".
+
+## Test: the canonical body is fixed, field by field
+
+Let e be sampleTrailEntry().
+Expect that canonicalTrailBody(e) is equal to "{{\"seq\":3,\"ts\":1795000000000,\"problemId\":\"opdp:116\",\"stage\":\"progress\",\"kind\":\"prove\",\"contributor\":\"c1\",\"model\":\"replay/m\",\"strategyId\":\"s1\",\"promptSha\":\"ab\",\"approachFingerprint\":\"fp\",\"artifactShas\":[\"d1\",\"d2\"],\"verdict\":\"rejected\",\"exitCode\":1,\"diagnostics\":\"block 3: Tactic error: step 2 (`rfl`)\",\"costMicros\":1250,\"summary\":\"rfl does not close Nat_add Zero n\",\"nextSuggestions\":[\"induct on n\"]}}".
+
+## Test: the canonical body is valid JSON that names no hash
+
+Let body be canonicalTrailBody(sampleTrailEntry()).
+Expect that jsonValid(body) is equal to true.
+Expect that jsonHas(jsonParse(body), "hash") is equal to false.
+Expect that jsonHas(jsonParse(body), "prevHash") is equal to false.
+
+## Test: the hash is SHA-256 over the previous hash and the canonical body
+
+Let e be sampleTrailEntry().
+Expect that trailHash("p", e) is equal to sha256Hex("p" + canonicalTrailBody(e)).
+Expect that sha256Hex("abc") is equal to "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad".
+
+## Test: appending numbers and chains entries
+
+Let t be sampleTrail().
+Expect that length of t is equal to 3.
+Expect that (item 1 of t)'s seq is equal to 1.
+Expect that (item 1 of t)'s prevHash is equal to trailGenesis().
+Expect that (item 2 of t)'s prevHash is equal to (item 1 of t)'s hash.
+Expect that (item 3 of t)'s seq is equal to 3.
+Expect that verifyTrail(t) is equal to "".
+
+## Test: two identical entries in different places hash differently
+
+Let t be sampleTrail().
+Expect that (item 1 of t)'s hash is not equal to (item 2 of t)'s hash.
+
+## Test: editing any entry breaks the chain at that entry
+
+Let mutable t be sampleTrail().
+Let mutable e be item 2 of t.
+Set e's diagnostics to "it worked, honest".
+Set item 2 of t to e.
+Expect that verifyTrail(t) is equal to "entry 2: hash does not match its contents".
+
+## Test: dropping an entry breaks the chain where it was
+
+Let t be sampleTrail().
+Let mutable cut be a new Seq of TrailEntry.
+Push item 1 of t to cut.
+Push item 3 of t to cut.
+Expect that verifyTrail(cut) is equal to "entry 2: seq is 3, expected 2".
+
+## Test: an entry re-sealed onto the wrong predecessor is caught
+
+Let t be sampleTrail().
+Let mutable forged be item 3 of t.
+Set forged to sealEntry(forged, 3, trailGenesis()).
+Let mutable bad be a new Seq of TrailEntry.
+Push item 1 of t to bad.
+Push item 2 of t to bad.
+Push forged to bad.
+Expect that verifyTrail(bad) is equal to "entry 3: prevHash does not match the hash of entry 2".
+
+## Test: an entry from another problem does not belong on the trail
+
+Let mutable t be sampleTrail().
+Set t to appendToTrail(t, blankEntry("opdp:117", "prove", "rejected", "x")).
+Expect that verifyTrail(t) is equal to "entry 4: belongs to opdp:117, not opdp:116".
+
+## Test: the empty trail holds
+
+Expect that verifyTrail(a new Seq of TrailEntry) is equal to "".
+
+## Test: a fingerprint is sensitive to every part
+
+Let base be approachFingerprint("prove", "s", "st", "intro;rfl").
+Expect that length of base is equal to 64.
+Expect that approachFingerprint("repair", "s", "st", "intro;rfl") is not equal to base.
+Expect that approachFingerprint("prove", "t", "st", "intro;rfl") is not equal to base.
+Expect that approachFingerprint("prove", "s", "su", "intro;rfl") is not equal to base.
+Expect that approachFingerprint("prove", "s", "st", "intro;exact") is not equal to base.
+
+## Test: a failed fingerprint is remembered and a verified one is not a failure
+
+Let mutable a be blankEntry("opdp:116", "prove", "rejected", "x").
+Set a's approachFingerprint to "fp-bad".
+Let mutable b be blankEntry("opdp:116", "prove", "verified", "").
+Set b's approachFingerprint to "fp-good".
+Let mutable t be a new Seq of TrailEntry.
+Set t to appendToTrail(t, a).
+Set t to appendToTrail(t, b).
+Expect that fingerprintFailed(t, "fp-bad") is equal to true.
+Expect that fingerprintFailed(t, "fp-good") is equal to false.
+Expect that fingerprintFailed(t, "fp-new") is equal to false.
+
+## Test: repeated identical failures are counted
+
+Let t be sampleTrail().
+Expect that repeatedFailures(t) is equal to 2.
+Expect that verifiedCount(t) is equal to 1.
+Expect that failureCounts(t) is equal to ["2× block 2: Tactic error: step 2 (`rfl`): `rfl` does not apply"].
+
+## Test: failure reasons are ordered by how often they recur
+
+Let mutable t be a new Seq of TrailEntry.
+Set t to appendToTrail(t, blankEntry("p", "prove", "rejected", "once")).
+Set t to appendToTrail(t, blankEntry("p", "prove", "rejected", "twice\nsecond line ignored")).
+Set t to appendToTrail(t, blankEntry("p", "prove", "rejected", "twice")).
+Set t to appendToTrail(t, blankEntry("p", "prove", "infrastructure", "largo crashed")).
+Expect that failureCounts(t) is equal to ["2× twice", "1× once", "1× largo crashed"].
+
+## Test: the digest of an empty trail says it is the first attempt
+
+Let d be trailDigest("opdp:116", a new Seq of TrailEntry, 5).
+Expect that d is equal to "Trail of opdp:116: 0 entries · 0 attempts · 0 verified · 0 rejected · 0 admitted an axiom · 0 infrastructure · spent $0.000000.\nNo attempt has been made yet.".
+
+## Test: the digest shows recent attempts, distinct reasons and suggestions
+
+Let mutable t be a new Seq of TrailEntry.
+Let mutable a be blankEntry("opdp:116", "prove", "rejected", "block 2: rfl does not apply").
+Set a's nextSuggestions to ["try induction"].
+Set a's costMicros to 1000.
+Set t to appendToTrail(t, a).
+Let mutable b be blankEntry("opdp:116", "repair", "rejected", "block 2: rfl does not apply").
+Set b's nextSuggestions to ["try induction", "unfold Nat_add"].
+Set b's summary to "the base case closes, the step does not".
+Set b's costMicros to 2500.
+Set t to appendToTrail(t, b).
+Let d be trailDigest("opdp:116", t, 1).
+Let expected be """Trail of opdp:116: 2 entries · 2 attempts · 0 verified · 2 rejected · 0 admitted an axiom · 0 infrastructure · spent $0.003500.
+
+Last 1 attempts, newest first:
+- #2 repair, strategy s1, model replay/m: rejected — block 2: rfl does not apply
+  summary: the base case closes, the step does not
+
+Distinct failure reasons (times seen):
+- 2× block 2: rfl does not apply
+
+Suggestions left by earlier attempts:
+- try induction
+- unfold Nat_add""".
+Expect that d is equal to expected.
