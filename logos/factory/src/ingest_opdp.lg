@@ -1,0 +1,773 @@
+# Ingest: the OPDP atlas
+
+The Ulam OPDP difficulty atlas profiles every problem of a corpus — UnsolvedMath
+in release 1.2 (5,426 records, 85 MB of JSON), UnsolvedMath, MathDB and
+ProofAtlas in release 1.8 (102,819 records). This adapter turns each record into
+a factory problem, its place in the graph (cohort → collection → category →
+problem) and the inputs the scheduler ranks it by.
+
+WHY RECORD BY RECORD. Parsed whole, the 85 MB release takes 19.4 s and 1.95 GB of memory in the
+interpreter (measured: `largo run --interpret` on `json.lg`'s `jsonTryParse`); the
+1.8 release is about twelve times larger, so a whole-file parse would need tens of
+gigabytes. So the atlas is never parsed whole. A byte-level scanner (`scanChunk`)
+walks the document once, keeping only a few integers of state — nesting depth,
+whether it is inside a string, whether the last byte was an escape — and cuts out
+each element of the top-level `records` array as its own compact JSON text. Each
+record is then parsed on its own (about 10 KB), projected, and dropped. The
+scanner's state carries across chunks, so the document can arrive in pieces of any
+size: memory is one chunk plus one record, whatever the size of the release.
+
+The scanner also keeps everything OUTSIDE the records array (the header: format,
+versions, the summary), with the array emptied, so the header can be parsed too
+and the number of records scanned checked against the count the header declares.
+
+WHAT A RECORD BECOMES. The atlas key is the numeric `problem_id` (`opdp:116`): `problem_number` is not
+unique. `null` stays apart from zero: a record whose tractability score is `null`
+(the atlas's solved and ill-posed gates) is not tractable and ranks zero, while a
+score of `0` is a real score. Scores are read EXACTLY into basis points — a
+probability `0.4` is 4,000 and a score `5.4` out of 10 is 5,400 — and a value finer
+than that is refused rather than rounded (`jsonScaled`).
+
+Import Wire.
+Import Shared.
+Import Rank.
+Import IngestFc from "ingest_fc.lg".
+Import Host.
+
+## Note
+The scanner's whole state between chunks. `records` holds the records completed
+in the chunk just scanned; the caller takes them and clears it.
+
+## An AtlasScan has:
+    a depth, which is Int.
+    an inString, which is Bool.
+    an escaped, which is Bool.
+    an inRecords, which is Bool.
+    an inRecord, which is Bool.
+    a keyBytes, which is Seq of Int.
+    a lastKey, which is Text.
+    a recordBytes, which is Seq of Int.
+    a headerBytes, which is Seq of Int.
+    a records, which is Seq of Text.
+    a count, which is Int.
+
+## Note
+The state before the first byte.
+
+## To newAtlasScan () -> AtlasScan:
+    Return a new AtlasScan with depth 0 and inString false and escaped false and inRecords false and inRecord false and keyBytes [] and lastKey "" and recordBytes [] and headerBytes [] and records [] and count 0.
+
+## Note
+The state after `bytes`, the next piece of the document.
+
+Bytes of the current record are kept (without the whitespace between tokens, so
+each record comes out as one line); bytes outside the records array go to the
+header; the separators between records go nowhere. A string at depth 1 is
+remembered as `lastKey`, so the array that opens right after the key `records`
+is recognised as THE records array. The state is unpacked into locals for the
+loop and packed back once, so the per-byte cost is a few comparisons.
+
+## To scanChunk (st: AtlasScan, bytes: Seq of Int) -> AtlasScan:
+    Let mutable depth be st's depth.
+    Let mutable inString be st's inString.
+    Let mutable escaped be st's escaped.
+    Let mutable inRecords be st's inRecords.
+    Let mutable inRecord be st's inRecord.
+    Let mutable key be st's keyBytes.
+    Let mutable lastKey be st's lastKey.
+    Let mutable rec be st's recordBytes.
+    Let mutable header be st's headerBytes.
+    Let mutable done be st's records.
+    Let mutable count be st's count.
+    Let n be length of bytes.
+    Let mutable i be 1.
+    While i is at most n:
+        Let b be item i of bytes.
+        If inString:
+            If inRecord:
+                Push b to rec.
+            Otherwise:
+                If inRecords is equal to false:
+                    Push b to header.
+            If escaped:
+                Set escaped to false.
+            Otherwise:
+                If b is equal to 92:
+                    Set escaped to true.
+                Otherwise:
+                    If b is equal to 34:
+                        Set inString to false.
+                        If depth is equal to 1 and inRecords is equal to false:
+                            Set lastKey to text_from_bytes(key).
+                    Otherwise:
+                        If depth is equal to 1 and inRecords is equal to false:
+                            Push b to key.
+        Otherwise:
+            If b is not equal to 32 and b is not equal to 10 and b is not equal to 13 and b is not equal to 9:
+                If b is equal to 123 or b is equal to 91:
+                    Set depth to depth + 1.
+                    If inRecords and depth is equal to 3 and b is equal to 123:
+                        Set inRecord to true.
+                        Set rec to [123].
+                    Otherwise:
+                        If inRecord:
+                            Push b to rec.
+                        Otherwise:
+                            If inRecords is equal to false:
+                                Push b to header.
+                                If depth is equal to 2 and b is equal to 91 and lastKey is equal to "records":
+                                    Set inRecords to true.
+                Otherwise:
+                    If b is equal to 125 or b is equal to 93:
+                        If inRecord:
+                            Push b to rec.
+                        Otherwise:
+                            If inRecords is equal to false:
+                                Push b to header.
+                        Set depth to depth - 1.
+                        If inRecord and depth is equal to 2:
+                            Push text_from_bytes(rec) to done.
+                            Set count to count + 1.
+                            Set inRecord to false.
+                            Set rec to [].
+                        Otherwise:
+                            If inRecords and depth is equal to 1:
+                                Set inRecords to false.
+                                Push 93 to header.
+                    Otherwise:
+                        If b is equal to 34:
+                            Set inString to true.
+                            If depth is equal to 1 and inRecords is equal to false:
+                                Set key to [].
+                        If inRecord:
+                            Push b to rec.
+                        Otherwise:
+                            If inRecords is equal to false:
+                                Push b to header.
+        Set i to i + 1.
+    Return a new AtlasScan with depth depth and inString inString and escaped escaped and inRecords inRecords and inRecord inRecord and keyBytes key and lastKey lastKey and recordBytes rec and headerBytes header and records done and count count.
+
+## Note
+The scan with its completed records handed over and cleared.
+
+## To drained (st: AtlasScan) -> AtlasScan:
+    Let mutable out be st.
+    Set out's records to [].
+    Return out.
+
+## Note
+Whether a scan ended where a whole document ends: outside every value and every
+string, with no record half-read.
+
+## To scanComplete (st: AtlasScan) -> Bool:
+    Return st's depth is equal to 0 and st's inString is equal to false and st's inRecord is equal to false.
+
+## Note
+The header the scan kept, as JSON: the document with its records array emptied.
+
+## To scanHeader (st: AtlasScan) -> Text:
+    Return text_from_bytes(st's headerBytes).
+
+## Note
+A whole document scanned in pieces of `pieceSize` bytes, for the tests and for a
+document already in memory: the records in order, and the final state.
+
+## To scanInPieces (doc: Text, pieceSize: Int) -> AtlasScan:
+    Let bs be text_bytes(doc).
+    Let n be length of bs.
+    Let mutable st be newAtlasScan().
+    Let mutable collected be a new Seq of Text.
+    Let mutable start be 1.
+    While start is at most n:
+        Let mutable upto be start + pieceSize - 1.
+        If upto is greater than n:
+            Set upto to n.
+        Set st to scanChunk(st, items start through upto of bs).
+        Repeat for r in st's records:
+            Push r to collected.
+        Set st to drained(st).
+        Set start to upto + 1.
+    Set st's records to collected.
+    Return st.
+
+## Note
+One atlas record, projected: the problem, what the scheduler ranks it by, and the
+labels its collection and category are shown with.
+
+## An OpdpRow has:
+    a problem, which is Problem.
+    an inputs, which is RankInputs.
+    a collectionSlug, which is Text.
+    a collectionLabel, which is Text.
+    a categorySlug, which is Text.
+    a categoryLabel, which is Text.
+
+## Note
+The fields of a record the projection reads; the record is read OPEN, since the
+atlas asks importers to tolerate fields a later release adds.
+
+## To opdpRecordShape () -> Seq of Text:
+    Return ["problem_id:int", "problem_number:text", "title:text", "catalog_status:text", "classification:object", "ai_assessment:object", "tractability:object", "verification:object", "formalization:object", "tool_leverage:object", "source_text:object"].
+
+## Note
+A score at a path of a record, in basis points of its 0–10 scale (exact).
+
+## To scoreBp (v: Json, path: Text) -> Result of Int and Text:
+    Inspect jsonScaled(jsonPath(v, path), 3):
+        When Ok (n):
+            Return a new Ok with value n.
+        When Err (e):
+            Return a new Err with error path + ": " + e.
+    Return a new Err with error path + ": unreadable".
+
+## Note
+A probability at a path of a record, in basis points (exact).
+
+## To probabilityBp (v: Json, path: Text) -> Result of Int and Text:
+    Inspect jsonScaled(jsonPath(v, path), 4):
+        When Ok (n):
+            Return a new Ok with value n.
+        When Err (e):
+            Return a new Err with error path + ": " + e.
+    Return a new Err with error path + ": unreadable".
+
+## Note
+The scheduler's inputs from a record. An untractable record (`tractability.score`
+is `null`) carries a zero band; everything else must be a number.
+
+## To opdpRankInputs (v: Json) -> Result of RankInputs and Text:
+    Let tractable be jsonIsNull(jsonPath(v, "tractability.score")) is equal to false.
+    Let mutable low be 0.
+    Let mutable high be 0.
+    If tractable:
+        Inspect probabilityBp(v, "tractability.progress_probability.low"):
+            When Err (e):
+                Return a new Err with error e.
+            When Ok (x):
+                Set low to x.
+        Inspect probabilityBp(v, "tractability.progress_probability.high"):
+            When Err (e):
+                Return a new Err with error e.
+            When Ok (x):
+                Set high to x.
+    Let mutable scores be a new Seq of Int.
+    Repeat for path in ["tool_leverage.score", "formalization.score", "verification.if_true_score", "verification.if_false_score"]:
+        Inspect scoreBp(v, path):
+            When Err (e):
+                Return a new Err with error e.
+            When Ok (x):
+                Push x to scores.
+    Let category be textAt(jsonPath(v, "classification.category"), "slug").
+    Return a new Ok with value (a new RankInputs with progressLowBp low and progressHighBp high and tractable tractable and aiFit textAt(jsonGet(v, "ai_assessment"), "fit") and toolLeverageBp (item 1 of scores) and formalizationBp (item 2 of scores) and verificationBp ((item 3 of scores + item 4 of scores) / 2) and availability "informal" and category category).
+
+## Note
+The slug of a classification part, or `unassigned` when the atlas has none (it
+writes `null` for a record outside every source collection).
+
+## To slugOr (v: Json, path: Text) -> Text:
+    Let slug be textAt(jsonPath(v, path), "slug").
+    If slug is equal to "":
+        Return "unassigned".
+    Return slug.
+
+## Note
+The Erdős handle of an atlas record: `EP-10` in the Erdős collection is `erdos:10`.
+
+## To opdpCrossRef (v: Json, collection: Text) -> Option of Text:
+    Let number be textAt(v, "problem_number").
+    If collection is equal to "erdos-problems" and startsWith(number, "EP-"):
+        Return some ("erdos:" + removePrefix(number, "EP-")).
+    Return none.
+
+## Note
+A record's status as the coordinator records it. The assessment gate outranks the
+catalog: a record the atlas gates as solved or ill-posed is that, whatever its
+catalog row says.
+
+## To opdpStatus (v: Json) -> Text:
+    Let gate be textAt(jsonGet(v, "assessment_gate"), "value").
+    If gate is equal to "solved" or gate is equal to "ill_posed":
+        Return problemStatus(gate).
+    Return problemStatus(textAt(v, "catalog_status")).
+
+## Note
+One record as a row. `defaultCohort` is the corpus the release's header names; a
+record that names its own `cohort` (the multi-corpus releases) keeps it.
+
+## To opdpRow (v: Json, defaultCohort: Text) -> Result of OpdpRow and Text:
+    Let problem be openShapeProblem(v, opdpRecordShape()).
+    If problem is not equal to "":
+        Return a new Err with error problem.
+    Let mutable cohort be defaultCohort.
+    If textAt(v, "cohort") is not equal to "":
+        Set cohort to textAt(v, "cohort").
+    Let collection be slugOr(v, "classification.source_collection").
+    Let category be slugOr(v, "classification.category").
+    Inspect opdpRankInputs(v):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (inputs):
+            Let idNumber be intAt(v, "problem_id").
+            Let p be a new Problem with id "opdp:{idNumber}" and title textAt(v, "title") and source "opdp" and cohort cohort and collection collection and category category and statementInformal textAt(jsonGet(v, "source_text"), "statement") and leanStatement none and leanModule none and leanDeclaration none and externalKey (some textAt(v, "problem_number")) and crossRef opdpCrossRef(v, collection) and status opdpStatus(v).
+            Return a new Ok with value (a new OpdpRow with problem p and inputs inputs and collectionSlug collection and collectionLabel textAt(jsonPath(v, "classification.source_collection"), "label") and categorySlug category and categoryLabel textAt(jsonPath(v, "classification.category"), "label")).
+    Return a new Err with error "unreadable record".
+
+## Note
+A record's text as a row.
+
+## To opdpRowOf (text: Text, defaultCohort: Text) -> Result of OpdpRow and Text:
+    Inspect parseStrict(text):
+        When Err (e):
+            Return a new Err with error "not JSON: " + e.
+        When Ok (v):
+            Return opdpRow(v, defaultCohort).
+    Return a new Err with error "unreadable record".
+
+## Note
+The node id of a category within a collection within a cohort.
+
+## To categoryNodeId (cohort: Text, collection: Text, category: Text) -> Text:
+    Return "category:" + cohort + "/" + collection + "/" + category.
+
+## Note
+A problem's rank as the atlas profiles it, before anything has been tried.
+
+## To rowRank (row: OpdpRow) -> Int:
+    Return priority(row's inputs, noSignals()).
+
+## Note
+The graph above the problems, built while rows stream past: each cohort,
+collection and category once, `ids` in first-seen order, each ranked by its best
+problem.
+
+## An AtlasGraph has:
+    an ids, which is Seq of Text.
+    a nodes, which is Map of Text to Node.
+
+## Note
+The empty graph.
+
+## To newAtlasGraph () -> AtlasGraph:
+    Return a new AtlasGraph with ids [] and nodes (a new Map of Text to Node).
+
+## Note
+The graph with a node of `id` raised to at least `rank` (made, the first time).
+
+## To raiseNode (g: AtlasGraph, id: Text, parent: Option of Text, kind: Text, label: Text, rank: Int) -> AtlasGraph:
+    Let mutable nodes be g's nodes.
+    Let mutable ids be g's ids.
+    If ids contains id:
+        Let mutable node be item id of nodes.
+        If rank is greater than node's rank:
+            Set node's rank to rank.
+            Set nodes at id to node.
+    Otherwise:
+        Push id to ids.
+        Set nodes at id to (a new Node with id id and parentId parent and problemId none and kind kind and label label and stage "ranked" and rank rank).
+    Return a new AtlasGraph with ids ids and nodes nodes.
+
+## Note
+The graph with a row's cohort, collection and category raised to its rank.
+
+## To graphWithRow (g: AtlasGraph, row: OpdpRow) -> AtlasGraph:
+    Let p be row's problem.
+    Let rank be rowRank(row).
+    Let cohortId be cohortNodeId(p's cohort).
+    Let collectionId be collectionNodeId(p's cohort, row's collectionSlug).
+    Let mutable collectionLabel be row's collectionLabel.
+    If collectionLabel is equal to "":
+        Set collectionLabel to row's collectionSlug.
+    Let mutable out be raiseNode(g, cohortId, none, "cohort", p's cohort, rank).
+    Set out to raiseNode(out, collectionId, some cohortId, "collection", collectionLabel, rank).
+    Set out to raiseNode(out, categoryNodeId(p's cohort, row's collectionSlug, row's categorySlug), some collectionId, "category", row's categoryLabel, rank).
+    Return out.
+
+## Note
+A row's own node, under its category.
+
+## To rowNode (row: OpdpRow) -> Node:
+    Let p be row's problem.
+    Return a new Node with id problemNodeId(p's id) and parentId (some categoryNodeId(p's cohort, row's collectionSlug, row's categorySlug)) and problemId (some p's id) and kind "problem" and label p's title and stage "ranked" and rank rowRank(row).
+
+## Note
+The graph's nodes, parents before children.
+
+## To graphNodes (g: AtlasGraph) -> Seq of Node:
+    Let mutable out be a new Seq of Node.
+    Repeat for kind in ["cohort", "collection", "category"]:
+        Repeat for id in g's ids:
+            Let node be item id of g's nodes.
+            If node's kind is equal to kind:
+                Push node to out.
+    Return out.
+
+## Note
+The corpus a release's header names (`dataset_snapshot.name`), and how many
+records it says it holds (`summary.records_total`, or `-1` when it does not say).
+
+## An AtlasHeader has:
+    a cohort, which is Text.
+    a declared, which is Int.
+
+## Note
+The header of a scanned release.
+
+## To atlasHeader (st: AtlasScan) -> Result of AtlasHeader and Text:
+    Inspect parseStrict(scanHeader(st)):
+        When Err (e):
+            Return a new Err with error "the atlas header is not JSON: " + e.
+        When Ok (v):
+            Let name be textAt(jsonGet(v, "dataset_snapshot"), "name").
+            Let mutable declared be 0 - 1.
+            Inspect jsonPath(v, "summary.records_total"):
+                When JNum (n):
+                    Set declared to n.
+                Otherwise:
+                    Set declared to 0 - 1.
+            If name is equal to "":
+                Return a new Ok with value (a new AtlasHeader with cohort "opdp" and declared declared).
+            Return a new Ok with value (a new AtlasHeader with cohort name and declared declared).
+    Return a new Err with error "unreadable header".
+
+## Note
+A small release in memory: every record as a problem, with the graph above them,
+parents first. Any record that does not project refuses the whole release, by
+its position, because an atlas silently missing records is worse than none.
+
+## To ingestAtlasText (doc: Text, pieceSize: Int) -> Result of Ingested and Text:
+    Let st be scanInPieces(doc, pieceSize).
+    If scanComplete(st) is equal to false:
+        Return a new Err with error "the atlas ends inside a value".
+    Inspect atlasHeader(st):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (header):
+            If header's declared is at least 0 and header's declared is not equal to st's count:
+                Return a new Err with error "the atlas declares {header's declared} records and holds {st's count}".
+            Let mutable problems be a new Seq of Problem.
+            Let mutable leaves be a new Seq of Node.
+            Let mutable g be newAtlasGraph().
+            Let mutable position be 0.
+            Repeat for text in st's records:
+                Set position to position + 1.
+                Inspect opdpRowOf(text, header's cohort):
+                    When Err (e):
+                        Return a new Err with error "atlas record {position}: " + e.
+                    When Ok (row):
+                        Push row's problem to problems.
+                        Push rowNode(row) to leaves.
+                        Set g to graphWithRow(g, row).
+            Let mutable nodes be graphNodes(g).
+            Repeat for leaf in leaves:
+                Push leaf to nodes.
+            Return a new Ok with value (a new Ingested with problems problems and nodes nodes).
+    Return a new Err with error "unreadable atlas".
+
+## Note
+What a streamed ingest did, for the operator and for the measurement log.
+
+## An AtlasSummary has:
+    a cohort, which is Text.
+    a declared, which is Int.
+    a scanned, which is Int.
+    a written, which is Int.
+    a refused, which is Int.
+    a firstRefusal, which is Text.
+    a chunks, which is Int.
+    a bytes, which is Int.
+    a scanMs, which is Int.
+    a projectMs, which is Int.
+    a writeMs, which is Int.
+
+## Note
+A release streamed from its chunk files into `outDir`: `problems.jsonl` (one
+problem a line), `nodes.jsonl` (the graph above the problems first, then one node
+a problem) and `records.jsonl` (each atlas record as one compact line — the
+release pre-split, so a later run can read it record by record). Each chunk is
+scanned, its records projected and appended, and both dropped before the next
+chunk is read. A record that does not project is counted and the first one named;
+the summary says how many, so nothing is lost silently.
+
+## To ingestAtlasChunks (chunkPaths: Seq of Text, outDir: Text, defaultCohort: Text) -> Result of AtlasSummary and Text:
+    Inspect ensureDir(outDir):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (made):
+            Let ignored be made.
+    Repeat for name in ["problems.jsonl", "nodes.jsonl", "records.jsonl", "problem-nodes.jsonl"]:
+        Let cleared be writeText(outDir + "/" + name, "").
+    Let mutable st be newAtlasScan().
+    Let mutable g be newAtlasGraph().
+    Let mutable written be 0.
+    Let mutable refused be 0.
+    Let mutable firstRefusal be "".
+    Let mutable bytes be 0.
+    Let mutable scanMs be 0.
+    Let mutable projectMs be 0.
+    Let mutable writeMs be 0.
+    Let mutable cohort be defaultCohort.
+    Repeat for path in chunkPaths:
+        Inspect readText(path):
+            When Err (e):
+                Return a new Err with error "cannot read {path}: " + e.
+            When Ok (chunkText):
+                Let t0 be clockMs().
+                Let chunkBytes be text_bytes(chunkText).
+                Set bytes to bytes + length of chunkBytes.
+                Set st to scanChunk(st, chunkBytes).
+                Let t1 be clockMs().
+                Set scanMs to scanMs + (t1 - t0).
+                Let mutable problemLines be a new Seq of Text.
+                Let mutable nodeLines be a new Seq of Text.
+                Repeat for text in st's records:
+                    Inspect opdpRowOf(text, cohort):
+                        When Err (e):
+                            Set refused to refused + 1.
+                            If firstRefusal is equal to "":
+                                Set firstRefusal to "record {written + refused}: " + e.
+                        When Ok (row):
+                            Push toJson_Problem(row's problem) to problemLines.
+                            Push toJson_Node(rowNode(row)) to nodeLines.
+                            Set g to graphWithRow(g, row).
+                            Set written to written + 1.
+                Let t2 be clockMs().
+                Set projectMs to projectMs + (t2 - t1).
+                If length of problemLines is greater than 0:
+                    Let p1 be appendText(outDir + "/problems.jsonl", join(problemLines, "\n") + "\n").
+                    Let p2 be appendText(outDir + "/problem-nodes.jsonl", join(nodeLines, "\n") + "\n").
+                If length of st's records is greater than 0:
+                    Let p3 be appendText(outDir + "/records.jsonl", join(st's records, "\n") + "\n").
+                Set st to drained(st).
+                Set writeMs to writeMs + (clockMs() - t2).
+    If scanComplete(st) is equal to false:
+        Return a new Err with error "the atlas ends inside a value".
+    Let mutable declared be 0 - 1.
+    Inspect atlasHeader(st):
+        When Ok (header):
+            Set declared to header's declared.
+            If header's cohort is not equal to cohort:
+                Set firstRefusal to firstRefusal + " (the header names cohort " + header's cohort + ")".
+        When Err (e):
+            Return a new Err with error e.
+    Let mutable aggregate be a new Seq of Text.
+    Repeat for node in graphNodes(g):
+        Push toJson_Node(node) to aggregate.
+    Inspect readText(outDir + "/problem-nodes.jsonl"):
+        When Ok (leaves):
+            Let n1 be writeText(outDir + "/nodes.jsonl", join(aggregate, "\n") + "\n" + leaves).
+        When Err (e):
+            Return a new Err with error e.
+    Return a new Ok with value (a new AtlasSummary with cohort cohort and declared declared and scanned st's count and written written and refused refused and firstRefusal firstRefusal and chunks length of chunkPaths and bytes bytes and scanMs scanMs and projectMs projectMs and writeMs writeMs).
+
+## Note
+A release made into chunk files the streamed ingest reads: a `.gz` is
+decompressed with `gzip` (a copy, so the source is never touched), then cut with
+`split -C` into pieces of at most `chunkMb` megabytes that end at line ends — the
+atlas is pretty-printed, so a piece never cuts a character in two. The chunk
+paths come back in order.
+
+## To prepareAtlas (path: Text, workDir: Text, chunkMb: Int) -> Result of Seq of Text and Text:
+    Inspect ensureDir(workDir + "/parts"):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (made):
+            Let ignored be made.
+    Let mutable plain be path.
+    If endsWith(path, ".gz"):
+        Let copied be workDir + "/atlas.json.gz".
+        Inspect runTool("cp", [path, copied], 600000, 65536):
+            When Err (e):
+                Return a new Err with error "cp: " + e.
+            When Ok (r):
+                If r's exitCode is not equal to 0:
+                    Return a new Err with error "cp failed: " + r's stderr.
+        Inspect runTool("gzip", ["-d", "-f", copied], 600000, 65536):
+            When Err (e):
+                Return a new Err with error "gzip: " + e.
+            When Ok (r):
+                If r's exitCode is not equal to 0:
+                    Return a new Err with error "gzip failed: " + r's stderr.
+        Set plain to workDir + "/atlas.json".
+    Inspect runTool("split", ["-C", "{chunkMb}M", "-d", "-a", "5", plain, workDir + "/parts/atlas."], 600000, 65536):
+        When Err (e):
+            Return a new Err with error "split: " + e.
+        When Ok (r):
+            If r's exitCode is not equal to 0:
+                Return a new Err with error "split failed: " + r's stderr.
+    Inspect listNames(workDir + "/parts"):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (names):
+            Let mutable out be a new Seq of Text.
+            Repeat for name in names:
+                If startsWith(name, "atlas."):
+                    Push workDir + "/parts/" + name to out.
+            Return a new Ok with value out.
+    Return a new Err with error "unprepared".
+
+## Note
+A two-record release in the atlas's own shape, cut down to the fields the
+projection reads (and one it does not): record 116 (GREEN-028, scored) and record
+7 (an Erdős problem the atlas gates as solved, so its tractability is `null`).
+
+## To sampleAtlas () -> Text:
+    Return joinAtlas(["{{\"problem_id\":116,\"difficulty_label\":\"T3 Serious Project\",\"problem_number\":\"GREEN-028\",\"title\":\"Gowers Box Norms over Finite Fields\",\"catalog_status\":\"open\",\"classification\":{{\"category\":{{\"id\":2,\"name\":\"combinatorics\",\"slug\":\"combinatorics\",\"label\":\"Combinatorics\"}},\"source_collection\":{{\"id\":3,\"slug\":\"green-problems\",\"label\":\"Ben Green's 100 Open Problems\"}}}},\"ai_assessment\":{{\"fit\":\"ai_favored\",\"difficulty_score\":4.4}},\"tractability\":{{\"status\":\"scored\",\"score\":6,\"progress_probability\":{{\"low\":0.4,\"high\":0.55}}}},\"verification\":{{\"if_true_score\":5.2,\"if_false_score\":4.5}},\"formalization\":{{\"score\":3.7}},\"tool_leverage\":{{\"score\":5.3}},\"source_text\":{{\"statement\":\"Let $p$ be an odd prime. Does $f$ correlate with a structured function?\"}}}}", "{{\"problem_id\":7,\"problem_number\":\"EP-10\",\"title\":\"Primes and powers of two\",\"catalog_status\":\"solved\",\"classification\":{{\"category\":{{\"slug\":\"number-theory\",\"label\":\"Number Theory\"}},\"source_collection\":{{\"id\":null,\"slug\":null,\"label\":\"Unassigned\"}}}},\"ai_assessment\":{{\"fit\":\"ai_neutral_mixed\"}},\"tractability\":{{\"status\":\"not_applicable\",\"score\":null,\"progress_probability\":null}},\"verification\":{{\"if_true_score\":6,\"if_false_score\":5.5}},\"formalization\":{{\"score\":4}},\"tool_leverage\":{{\"score\":4.5}},\"source_text\":{{\"statement\":\"Is every odd n the sum of a prime and a power of two?\"}}}}"]).
+
+## Note
+Records wrapped in a release's top level, pretty-printed the way the atlas is (a
+newline and indentation between tokens), with a header in front and a key after.
+
+## To joinAtlas (records: Seq of Text) -> Text:
+    Let header be "{{\n  \"format_name\": \"ulam_opdp_assessment_export\",\n  \"dataset_snapshot\": {{\"name\": \"UnsolvedMath\", \"record_count\": 2}},\n  \"summary\": {{\"records_total\": {length of records}}},\n  \"records\": [\n    ".
+    Return header + join(records, ",\n    ") + "\n  ],\n  \"trailer\": \"after the records\"\n}}\n".
+
+## Test: the scanner cuts out each record and keeps the header
+
+Let st be scanInPieces(sampleAtlas(), 1000000).
+Expect that scanComplete(st) is equal to true.
+Expect that st's count is equal to 2.
+Expect that length of st's records is equal to 2.
+Expect that jsonValid(item 1 of st's records) is equal to true.
+Expect that startsWith(item 1 of st's records, "{{\"problem_id\":116,") is equal to true.
+Expect that scanHeader(st) is equal to "{{\"format_name\":\"ulam_opdp_assessment_export\",\"dataset_snapshot\":{{\"name\":\"UnsolvedMath\",\"record_count\":2}},\"summary\":{{\"records_total\":2}},\"records\":[],\"trailer\":\"after the records\"}}".
+
+## Test: a record comes out compact, and its strings keep their spaces
+
+Let st be scanInPieces(joinAtlas(["{{ \"problem_id\" : 1 ,\n \"title\" : \"a  b \\\" {{[ c\" }}"]), 1000000).
+Expect that item 1 of st's records is equal to "{{\"problem_id\":1,\"title\":\"a  b \\\" {{[ c\"}}".
+
+## Test: the scan does not depend on where the chunks are cut
+
+Let whole be scanInPieces(sampleAtlas(), 1000000).
+Repeat for size in [1, 2, 3, 7, 64, 333]:
+    Let pieces be scanInPieces(sampleAtlas(), size).
+    Expect that pieces's records is equal to whole's records.
+    Expect that scanHeader(pieces) is equal to scanHeader(whole).
+    Expect that scanComplete(pieces) is equal to true.
+
+## Test: a document cut short is not complete
+
+Let doc be sampleAtlas().
+Let bs be text_bytes(doc).
+Let st be scanChunk(newAtlasScan(), items 1 through 300 of bs).
+Expect that scanComplete(st) is equal to false.
+
+## Test: an array named records deeper down is not the records array
+
+Let doc be "{{\"meta\": {{\"records\": [{{\"x\": 1}}]}}, \"records\": [{{\"problem_id\": 9}}]}}".
+Let st be scanInPieces(doc, 5).
+Expect that st's records is equal to ["{{\"problem_id\":9}}"].
+
+## Test: a scored record becomes a problem with its exact inputs
+
+Let st be scanInPieces(sampleAtlas(), 4096).
+Inspect opdpRowOf(item 1 of st's records, "UnsolvedMath"):
+    When Ok (row):
+        Expect that row's problem's id is equal to "opdp:116".
+        Expect that row's problem's source is equal to "opdp".
+        Expect that row's problem's cohort is equal to "UnsolvedMath".
+        Expect that row's problem's collection is equal to "green-problems".
+        Expect that row's problem's category is equal to "combinatorics".
+        Expect that row's problem's externalKey is equal to some "GREEN-028".
+        Expect that row's problem's leanStatement is none.
+        Expect that row's problem's status is equal to "open".
+        Expect that row's inputs is equal to sampleInputs().
+        Expect that rowRank(row) is equal to 5345.
+    When Err (e):
+        Expect that e is equal to "no error".
+
+## Test: a null tractability is untractable, never zero, and ranks nothing
+
+Let st be scanInPieces(sampleAtlas(), 4096).
+Inspect opdpRowOf(item 2 of st's records, "UnsolvedMath"):
+    When Ok (row):
+        Expect that row's problem's id is equal to "opdp:7".
+        Expect that row's inputs's tractable is equal to false.
+        Expect that row's collectionSlug is equal to "unassigned".
+        Expect that row's inputs's verificationBp is equal to 5750.
+        Expect that rowRank(row) is equal to 0.
+        Expect that row's problem's crossRef is none.
+        Expect that row's problem's status is equal to "solved_upstream".
+    When Err (e):
+        Expect that e is equal to "no error".
+
+## Test: an Erdős record carries its cross-reference
+
+Let v be jsonParse("{{\"problem_number\": \"EP-10\"}}").
+Expect that opdpCrossRef(v, "erdos-problems") is equal to some "erdos:10".
+Expect that opdpCrossRef(v, "green-problems") is none.
+
+## Test: a score finer than a basis point is refused, not rounded
+
+Let doc be "{{\"problem_id\":1,\"problem_number\":\"X\",\"title\":\"t\",\"catalog_status\":\"open\",\"classification\":{{}},\"ai_assessment\":{{}},\"tractability\":{{\"score\":5,\"progress_probability\":{{\"low\":0.25,\"high\":0.40}}}},\"verification\":{{\"if_true_score\":5,\"if_false_score\":5}},\"formalization\":{{\"score\":5}},\"tool_leverage\":{{\"score\":5.2525}},\"source_text\":{{}}}}".
+Inspect opdpRowOf(doc, "U"):
+    When Ok (row):
+        Expect that row's inputs's toolLeverageBp is equal to -1.
+    When Err (e):
+        Expect that e is equal to "tool_leverage.score: 5.2525 has more than 3 decimals".
+
+## Test: a release in memory becomes problems under their graph, parents first
+
+Inspect ingestAtlasText(sampleAtlas(), 97):
+    When Ok (got):
+        Expect that length of got's problems is equal to 2.
+        Let mutable ids be a new Seq of Text.
+        Repeat for n in got's nodes:
+            Push n's id to ids.
+        Expect that ids is equal to ["cohort:UnsolvedMath", "collection:UnsolvedMath/green-problems", "collection:UnsolvedMath/unassigned", "category:UnsolvedMath/green-problems/combinatorics", "category:UnsolvedMath/unassigned/number-theory", "problem:opdp:116", "problem:opdp:7"].
+        Expect that (item 1 of got's nodes)'s rank is equal to 5345.
+        Expect that (item 3 of got's nodes)'s rank is equal to 0.
+        Expect that (item 6 of got's nodes)'s parentId is equal to some "category:UnsolvedMath/green-problems/combinatorics".
+    When Err (e):
+        Expect that e is equal to "no error".
+
+## Test: a release that holds fewer records than it declares is refused
+
+Let short be replace(sampleAtlas(), "\"records_total\": 2", "\"records_total\": 3").
+Inspect ingestAtlasText(short, 4096):
+    When Ok (got):
+        Expect that length of got's problems is equal to 0.
+    When Err (e):
+        Expect that e is equal to "the atlas declares 3 records and holds 2".
+
+## Test: a release streams from chunk files into problems, nodes and pre-split records
+
+Let doc be sampleAtlas().
+Let bs be text_bytes(doc).
+Let cut be 400.
+Let w1 be writeText("atlas/parts/atlas.00000", text_from_bytes(items 1 through cut of bs)).
+Let w2 be writeText("atlas/parts/atlas.00001", text_from_bytes(items (cut + 1) through (length of bs) of bs)).
+Inspect ingestAtlasChunks(["atlas/parts/atlas.00000", "atlas/parts/atlas.00001"], "atlas/out", "UnsolvedMath"):
+    When Ok (s):
+        Expect that s's scanned is equal to 2.
+        Expect that s's written is equal to 2.
+        Expect that s's refused is equal to 0.
+        Expect that s's declared is equal to 2.
+        Expect that s's chunks is equal to 2.
+        Expect that s's bytes is equal to length of bs.
+    When Err (e):
+        Expect that e is equal to "no error".
+Inspect readText("atlas/out/problems.jsonl"):
+    When Ok (t):
+        Let ls be lines(trimEnd(t)).
+        Expect that length of ls is equal to 2.
+        Inspect fromJson_Problem(item 1 of ls):
+            When Ok (p):
+                Expect that p's id is equal to "opdp:116".
+            When Err (e):
+                Expect that e is equal to "a problem".
+    When Err (e):
+        Expect that e is equal to "readable".
+Inspect readText("atlas/out/nodes.jsonl"):
+    When Ok (t):
+        Let ls be lines(trimEnd(t)).
+        Expect that length of ls is equal to 7.
+        Expect that item 1 of ls contains "\"id\":\"cohort:UnsolvedMath\"".
+        Expect that item 7 of ls contains "\"id\":\"problem:opdp:7\"".
+    When Err (e):
+        Expect that e is equal to "readable".
+Inspect readText("atlas/out/records.jsonl"):
+    When Ok (t):
+        Expect that length of lines(trimEnd(t)) is equal to 2.
+    When Err (e):
+        Expect that e is equal to "readable".

@@ -1,0 +1,15 @@
+/-! # Statement: excluded middle
+
+Route C. A proof must establish `goal`. -/
+
+Definition goal : Prop := forall (P : Prop), Or P (Not P).
+
+/-! ## Submission -/
+
+Theorem proof_of_goal : goal := by intro P; exact (Classical_em P).
+
+/-! ## Closing checks, appended by the factory -/
+
+Check proof_of_goal.
+
+Print Axioms proof_of_goal.

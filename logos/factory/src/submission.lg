@@ -1,0 +1,730 @@
+# Submission
+
+What a model hands back, and how it becomes a document the kernel checks.
+
+A model answers with prose and exactly one fenced block of LOGOS kernel
+vernacular, opened by a line ```` ```logos-kernel ````. The block is the
+SUBMISSION. The factory never runs it as written: it assembles the proof
+document itself —
+
+1. the accepted STATEMENT document, byte for byte (its hash is what a result is
+   bound to), which defines the goal as a `Prop`;
+2. the submission;
+3. two closing checks the factory appends: `Check <proof>.`, whose output must be
+   exactly `<proof> : <goal>`, and `Print Axioms <proof>.`, whose output the
+   acceptance policy reads.
+
+The kernel decides whether the document checks. What the kernel does NOT decide
+is whether the submission changed the meaning of the words the statement uses:
+the vernacular lets a `Definition` shadow any existing name, prelude names
+included (`LOGOS_ISSUES.md`, issue 2). So the submission is also read here, before
+the kernel sees it, and refused when it uses a command that changes how text
+reads, declares a name twice, or does not contain the one theorem it must. Every
+name it declares is then probed against the statement and the prelude by the
+verifier, and a name that already exists refuses the submission.
+
+To read a submission the way the kernel does, this module splits a document into
+blocks exactly as the kernel's document door does — a comment is a block, a
+command ends at a `.` followed by whitespace — so block numbers here are the block
+numbers the kernel reports, and a failed block can be shown back to the model.
+
+## Note
+The bytes the splitter cares about, by name.
+
+## To isSpaceByte (b: Int) -> Bool:
+    Return b is equal to 32 or b is equal to 9 or b is equal to 10 or b is equal to 13.
+
+## Note
+The byte at a 1-based position, or `0` past either end.
+
+## To byteAt (bs: Seq of Int, i: Int) -> Int:
+    If i is less than 1 or i is greater than length of bs:
+        Return 0.
+    Return item i of bs.
+
+## Note
+The last byte of a `/- … -/` comment that opens at `start`, with nesting as Lean and
+the kernel count it, or `-1` when it never closes.
+
+## To commentEnd (bs: Seq of Int, start: Int) -> Int:
+    Let n be length of bs.
+    Let mutable depth be 0.
+    Let mutable i be start.
+    While i is less than n:
+        Let b be item i of bs.
+        Let c be item (i + 1) of bs.
+        If b is equal to 47 and c is equal to 45:
+            Set depth to depth + 1.
+            Set i to i + 2.
+        Otherwise:
+            If b is equal to 45 and c is equal to 47:
+                Set depth to depth - 1.
+                If depth is equal to 0:
+                    Return i + 1.
+                Set i to i + 2.
+            Otherwise:
+                Set i to i + 1.
+    Return 0 - 1.
+
+## Note
+The last byte of a command that starts at `start`: the first `.` outside a string
+and outside a «quoted name» that is followed by whitespace or the end. This is the
+kernel's `sentence_end`, byte for byte.
+
+## To sentenceEnd (bs: Seq of Int, start: Int) -> Int:
+    Let n be length of bs.
+    Let mutable inString be false.
+    Let mutable inName be false.
+    Let mutable escaped be false.
+    Let mutable i be start.
+    While i is at most n:
+        Let b be item i of bs.
+        If escaped:
+            Set escaped to false.
+        Otherwise:
+            If inName:
+                If b is equal to 194 and byteAt(bs, i + 1) is equal to 187:
+                    Set inName to false.
+                    Set i to i + 1.
+            Otherwise:
+                If b is equal to 194 and byteAt(bs, i + 1) is equal to 171 and inString is equal to false:
+                    Set inName to true.
+                    Set i to i + 1.
+                Otherwise:
+                    If b is equal to 92 and inString:
+                        Set escaped to true.
+                    Otherwise:
+                        If b is equal to 34:
+                            Set inString to not inString.
+                        Otherwise:
+                            If b is equal to 46 and inString is equal to false:
+                                If i is equal to n or isSpaceByte(byteAt(bs, i + 1)):
+                                    Return i.
+        Set i to i + 1.
+    Return n.
+
+## Note
+A document split into the kernel's blocks, or the reason it cannot be: an
+unterminated comment, which the kernel refuses too.
+
+## A Blocks has:
+    an items, which is Seq of Text.
+    a problem, which is Text.
+
+## Note
+The blocks of a document, in order, each trimmed: comments (`-- …` to the end of
+its line, `/- … -/` nested) and commands.
+
+## To kernelBlocks (doc: Text) -> Blocks:
+    Let bs be text_bytes(doc).
+    Let n be length of bs.
+    Let mutable out be a new Seq of Text.
+    Let mutable i be 1.
+    While i is at most n:
+        While i is at most n and isSpaceByte(item i of bs):
+            Set i to i + 1.
+        If i is at most n:
+            Let b be item i of bs.
+            Let c be byteAt(bs, i + 1).
+            Let mutable last be 0.
+            If b is equal to 45 and c is equal to 45:
+                Set last to i.
+                While last is less than n and item last of bs is not equal to 10:
+                    Set last to last + 1.
+            Otherwise:
+                If b is equal to 47 and c is equal to 45:
+                    Set last to commentEnd(bs, i).
+                    If last is less than 0:
+                        Return a new Blocks with items out and problem "an unterminated `/-` comment opens block {length of out + 1}".
+                Otherwise:
+                    Set last to sentenceEnd(bs, i).
+            Push trim(text_from_bytes(items i through last of bs)) to out.
+            Set i to last + 1.
+    Return a new Blocks with items out and problem "".
+
+## Note
+Whether a block is a comment.
+
+## To isCommentBlock (block: Text) -> Bool:
+    Return startsWith(block, "--") or startsWith(block, "/-").
+
+## Note
+The words of a block, split on whitespace.
+
+## To blockWords (block: Text) -> Seq of Text:
+    Return words(block).
+
+## Note
+The command a block is: its first word, after the visibility words the kernel
+reads past (`Local`, `Private`, `Protected`). A comment is `comment`, and the
+literate forms the kernel also reads (`## To …`, `## Theorem: …`, `Let x be …`,
+`A Nat is either …`) are `literate`.
+
+## To commandOf (block: Text) -> Text:
+    If isCommentBlock(block):
+        Return "comment".
+    If startsWith(block, "##"):
+        Return "literate".
+    Let ws be blockWords(block).
+    If length of ws is equal to 0:
+        Return "empty".
+    Let mutable i be 1.
+    While i is less than length of ws and ["Local", "Private", "Protected"] contains item i of ws:
+        Set i to i + 1.
+    Let w be item i of ws.
+    If w is equal to "Let" or ((w is equal to "A" or w is equal to "An") and block contains " is either"):
+        Return "literate".
+    Return w.
+
+## Note
+The commands a submission may use: declarations that add names, and the two
+queries. Everything else the vernacular offers — notation, macros, fixity,
+namespaces, sections, `Open`, `Export`, `Structure`, `Quotient`, `Opaque` and the
+literate forms — changes how later text reads or adds names this module does not
+track, so a submission that uses one is refused rather than reasoned about.
+
+## To submissionCommands () -> Seq of Text:
+    Return ["comment", "Definition", "Theorem", "Axiom", "Inductive", "Check", "Eval", "Print"].
+
+## Note
+The commands a statement document may use: definitions and inductive types only.
+A statement asserts nothing, so it has no `Axiom` and no `Theorem`.
+
+## To statementCommands () -> Seq of Text:
+    Return ["comment", "Definition", "Inductive", "Check", "Eval"].
+
+## Note
+Whether a byte can be part of a declaration name: letters, digits, `_`, `'`, `.`
+for hierarchy, and any byte of a multi-byte UTF-8 character (`α`, `«…»`).
+
+## To isNameByte (b: Int) -> Bool:
+    If b is at least 128:
+        Return true.
+    If b is at least 48 and b is at most 57:
+        Return true.
+    If b is at least 65 and b is at most 90:
+        Return true.
+    If b is at least 97 and b is at most 122:
+        Return true.
+    Return b is equal to 95 or b is equal to 39 or b is equal to 46.
+
+## Note
+The name that starts at the first non-space byte at or after `start`, and where
+it ends. A universe list `.{u}` ends a name, as does anything that is not a name
+byte. Answers `(name, position after it)`.
+
+## To nameAt (bs: Seq of Int, start: Int) -> (Text, Int):
+    Let n be length of bs.
+    Let mutable i be start.
+    While i is at most n and isSpaceByte(item i of bs):
+        Set i to i + 1.
+    Let first be i.
+    While i is at most n and isNameByte(item i of bs) and (item i of bs is not equal to 46 or byteAt(bs, i + 1) is not equal to 123):
+        Set i to i + 1.
+    If i is equal to first:
+        Return ("", i).
+    Let mutable last be i - 1.
+    While last is at least first and item last of bs is equal to 46:
+        Set last to last - 1.
+    Return (text_from_bytes(items first through last of bs), i).
+
+## Note
+The byte position right after the command word (and the visibility words before
+it) of a block.
+
+## To afterCommandWord (bs: Seq of Int, word: Text) -> Int:
+    Let wb be text_bytes(word).
+    Let n be length of bs.
+    Let m be length of wb.
+    Let mutable i be 1.
+    While i + m - 1 is at most n:
+        If bytesMatchAt(bs, wb, i):
+            Return i + m.
+        Set i to i + 1.
+    Return n + 1.
+
+## Note
+The constructors of an inductive block, and the names of the further types of a
+mutual block: after each top-level `:=`, each alternative separated by `|` starts
+with a constructor name, and a top-level `with` starts the next type of the block.
+
+## To inductiveNames (bs: Seq of Int, from: Int) -> Seq of Text:
+    Let n be length of bs.
+    Let mutable out be a new Seq of Text.
+    Let mutable depth be 0.
+    Let mutable inBody be false.
+    Let mutable atAlternative be false.
+    Let mutable i be from.
+    While i is at most n:
+        Let b be item i of bs.
+        If b is equal to 40 or b is equal to 91 or b is equal to 123:
+            Set depth to depth + 1.
+        If b is equal to 41 or b is equal to 93 or b is equal to 125:
+            Set depth to depth - 1.
+        If depth is equal to 0:
+            If b is equal to 58 and byteAt(bs, i + 1) is equal to 61:
+                Set inBody to true.
+                Set atAlternative to true.
+                Set i to i + 1.
+            Otherwise:
+                If b is equal to 124 and inBody:
+                    Set atAlternative to true.
+                Otherwise:
+                    If inBody and b is equal to 119 and bytesMatchAt(bs, text_bytes("with "), i) and isSpaceByte(byteAt(bs, i - 1)):
+                        Let (other, next) be nameAt(bs, i + 4).
+                        If other is not equal to "":
+                            Push other to out.
+                        Set inBody to false.
+                        Set atAlternative to false.
+                        Set i to next - 1.
+                    Otherwise:
+                        If atAlternative and isSpaceByte(b) is equal to false:
+                            Let (ctor, after) be nameAt(bs, i).
+                            If ctor is not equal to "":
+                                Push ctor to out.
+                            Set atAlternative to false.
+                            Set i to after - 1.
+        Set i to i + 1.
+    Return out.
+
+## Note
+The names a block declares: the declared name of a `Definition`, `Theorem`,
+`Axiom` or `Opaque`, and for an `Inductive` its name, its constructors and the
+other types of a mutual block. A query or a comment declares nothing.
+
+## To declaredNames (block: Text) -> Seq of Text:
+    Let command be commandOf(block).
+    Let mutable out be a new Seq of Text.
+    If ["Definition", "Theorem", "Axiom", "Opaque", "Inductive"] contains command is equal to false:
+        Return out.
+    Let bs be text_bytes(block).
+    Let (name, after) be nameAt(bs, afterCommandWord(bs, command)).
+    If name is not equal to "":
+        Push name to out.
+    If command is equal to "Inductive":
+        Repeat for more in inductiveNames(bs, after):
+            Push more to out.
+    Return out.
+
+## Note
+The text after the first top-level `:=` of a block, trimmed, without the closing
+period: a definition's body, a theorem's proof.
+
+## To bodyOf (block: Text) -> Text:
+    Let parts be splitN(block, ":=", 2).
+    If length of parts is less than 2:
+        Return "".
+    Return removeSuffix(trim(item 2 of parts), ".").
+
+## Note
+The text between the declared name and the first `:=` of a block, trimmed: a
+theorem's statement, with any `:` in front of it removed.
+
+## To headTypeOf (block: Text) -> Text:
+    Let head be item 1 of splitN(block, ":=", 2).
+    Let parts be splitN(head, ":", 2).
+    If length of parts is less than 2:
+        Return "".
+    Return trim(item 2 of parts).
+
+## Note
+The steps of a theorem's tactic script (`by intro n; rfl.`), each its first word:
+the SHAPE of the proof, with every name and term taken out. A proof by a term is
+the one step `term`.
+
+## To tacticSkeleton (block: Text) -> Seq of Text:
+    Let body be bodyOf(block).
+    Let mutable out be a new Seq of Text.
+    If startsWith(body, "by ") is equal to false:
+        Push "term" to out.
+        Return out.
+    Repeat for step in split(removePrefix(body, "by "), ";"):
+        Let ws be words(step).
+        If length of ws is greater than 0:
+            Push item 1 of ws to out.
+    Return out.
+
+## Note
+The skeleton of a whole submission: every theorem's steps in order, theorems
+separated by ` | `. Two submissions that differ only in names, terms or spacing
+have one skeleton, which is what an approach fingerprint needs.
+
+## To submissionSkeleton (submission: Text) -> Text:
+    Let mutable parts be a new Seq of Text.
+    Repeat for block in (kernelBlocks(submission))'s items:
+        If commandOf(block) is equal to "Theorem":
+            Push join(tacticSkeleton(block), ";") to parts.
+    Return join(parts, " | ").
+
+## Note
+Every name a submission declares, in order, repeats included.
+
+## To submissionNames (submission: Text) -> Seq of Text:
+    Let mutable out be a new Seq of Text.
+    Repeat for block in (kernelBlocks(submission))'s items:
+        Repeat for name in declaredNames(block):
+            Push name to out.
+    Return out.
+
+## Note
+The theorem a submission must contain to prove the goal `goalName`.
+
+## To proofNameFor (goalName: Text) -> Text:
+    Return "proof_of_" + goalName.
+
+## Note
+Everything wrong with a submission that can be seen without the kernel, or the
+empty list. `proofName` is the theorem it must contain, and `goalName` the type
+that theorem must have.
+
+## To submissionProblems (submission: Text, proofName: Text, goalName: Text) -> Seq of Text:
+    Let mutable out be a new Seq of Text.
+    Let blocks be kernelBlocks(submission).
+    If blocks's problem is not equal to "":
+        Push blocks's problem to out.
+        Return out.
+    If length of blocks's items is equal to 0:
+        Push "the submission is empty" to out.
+        Return out.
+    Let mutable proofs be 0.
+    Let mutable index be 0.
+    Repeat for block in blocks's items:
+        Set index to index + 1.
+        Let command be commandOf(block).
+        If submissionCommands() contains command is equal to false:
+            Push "block {index} uses `{command}`, which a submission may not use" to out.
+        If command is equal to "Theorem":
+            Let names be declaredNames(block).
+            If length of names is greater than 0 and item 1 of names is equal to proofName:
+                Set proofs to proofs + 1.
+                If headTypeOf(block) is not equal to goalName:
+                    Push "the theorem {proofName} must have type exactly `{goalName}`, not `{headTypeOf(block)}`" to out.
+    If proofs is equal to 0:
+        Push "the submission has no `Theorem {proofName} : {goalName} := …`" to out.
+    Let names be submissionNames(submission).
+    Let mutable seen be a new Seq of Text.
+    Repeat for name in names:
+        If seen contains name:
+            Push "the name {name} is declared twice" to out.
+        Otherwise:
+            Push name to seen.
+        If name is equal to goalName:
+            Push "the submission redeclares the goal {goalName}" to out.
+    Return out.
+
+## Note
+Everything wrong with a statement document that can be seen without the kernel:
+only definitions and inductive types, and the goal defined as a `Prop`.
+
+## To statementProblems (document: Text, goalName: Text) -> Seq of Text:
+    Let mutable out be a new Seq of Text.
+    Let blocks be kernelBlocks(document).
+    If blocks's problem is not equal to "":
+        Push blocks's problem to out.
+        Return out.
+    Let mutable goals be 0.
+    Let mutable index be 0.
+    Repeat for block in blocks's items:
+        Set index to index + 1.
+        Let command be commandOf(block).
+        If statementCommands() contains command is equal to false:
+            Push "block {index} uses `{command}`, which a statement may not use" to out.
+        Let names be declaredNames(block).
+        If command is equal to "Definition" and length of names is greater than 0 and item 1 of names is equal to goalName:
+            Set goals to goals + 1.
+            If headTypeOf(block) is not equal to "Prop":
+                Push "the goal {goalName} must be defined as a `Prop`" to out.
+    If goals is not equal to 1:
+        Push "the statement must define `{goalName}` exactly once, as `Definition {goalName} : Prop := …`" to out.
+    Return out.
+
+## Note
+The proof document the kernel checks: the statement, the submission, and the
+factory's two closing checks.
+
+## To assembleProofDocument (statement: Text, submission: Text, proofName: Text) -> Text:
+    Return trimEnd(statement) + "\n\n/-! ## Submission -/\n\n" + trim(submission) + "\n\n/-! ## Closing checks, appended by the factory -/\n\nCheck " + proofName + ".\n\nPrint Axioms " + proofName + ".\n".
+
+## Note
+The document that asks the kernel whether `name` is already bound after
+`preamble` (the statement document, or nothing for the bare prelude): it checks
+exactly when the name exists.
+
+## To nameProbeDocument (preamble: Text, name: Text) -> Text:
+    If trim(preamble) is equal to "":
+        Return "Check " + name + ".\n".
+    Return trimEnd(preamble) + "\n\nCheck " + name + ".\n".
+
+## Note
+The text of block `k` of a document, as the kernel numbers blocks, or `""`.
+
+## To blockText (doc: Text, k: Int) -> Text:
+    Let blocks be (kernelBlocks(doc))'s items.
+    If k is less than 1 or k is greater than length of blocks:
+        Return "".
+    Return item k of blocks.
+
+## Note
+What an extraction found: the submission, the summary line, the suggestions, or
+why there is no submission.
+
+## An Extraction has:
+    a block, which is Text.
+    a summary, which is Text.
+    a suggestions, which is Seq of Text.
+    a problem, which is Text.
+
+## Note
+Whether a line opens a fence with the given info string.
+
+## To opensFence (line: Text, info: Text) -> Bool:
+    Let t be trim(line).
+    If startsWith(t, "```") is equal to false:
+        Return false.
+    Return trim(trimChars(t, "`")) is equal to info.
+
+## Note
+Whether a line closes a fence: nothing but three or more backticks.
+
+## To closesFence (line: Text) -> Bool:
+    Let t be trim(line).
+    Return startsWith(t, "```") and trimChars(t, "`") is equal to "".
+
+## Note
+The submission inside a model's answer.
+
+The output contract: exactly one fenced block whose info string is
+`logos-kernel`. Fences with any other info string (an example in prose) are
+ignored. Outside the block, a line `Summary: …` is the attempt's one-line
+account of itself, and each line `Next: …` is a suggestion for the attempts after
+it; both go onto the trail. Zero blocks, two blocks or an unclosed block is a
+refusal, never a guess.
+
+## To extractSubmission (answer: Text) -> Extraction:
+    Let mutable found be 0.
+    Let mutable inside be false.
+    Let mutable inOther be false.
+    Let mutable body be a new Seq of Text.
+    Let mutable summary be "".
+    Let mutable suggestions be a new Seq of Text.
+    Repeat for line in lines(answer):
+        If inside:
+            If closesFence(line):
+                Set inside to false.
+            Otherwise:
+                If found is equal to 1:
+                    Push line to body.
+        Otherwise:
+            If inOther:
+                If closesFence(line):
+                    Set inOther to false.
+            Otherwise:
+                If opensFence(line, "logos-kernel"):
+                    Set found to found + 1.
+                    Set inside to true.
+                Otherwise:
+                    If startsWith(trim(line), "```"):
+                        Set inOther to true.
+                    Otherwise:
+                        Let t be trim(line).
+                        If startsWith(t, "Summary:"):
+                            Set summary to trim(removePrefix(t, "Summary:")).
+                        If startsWith(t, "Next:"):
+                            Push trim(removePrefix(t, "Next:")) to suggestions.
+    Let mutable problem be "".
+    If inside:
+        Set problem to "the ```logos-kernel block is never closed".
+    If found is equal to 0:
+        Set problem to "the answer has no ```logos-kernel block".
+    If found is greater than 1:
+        Set problem to "the answer has {found} ```logos-kernel blocks; exactly one is allowed".
+    Let mutable block be "".
+    If problem is equal to "":
+        Set block to trim(join(body, "\n")).
+    Return a new Extraction with block block and summary summary and suggestions suggestions and problem problem.
+
+## Note
+Lines joined into one text, one element a line (`""` for a blank line).
+
+A multi-line text literal inside an indented block is misread once the program
+also reaches `crypto.lg` (`LOGOS_ISSUES.md`, issue 7), and the factory does, so a
+text of several lines is written as its lines.
+
+## To joinLines (xs: Seq of Text) -> Text:
+    Return join(xs, "\n").
+
+## Note
+The statement of the kernel fixtures in `tests/fixtures/kernel/`.
+
+## To fixtureStatement () -> Text:
+    Return joinLines(["/-! # Statement: zero is a left identity of addition on Nat", "", "Route C. A proof must establish `goal`. -/", "", "Definition goal : Prop := forall (n : Nat), Eq Nat (Nat_add Zero n) n."]).
+
+## Note
+The submission of `tests/fixtures/kernel/verified.lg`.
+
+## To fixtureProof () -> Text:
+    Return joinLines(["Theorem succ_step : forall (k : Nat), Eq Nat (Nat_add Zero (Succ k)) (Succ (Nat_add Zero k)) := by intro k; rfl.", "", "Theorem proof_of_goal : goal := by intro n; induction n as [ | k ih]; rfl; rw [succ_step k]; rw [ih]; rfl."]).
+
+## Test: a document splits into the kernel's blocks, comments included
+
+Let blocks be kernelBlocks(assembleProofDocument(fixtureStatement(), fixtureProof(), "proof_of_goal")).
+Expect that blocks's problem is equal to "".
+Expect that length of blocks's items is equal to 8.
+Expect that item 2 of blocks's items is equal to "Definition goal : Prop := forall (n : Nat), Eq Nat (Nat_add Zero n) n.".
+Expect that item 7 of blocks's items is equal to "Check proof_of_goal.".
+Expect that item 8 of blocks's items is equal to "Print Axioms proof_of_goal.".
+
+## Test: the assembled document is the recorded fixture, byte for byte
+
+Let doc be assembleProofDocument(fixtureStatement(), fixtureProof(), "proof_of_goal").
+Let expected be """/-! # Statement: zero is a left identity of addition on Nat
+
+Route C. A proof must establish `goal`. -/
+
+Definition goal : Prop := forall (n : Nat), Eq Nat (Nat_add Zero n) n.
+
+/-! ## Submission -/
+
+Theorem succ_step : forall (k : Nat), Eq Nat (Nat_add Zero (Succ k)) (Succ (Nat_add Zero k)) := by intro k; rfl.
+
+Theorem proof_of_goal : goal := by intro n; induction n as [ | k ih]; rfl; rw [succ_step k]; rw [ih]; rfl.
+
+/-! ## Closing checks, appended by the factory -/
+
+Check proof_of_goal.
+
+Print Axioms proof_of_goal.""" + "\n".
+Expect that doc is equal to expected.
+
+## Test: a period inside a name or a string does not end a command
+
+Let blocks be (kernelBlocks("Definition Lean.Eq.rec.{{u}} : Prop := True.\nCheck «a. b».\nEval \"x. y\"."))'s items.
+Expect that length of blocks is equal to 3.
+Expect that item 2 of blocks is equal to "Check «a. b».".
+Expect that item 3 of blocks is equal to "Eval \"x. y\".".
+
+## Test: a nested comment is one block and an unclosed one is refused
+
+Let ok be kernelBlocks("/- outer /- inner -/ still outer -/\nCheck Zero.").
+Expect that length of ok's items is equal to 2.
+Expect that item 1 of ok's items is equal to "/- outer /- inner -/ still outer -/".
+Let bad be kernelBlocks("Check Zero.\n/- never closed").
+Expect that bad's problem is equal to "an unterminated `/-` comment opens block 2".
+
+## Test: a line comment runs to the end of its line
+
+Let blocks be (kernelBlocks("-- a note. with a period\nCheck Zero."))'s items.
+Expect that blocks is equal to ["-- a note. with a period", "Check Zero."].
+
+## Test: the command of a block is read past visibility words
+
+For each of these cases:
+
+| block                                        | command      |
+|----------------------------------------------|--------------|
+| "Definition one : Nat := Succ Zero."         | "Definition" |
+| "Private Definition x : Nat := Zero."        | "Definition" |
+| "Local Notation \"a ++ b\" := (f a b)."      | "Notation"   |
+| "-- note"                                    | "comment"    |
+| "## Theorem: T"                              | "literate"   |
+| "Let x be 5."                                | "literate"   |
+| "A Colour is either Red or Blue."            | "literate"   |
+| "Print Axioms t."                            | "Print"      |
+
+Expect that commandOf(block) is equal to command.
+
+## Test: declarations name what they declare
+
+Expect that declaredNames("Theorem proof_of_goal : goal := by rfl.") is equal to ["proof_of_goal"].
+Expect that declaredNames("Definition Lean.Eq.rec.{{u, v}} : Prop := True.") is equal to ["Lean.Eq.rec"].
+Expect that declaredNames("Axiom h1f : Nat -> Nat.") is equal to ["h1f"].
+Expect that declaredNames("Definition two:Nat := Succ (Succ Zero).") is equal to ["two"].
+Expect that declaredNames("Check two.") is equal to [].
+
+## Test: an inductive declares its constructors and its mutual partners
+
+Expect that declaredNames("Inductive MyBool := Yes : MyBool | No : MyBool.") is equal to ["MyBool", "Yes", "No"].
+Expect that declaredNames("Inductive Leq (n : Nat) : Nat -> Prop := leq_n : Leq n n | leq_S : (m : Nat) -> Leq n m -> Leq n (Succ m).") is equal to ["Leq", "leq_n", "leq_S"].
+Expect that declaredNames("Inductive Even : Nat -> Prop := ev0 : Even Zero | evS : (n : Nat) -> Odd n -> Even (Succ n) with Odd : Nat -> Prop := odS : (n : Nat) -> Even n -> Odd (Succ n).") is equal to ["Even", "ev0", "evS", "Odd", "odS"].
+
+## Test: a skeleton keeps the shape of a proof and drops its names
+
+Expect that tacticSkeleton("Theorem p : goal := by intro n; induction n as [ | k ih]; rfl; rw [succ_step k]; rw [ih]; rfl.") is equal to ["intro", "induction", "rfl", "rw", "rw", "rfl"].
+Expect that tacticSkeleton("Theorem p : goal := fun (n : Nat) => refl Nat n.") is equal to ["term"].
+Expect that submissionSkeleton(fixtureProof()) is equal to "intro;rfl | intro;induction;rfl;rw;rw;rfl".
+Expect that submissionSkeleton("Theorem a : goal := by intro m; rfl.") is equal to submissionSkeleton("Theorem b  :  goal :=  by intro z ;  rfl.").
+
+## Test: the fixture proof is a well-formed submission
+
+Expect that proofNameFor("goal") is equal to "proof_of_goal".
+Expect that submissionProblems(fixtureProof(), "proof_of_goal", "goal") is equal to [].
+Expect that submissionNames(fixtureProof()) is equal to ["succ_step", "proof_of_goal"].
+
+## Test: a submission that changes how text reads is refused before the kernel sees it
+
+Let s be "Notation \"a + b\" := (Nat_add b a).\n\nTheorem proof_of_goal : goal := by intro n; rfl.".
+Expect that submissionProblems(s, "proof_of_goal", "goal") is equal to ["block 1 uses `Notation`, which a submission may not use"].
+
+## Test: a submission must prove exactly the goal
+
+Expect that submissionProblems("Theorem other : goal := by intro n; rfl.", "proof_of_goal", "goal") is equal to ["the submission has no `Theorem proof_of_goal : goal := …`"].
+Expect that submissionProblems("Theorem proof_of_goal : True := by exact I.", "proof_of_goal", "goal") is equal to ["the theorem proof_of_goal must have type exactly `goal`, not `True`"].
+
+## Test: a submission may not redeclare the goal or declare a name twice
+
+Let s be "Definition goal : Prop := True.\n\nTheorem proof_of_goal : goal := by exact I.\n\nTheorem proof_of_goal : goal := by exact I.".
+Expect that submissionProblems(s, "proof_of_goal", "goal") is equal to ["the submission redeclares the goal goal", "the name proof_of_goal is declared twice"].
+
+## Test: an empty submission and an unclosed comment are refused
+
+Expect that submissionProblems("", "proof_of_goal", "goal") is equal to ["the submission is empty"].
+Expect that submissionProblems("/- open", "proof_of_goal", "goal") is equal to ["an unterminated `/-` comment opens block 1"].
+
+## Test: a statement defines its goal once, as a Prop, and asserts nothing
+
+Expect that statementProblems(fixtureStatement(), "goal") is equal to [].
+Expect that statementProblems("Axiom cheat : False.\n\nDefinition goal : Prop := False.", "goal") is equal to ["block 1 uses `Axiom`, which a statement may not use"].
+Expect that statementProblems("Definition goal : Nat := Zero.", "goal") is equal to ["the goal goal must be defined as a `Prop`"].
+Expect that statementProblems("Definition other : Prop := True.", "goal") is equal to ["the statement must define `goal` exactly once, as `Definition goal : Prop := …`"].
+
+## Test: a name probe is the preamble and one Check
+
+Expect that nameProbeDocument(fixtureStatement(), "goal") is equal to fixtureStatement() + "\n\nCheck goal.\n".
+Expect that nameProbeDocument("", "False") is equal to "Check False.\n".
+
+## Test: the failed block of a document can be shown back
+
+Let doc be assembleProofDocument(fixtureStatement(), "Theorem proof_of_goal : goal := by intro n; rfl.", "proof_of_goal").
+Expect that blockText(doc, 4) is equal to "Theorem proof_of_goal : goal := by intro n; rfl.".
+Expect that blockText(doc, 99) is equal to "".
+
+## Test: the submission is the one logos-kernel block, with its summary and suggestions
+
+Let answer be """I will induct on n.
+
+```logos-kernel
+Theorem proof_of_goal : goal := by intro n; rfl.
+```
+
+Summary: closes the goal by computation.
+Next: if rfl fails, induct on n.
+Next: unfold Nat_add first.""".
+Let x be extractSubmission(answer).
+Expect that x's problem is equal to "".
+Expect that x's block is equal to "Theorem proof_of_goal : goal := by intro n; rfl.".
+Expect that x's summary is equal to "closes the goal by computation.".
+Expect that x's suggestions is equal to ["if rfl fails, induct on n.", "unfold Nat_add first."].
+
+## Test: other fences are ignored, even when they hold vernacular
+
+Let answer be "For instance:\n```lean\ntheorem t : True := trivial\n```\n```logos-kernel\nTheorem proof_of_goal : goal := by exact I.\n```".
+Let x be extractSubmission(answer).
+Expect that x's problem is equal to "".
+Expect that x's block is equal to "Theorem proof_of_goal : goal := by exact I.".
+
+## Test: zero, two or an unclosed block is a refusal
+
+Expect that (extractSubmission("no code here"))'s problem is equal to "the answer has no ```logos-kernel block".
+Expect that (extractSubmission("```logos-kernel\nA.\n```\n```logos-kernel\nB.\n```"))'s problem is equal to "the answer has 2 ```logos-kernel blocks; exactly one is allowed".
+Expect that (extractSubmission("```logos-kernel\nTheorem p : goal := by rfl."))'s problem is equal to "the ```logos-kernel block is never closed".
+Expect that (extractSubmission("```logos-kernel\nA.\n```\n```logos-kernel\nB.\n```"))'s block is equal to "".

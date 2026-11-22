@@ -1,0 +1,411 @@
+# Reference
+
+What a model is told about the language it must write proofs in.
+
+No model was trained on the LOGOS kernel vernacular. It looks like Coq and Lean
+and it is neither: its tactic set is small and fixed, its names are its own
+(`Nat_add`, `conj`, `witness`), and a guess that would work in Lean is a parse
+error here. So every prompt carries this reference, and the reference is held to
+one rule: NOTHING IN IT IS UNCHECKED. Each example below is a whole kernel
+document, the reference text is BUILT from those examples (so it cannot quote one
+the tests did not run), and the live tests run every example through `largo
+check --kernel` — the positive ones must check, the failure ones must be refused
+with the error they are shown with. The prelude table lists only names whose
+`Check` succeeds.
+
+
+## Note
+One example of the reference: a name, the line that introduces it, and the whole
+document. A positive example must check; a failure example must be refused with
+an error containing `expectError`.
+
+## A RefExample has:
+    a name, which is Text.
+    a lead, which is Text.
+    a document, which is Text.
+    an expectError, which is Text.
+
+## Note
+A positive example.
+
+## To positiveExample (name: Text, lead: Text, document: Text) -> RefExample:
+    Return a new RefExample with name name and lead lead and document document and expectError "".
+
+## Note
+A failure example: the document, and the part of the kernel's error it shows.
+
+## To failureExample (name: Text, lead: Text, document: Text, expectError: Text) -> RefExample:
+    Return a new RefExample with name name and lead lead and document document and expectError expectError.
+
+## Note
+Lines joined into one text, one element a line (`""` for a blank line).
+
+A multi-line text literal inside an indented block is misread once the program
+also reaches `crypto.lg` (`LOGOS_ISSUES.md`, issue 7), and the factory does, so a
+text of several lines is written as its lines.
+
+## To joinLines (xs: Seq of Text) -> Text:
+    Return join(xs, "\n").
+
+## Note
+The document of the `definition` example.
+
+## To docDefinition () -> Text:
+    Return joinLines(["Definition double : Nat -> Nat := fix double => fun (n : Nat) => match n return (fun (x : Nat) => Nat) with Zero | fun (k : Nat) => Succ (Succ (double k)) end.", "", "Eval (double (Succ (Succ Zero))).", "", "Theorem double_two : Eq Nat (double (Succ (Succ Zero))) (Succ (Succ (Succ (Succ Zero)))) := by rfl."]).
+
+## Note
+The document of the `inductive` example.
+
+## To docInductive () -> Text:
+    Return joinLines(["Inductive Even : Nat -> Prop := even_zero : Even Zero | even_ss : forall (n : Nat), Even n -> Even (Succ (Succ n)).", "", "Theorem even_four : Even (Succ (Succ (Succ (Succ Zero)))) := by apply even_ss; apply even_ss; exact even_zero."]).
+
+## Note
+The document of the `term_proof` example.
+
+## To docTermProof () -> Text:
+    Return "Theorem and_comm_term : forall (P : Prop), forall (Q : Prop), And P Q -> And Q P := fun (P : Prop) => fun (Q : Prop) => fun (h : And P Q) => match h return (fun (x : And P Q) => And Q P) with fun (p : P) => fun (q : Q) => conj Q P q p end.".
+
+## Note
+The document of the `binders` example.
+
+## To docBinders () -> Text:
+    Return "Theorem self_sum : forall (a : Nat) (b : Nat), Eq Nat (Nat_add a b) (Nat_add a b) := by intro a b; rfl.".
+
+## Note
+The document of the `numerals` example.
+
+## To docNumerals () -> Text:
+    Return joinLines(["Theorem two_plus_three : Eq Nat (Nat_add 2 3) 5 := by rfl.", "", "Theorem int_arithmetic : Eq Int (mul 2 3) 6 := by decide."]).
+
+## Note
+The document of the `print_axioms` example.
+
+## To docPrintAxioms () -> Text:
+    Return joinLines(["Theorem em_example : forall (P : Prop), Or P (Not P) := by intro P; exact (Classical_em P).", "", "Print Axioms em_example."]).
+
+## Note
+The document of the `intro_exact` example.
+
+## To docIntroExact () -> Text:
+    Return "Theorem id_prop : forall (P : Prop), P -> P := by intro P h; exact h.".
+
+## Note
+The document of the `assumption` example.
+
+## To docAssumption () -> Text:
+    Return "Theorem keep : forall (P : Prop), forall (Q : Prop), P -> Q -> P := by intro P Q p q; assumption.".
+
+## Note
+The document of the `apply` example.
+
+## To docApply () -> Text:
+    Return "Theorem modus_ponens : forall (P : Prop), forall (Q : Prop), (P -> Q) -> P -> Q := by intro P Q f p; apply f; exact p.".
+
+## Note
+The document of the `constructor` example.
+
+## To docConstructor () -> Text:
+    Return "Theorem and_intro : forall (P : Prop), forall (Q : Prop), P -> Q -> And P Q := by intro P Q p q; constructor; exact p; exact q.".
+
+## Note
+The document of the `cases_and` example.
+
+## To docCasesAnd () -> Text:
+    Return "Theorem and_swap : forall (P : Prop), forall (Q : Prop), And P Q -> And Q P := by intro P Q h; cases h as [p q]; constructor; exact q; exact p.".
+
+## Note
+The document of the `left_right` example.
+
+## To docLeftRight () -> Text:
+    Return "Theorem or_swap : forall (P : Prop), forall (Q : Prop), Or P Q -> Or Q P := by intro P Q h; cases h as [p | q]; right; exact p; left; exact q.".
+
+## Note
+The document of the `exists` example.
+
+## To docExists () -> Text:
+    Return "Theorem ex_succ : Ex Nat (fun (n : Nat) => Eq Nat n Zero) -> Ex Nat (fun (m : Nat) => Eq Nat m (Succ Zero)) := by intro h; cases h as [n e]; exists (Succ n); rw [e]; rfl.".
+
+## Note
+The document of the `exfalso` example.
+
+## To docExfalso () -> Text:
+    Return "Theorem from_false : forall (P : Prop), False -> P := by intro P f; exfalso; exact f.".
+
+## Note
+The document of the `not` example.
+
+## To docNot () -> Text:
+    Return "Theorem not_not_intro : forall (P : Prop), P -> Not (Not P) := by intro P p np; exact (np p).".
+
+## Note
+The document of the `have` example.
+
+## To docHave () -> Text:
+    Return "Theorem chain : forall (P : Prop), forall (Q : Prop), forall (R : Prop), (P -> Q) -> (Q -> R) -> P -> R := by intro P Q R f g p; have q : Q; exact (f p); exact (g q).".
+
+## Note
+The document of the `rfl` example.
+
+## To docRfl () -> Text:
+    Return joinLines(["Theorem two_plus_two : Eq Nat (Nat_add (Succ (Succ Zero)) (Succ (Succ Zero))) (Succ (Succ (Succ (Succ Zero)))) := by rfl.", "", "Theorem add_zero_right : forall (n : Nat), Eq Nat (Nat_add n Zero) n := by intro n; rfl."]).
+
+## Note
+The document of the `induction` example.
+
+## To docInduction () -> Text:
+    Return "Theorem zero_add : forall (n : Nat), Eq Nat (Nat_add Zero n) n := by intro n; induction n as [ | k ih]; rfl; change Eq Nat (Succ (Nat_add Zero k)) (Succ k); rw [ih]; rfl.".
+
+## Note
+The document of the `rw_reverse` example.
+
+## To docRwReverse () -> Text:
+    Return "Theorem rewrite_back : forall (a : Nat), forall (b : Nat), Eq Nat a b -> Eq Nat (Succ b) (Succ a) := by intro a b h; rw [<- h]; rfl.".
+
+## Note
+The document of the `subst` example.
+
+## To docSubst () -> Text:
+    Return "Theorem sym_by_subst : forall (a : Nat), forall (b : Nat), Eq Nat a b -> Eq Nat b a := by intro a b h; subst h; rfl.".
+
+## Note
+The document of the `injection` example.
+
+## To docInjection () -> Text:
+    Return "Theorem succ_inj_example : forall (a : Nat), forall (b : Nat), Eq Nat (Succ a) (Succ b) -> Eq Nat a b := by intro a b h; injection h as [e]; exact e.".
+
+## Note
+The document of the `cases_impossible` example.
+
+## To docCasesImpossible () -> Text:
+    Return joinLines(["Theorem succ_ne_zero : forall (n : Nat), Not (Eq Nat (Succ n) Zero) := by intro n h; cases h.", "", "Inductive Even : Nat -> Prop := even_zero : Even Zero | even_ss : forall (n : Nat), Even n -> Even (Succ (Succ n)).", "", "Theorem one_not_even : Not (Even (Succ Zero)) := by intro h; cases h."]).
+
+## Note
+The document of the `decide` example.
+
+## To docDecide () -> Text:
+    Return joinLines(["Theorem two_ne_one : Not (Eq Nat (Succ (Succ Zero)) (Succ Zero)) := by decide.", "", "Theorem one_le_two : Nat_le (Succ Zero) (Succ (Succ Zero)) := by decide."]).
+
+## Note
+The document of the `calc` example.
+
+## To docCalc () -> Text:
+    Return "Theorem trans3 : forall (a : Nat), forall (b : Nat), forall (c : Nat), Eq Nat a b -> Eq Nat b c -> Eq Nat a c := by intro a b c h1 h2; calc [Eq Nat a b := h1, Eq Nat _ c := h2].".
+
+## Note
+The document of the `cc` example.
+
+## To docCc () -> Text:
+    Return joinLines(["Axiom f : Nat -> Nat.", "", "Theorem congr_example : forall (a : Nat), forall (b : Nat), Eq Nat a b -> Eq Nat (f a) (f b) := by intro a b h; cc."]).
+
+## Note
+The document of the `simp` example.
+
+## To docSimp () -> Text:
+    Return joinLines(["Theorem plus_zero : forall (n : Nat), Eq Nat (Nat_add n Zero) n := by intro n; rfl.", "", "Theorem simp_example : forall (a : Nat), Eq Nat (Nat_add (Nat_add a Zero) Zero) a := by intro a; simp [plus_zero]."]).
+
+## Note
+The document of the `refine` example.
+
+## To docRefine () -> Text:
+    Return "Theorem pair_up : forall (P : Prop), forall (Q : Prop), P -> Q -> And P Q := by intro P Q p q; refine (conj P Q _ _); exact p; exact q.".
+
+## Note
+The document of the `int_laws` example.
+
+## To docIntLaws () -> Text:
+    Return "Theorem int_add_comm_example : forall (a : Int), forall (b : Int), Eq Int (add a b) (add b a) := by intro a b; exact (add_comm a b).".
+
+## Note
+The document of the `wrong_term` example.
+
+## To docWrongTerm () -> Text:
+    Return "Theorem t : forall (P : Prop), forall (Q : Prop), P -> Q := by intro P Q p; exact p.".
+
+## Note
+The document of the `no_conversion` example.
+
+## To docNoConversion () -> Text:
+    Return "Theorem t : forall (n : Nat), Eq Nat (Nat_add Zero n) n := by intro n; rfl.".
+
+## Note
+The document of the `unfinished` example.
+
+## To docUnfinished () -> Text:
+    Return "Theorem t : forall (P : Prop), P -> P := by intro P.".
+
+## Note
+The document of the `no_such_tactic` example.
+
+## To docNoSuchTactic () -> Text:
+    Return "Theorem t : forall (P : Prop), P -> P := by intro P h; omega.".
+
+## Note
+The document of the `no_lemma_keyword` example.
+
+## To docNoLemmaKeyword () -> Text:
+    Return "Lemma t : Eq Nat Zero Zero := by rfl.".
+
+## Note
+The document of the `false_by_decide` example.
+
+## To docFalseByDecide () -> Text:
+    Return "Theorem t : Eq Nat (Succ Zero) Zero := by decide.".
+
+## Note
+The commands and the terms, by example.
+
+## To languageExamples () -> Seq of RefExample:
+    Let mutable out be a new Seq of RefExample.
+    Push positiveExample("definition", "`Definition name : Type := term.` A `fix` makes a recursion; `match` lists one case per constructor, in order, each constructor argument a `fun`:", docDefinition()) to out.
+    Push positiveExample("inductive", "`Inductive Name : arity := c1 : type1 | c2 : type2.` declares a type or a predicate:", docInductive()) to out.
+    Push positiveExample("term_proof", "A theorem may be proved by a term instead of a script; a `match` on a proof of `And P Q` has one case taking both parts:", docTermProof()) to out.
+    Push positiveExample("binders", "`forall (a : A) (b : B), …` binds several names at once:", docBinders()) to out.
+    Push positiveExample("numerals", "A numeral takes its type from where it stands: a `Nat` where a `Nat` is expected, an `Int` otherwise:", docNumerals()) to out.
+    Push positiveExample("print_axioms", "`Print Axioms name.` reports what a theorem rests on; a proof by excluded middle rests on Lean's three axioms:", docPrintAxioms()) to out.
+    Return out.
+
+## Note
+Every tactic of a `by` script, each in one checked example.
+
+## To tacticExamples () -> Seq of RefExample:
+    Let mutable out be a new Seq of RefExample.
+    Push positiveExample("intro_exact", "`intro` names the hypotheses of a `forall` or an `->`, one name each; `exact t` closes the goal with a term of its type:", docIntroExact()) to out.
+    Push positiveExample("assumption", "`assumption` closes the goal with a hypothesis that has exactly its type:", docAssumption()) to out.
+    Push positiveExample("apply", "`apply f` reduces the goal `Q` to `P` when `f : P -> Q`:", docApply()) to out.
+    Push positiveExample("constructor", "`constructor` splits `And P Q` (and `Iff P Q`) into one goal per part:", docConstructor()) to out.
+    Push positiveExample("cases_and", "`cases h as [p q]` takes a hypothesis apart; the names in brackets are each constructor's arguments, cases separated by `|`:", docCasesAnd()) to out.
+    Push positiveExample("left_right", "`left` and `right` choose a side of `Or`; `cases` on an `Or` gives one goal per side:", docLeftRight()) to out.
+    Push positiveExample("exists", "`exists t` gives the witness of an `Ex`; `cases` on an `Ex` names the witness and its proof:", docExists()) to out.
+    Push positiveExample("exfalso", "`exfalso` turns any goal into `False`:", docExfalso()) to out.
+    Push positiveExample("not", "`Not P` is `P -> False`, so `intro` takes its hypothesis:", docNot()) to out.
+    Push positiveExample("have", "`have h : T` opens `T` as the next goal, then makes `h` available for the rest:", docHave()) to out.
+    Push positiveExample("rfl", "`rfl` closes `Eq A x y` when `x` and `y` compute to the same value; `Nat_add` recurses on its SECOND argument, so `Nat_add n Zero` computes to `n`:", docRfl()) to out.
+    Push positiveExample("induction", "`induction n as [ | k ih]` leaves the `Zero` case, then the `Succ k` case with `ih`; `change` restates a goal as something it computes to, and `rw [h]` rewrites by an equation:", docInduction()) to out.
+    Push positiveExample("rw_reverse", "`rw [<- h]` rewrites right to left:", docRwReverse()) to out.
+    Push positiveExample("subst", "`subst h` replaces a variable by what `h` equates it with:", docSubst()) to out.
+    Push positiveExample("injection", "`injection h as [e]` takes `Succ a = Succ b` to `a = b`:", docInjection()) to out.
+    Push positiveExample("cases_impossible", "`cases h` on an impossible equation or predicate closes the goal — no constructor can have built it:", docCasesImpossible()) to out.
+    Push positiveExample("decide", "`decide` settles a closed decidable proposition by computing — equalities, `Not`, `Nat_le`, `Nat_lt` on numbers:", docDecide()) to out.
+    Push positiveExample("calc", "`calc [Eq A a b := p, Eq A _ c := q]` chains equations; `_` is the end of the step before:", docCalc()) to out.
+    Push positiveExample("cc", "`cc` closes an equation the hypotheses give by congruence:", docCc()) to out.
+    Push positiveExample("simp", "`simp [l1, l2]` rewrites by the named equations until none applies, then closes the goal by `rfl`:", docSimp()) to out.
+    Push positiveExample("refine", "`refine t` uses a term with `_` holes; each hole becomes a goal:", docRefine()) to out.
+    Push positiveExample("int_laws", "The integer laws are theorems to cite: `add_comm`, `add_assoc`, `mul_comm`, `mul_assoc`, `mul_distrib_add`, `add_zero`, `mul_one`, `le_refl`, `le_trans`:", docIntLaws()) to out.
+    Return out.
+
+## Note
+What refusals look like: each document is refused by the kernel with the error
+shown, so a model reading a repair prompt knows what it is looking at.
+
+## To failureExamples () -> Seq of RefExample:
+    Let mutable out be a new Seq of RefExample.
+    Push failureExample("wrong_term", "An `exact` whose term has the wrong type names the goal and the type:", docWrongTerm(), "`exact` does not apply: the goal is Q, and p has type P") to out.
+    Push failureExample("no_conversion", "An `rfl` on two sides that do not compute to one value:", docNoConversion(), "`rfl` does not apply: Nat_add Zero n and n do not convert") to out.
+    Push failureExample("unfinished", "A script that stops with goals left:", docUnfinished(), "after the last step: 1 goal(s) remain") to out.
+    Push failureExample("no_such_tactic", "A tactic that does not exist (there is no `omega`, `ring`, `linarith`, `auto` or `simp at` in a script):", docNoSuchTactic(), "the tactic `omega` is not supported") to out.
+    Push failureExample("no_lemma_keyword", "There is no `Lemma`, `theorem` or `def`: write `Theorem` and `Definition`:", docNoLemmaKeyword(), "Unknown command: Lemma") to out.
+    Push failureExample("false_by_decide", "A `decide` on a false proposition:", docFalseByDecide(), "is false: its instance decides it so") to out.
+    Return out.
+
+## Note
+Every example, positive and failure, in the order the reference shows them.
+
+## To allExamples () -> Seq of RefExample:
+    Let mutable out be a new Seq of RefExample.
+    Repeat for e in languageExamples():
+        Push e to out.
+    Repeat for e in tacticExamples():
+        Push e to out.
+    Repeat for e in failureExamples():
+        Push e to out.
+    Return out.
+
+## Note
+The prelude names the reference promises, each with its type written with every
+parenthesis (the kernel's own `Check` drops the parentheses around an arrow in an
+argument — `LOGOS_ISSUES.md`, issue 3 — so these are written by hand and only the
+names are checked).
+
+## To preludeTable () -> Seq of Text:
+    Return ["Nat : Type, with Zero : Nat and Succ : Nat -> Nat", "Nat_add, Nat_sub, Nat_mul, Nat_pow : Nat -> Nat -> Nat (Nat_add recurses on its second argument; Nat_sub stops at Zero)", "Nat_le, Nat_lt : Nat -> Nat -> Prop, and natLe : Nat -> Nat -> Bool", "Bool : Type, with true and false", "True : Prop, with I : True; False : Prop, with no constructor", "Not : Prop -> Prop, where Not P is P -> False", "And : Prop -> Prop -> Prop, with conj : forall (P Q : Prop), P -> Q -> And P Q", "Or : Prop -> Prop -> Prop, with left : forall (P Q : Prop), P -> Or P Q and right : forall (P Q : Prop), Q -> Or P Q", "Iff : Prop -> Prop -> Prop", "Ex : forall (A : Type), (A -> Prop) -> Prop, with witness : forall (A : Type) (P : A -> Prop) (x : A), P x -> Ex A P", "Eq : forall (A : Type), A -> A -> Prop, with refl : forall (A : Type) (x : A), Eq A x x", "Eq_sym : forall (A : Type) (x y : A), Eq A x y -> Eq A y x; Eq_trans : forall (A : Type) (x y z : A), Eq A x y -> Eq A y z -> Eq A x z", "Int : Type, with add, sub, mul, div, mod : Int -> Int -> Int and the laws add_comm, add_assoc, add_zero, mul_comm, mul_assoc, mul_one, mul_distrib_add", "List : Type -> Type, with nil : forall (A : Type), List A and cons : forall (A : Type), A -> List A -> List A", "Option, Prod (with Prod_mk) and Fin : Nat -> Type", "propext : forall (p q : Prop), Iff p q -> Eq Prop p q; Classical_em : forall (P : Prop), Or P (Not P); Classical_choice : forall (A : Type), Nonempty A -> A"].
+
+## Note
+The names the prelude table promises, each of which the live test `Check`s.
+
+## To referenceNames () -> Seq of Text:
+    Return ["Nat", "Zero", "Succ", "Nat_add", "Nat_sub", "Nat_mul", "Nat_pow", "Nat_le", "Nat_lt", "natLe", "Bool", "true", "false", "True", "I", "False", "Not", "And", "conj", "Or", "left", "right", "Iff", "Ex", "witness", "Eq", "refl", "Eq_sym", "Eq_trans", "Int", "add", "sub", "mul", "div", "mod", "add_comm", "add_assoc", "add_zero", "mul_comm", "mul_assoc", "mul_one", "mul_distrib_add", "le_refl", "le_trans", "List", "nil", "cons", "Option", "Prod", "Prod_mk", "Fin", "propext", "Classical_em", "Classical_choice", "Nonempty"].
+
+## Note
+One example as the reference shows it: the lead, then the document in a fence;
+a failure example also shows the error the kernel gives.
+
+## To renderExample (e: RefExample) -> Text:
+    Let mutable out be e's lead + "\n\n```logos-kernel\n" + e's document + "\n```".
+    If e's expectError is not equal to "":
+        Set out to out + "\nThe kernel answers: … " + e's expectError + " …".
+    Return out.
+
+## Note
+The opening of the reference: the shape of a document, the commands and the terms.
+
+## To referenceIntro () -> Text:
+    Return joinLines(["# The LOGOS kernel vernacular", "", "A document is a sequence of commands. Every command ends with a period followed by whitespace or the end. Prose goes in comments only: `-- to the end of the line`, `/- a block -/`, `/-- a doc comment -/`, `/-! a module comment -/`. There is no Markdown outside comments.", "", "Commands: `Definition name : Type := term.` · `Theorem name : Prop := proof.` (a term, or `by` and a script) · `Axiom name : Type.` (an ASSUMPTION — see the rules) · `Inductive Name : arity := c1 : t1 | c2 : t2.` · `Check term.` · `Eval term.` · `Print Axioms name.`", "", "Terms: `forall (x : A), P` · `fun (x : A) => t` · `A -> B` · application by juxtaposition, `f a b` · `Prop` and `Type` · `match t return (fun (x : T) => R) with case1 | case2 end` (one case per constructor, in order, each constructor argument a `fun`) · `fix f => fun (x : A) => …` for recursion. Arrows associate to the right, so write the parentheses of `(A -> B) -> C`."]).
+
+## Note
+The opening of the tactic section: the closed list of steps.
+
+## To tacticsIntro () -> Text:
+    Return joinLines(["## Tactics", "", "A script is `by` and steps separated by `;`. The steps are exactly: `intro`, `exact`, `apply`, `refine`, `assumption`, `exfalso`, `constructor`, `left`, `right`, `exists`, `have`, `rfl`, `change`, `rw`, `subst`, `injection`, `calc`, `cc`, `decide`, `simp`, `induction`, `cases`. Each step works on the first open goal, and the script must close every goal."]).
+
+## Note
+The reference a prompt carries, in full.
+
+## To kernelReference () -> Text:
+    Let mutable parts be a new Seq of Text.
+    Push referenceIntro() to parts.
+    Push "## The language, by example" to parts.
+    Repeat for e in languageExamples():
+        Push renderExample(e) to parts.
+    Push "## The prelude\n\n- " + join(preludeTable(), "\n- ") to parts.
+    Push tacticsIntro() to parts.
+    Repeat for e in tacticExamples():
+        Push renderExample(e) to parts.
+    Push "## What a refusal looks like" to parts.
+    Repeat for e in failureExamples():
+        Push renderExample(e) to parts.
+    Push submissionRules() to parts.
+    Return join(parts, "\n\n").
+
+## Note
+The factory's rules for a submission, stated once, in the words `submission.lg`
+enforces them.
+
+## To submissionRules () -> Text:
+    Return joinLines(["## The rules of a submission", "", "- Answer with exactly one fenced block opened by ```logos-kernel and closed by ```. Outside it, you may write `Summary: …` (one line about your attempt) and `Next: …` lines (what the next attempt should try).", "- The block is checked after the statement document, which defines the goal. Prove it as `Theorem proof_of_<goal> : <goal> := …`, with the type written exactly as the goal's name.", "- You may use only `Definition`, `Theorem`, `Axiom`, `Inductive`, `Check`, `Eval`, `Print Axioms` and comments. No `Notation`, `Macro`, `Open`, `Namespace`, `Section`, `Structure` or literate `##` forms.", "- Every name you declare must be new: you may not redefine a prelude name or anything in the statement.", "- A proof that rests on an `Axiom` you declare is recorded as progress modulo that axiom, never as a proof. Only `propext`, `Quot_sound` and `Classical_choice` are allowed underneath an accepted proof."]).
+
+## Test: the reference is built from its examples and shows every one
+
+Let text be kernelReference().
+Repeat for e in allExamples():
+    Expect that text contains e's document.
+Expect that text contains "## The rules of a submission".
+Expect that text contains "`Nat_add` recurses on its SECOND argument".
+
+## Test: example names are distinct
+
+Let mutable seen be a new Seq of Text.
+Repeat for e in allExamples():
+    Expect that seen contains e's name is equal to false.
+    Push e's name to seen.
+Expect that length of allExamples() is equal to 34.
+
+## Test: every tactic the kernel offers has an example
+
+Let text be kernelReference().
+Repeat for tactic in ["intro", "exact", "assumption", "apply", "refine", "exfalso", "constructor", "left", "right", "exists", "have", "rfl", "change", "rw", "subst", "injection", "calc", "cc", "decide", "simp", "induction", "cases"]:
+    Expect that text contains "; " + tactic or text contains "by " + tactic.
+
+## Test: the rules name the fence the extractor reads
+
+Expect that submissionRules() contains "```logos-kernel".
+Expect that submissionRules() contains "proof_of_<goal>".

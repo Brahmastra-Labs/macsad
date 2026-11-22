@@ -1,0 +1,17 @@
+/-! # Statement: zero is a left identity of addition on Nat
+
+Route C. A proof must establish `goal`. -/
+
+Definition goal : Prop := forall (n : Nat), Eq Nat (Nat_add Zero n) n.
+
+/-! ## Submission -/
+
+Axiom zero_add_axiom : forall (n : Nat), Eq Nat (Nat_add Zero n) n.
+
+Theorem proof_of_goal : goal := by exact zero_add_axiom.
+
+/-! ## Closing checks, appended by the factory -/
+
+Check proof_of_goal.
+
+Print Axioms proof_of_goal.

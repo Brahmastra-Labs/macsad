@@ -1,0 +1,447 @@
+# Verdict
+
+What the kernel said about a proof document, and what the factory accepts.
+
+The kernel is the judge: `largo prove --kernel <document> --json` (or `largo check
+--kernel`, which prints the same report) checks every block in order and stops
+at the first that does not check. This module reads that report and applies the
+ACCEPTANCE POLICY on top of it, which is fixed and is not anything an agent can
+edit:
+
+- every block of the assembled document checked;
+- the factory's closing `Check <proof>.` printed exactly `<proof> : <goal>`, so the
+  theorem has the statement's goal as its type;
+- the factory's closing `Print Axioms <proof>.` reports a closure inside
+  `propext`, `Quot_sound` and `Classical_choice` — Lean's three axioms, under the
+  spellings the LOGOS kernel prints;
+- and, before any of that, the submission passed `submission.lg`'s reading and
+  every name it declares was free (see `nameProbeVerdict`).
+
+There are exactly four outcomes. `verified`: the policy holds. `rejected`: the
+kernel refused a block, or the submission was refused before the kernel saw it;
+the block and the error go back to the model. `admitted_axiom`: everything
+checked, but the proof rests on an axiom outside the three, so it is progress
+modulo that axiom (a decomposition's child lemma), never a proof. `infrastructure`:
+the run itself failed — a deadline, a report that is not a report — which is
+nobody's mathematical fault and is retried rather than blamed on the attempt.
+
+The recorded reports below were produced by `largo 0.11.0` on the documents in
+`tests/fixtures/kernel/`; every classification test reads one of them.
+
+Import Wire.
+Import Shared.
+Import Submission.
+
+## Note
+The axioms an accepted proof may rest on, as the kernel spells them.
+
+## To allowedAxioms () -> Seq of Text:
+    Return ["propext", "Quot_sound", "Classical_choice"].
+
+## Note
+A kernel report, read: whether the document checked, each block's output in
+order, the first refused block (`0` when the kernel names none — a document that
+does not even parse is refused whole), and the kernel's error.
+
+## A KernelReport has:
+    a checked, which is Bool.
+    an outputs, which is Seq of Text.
+    a failedBlock, which is Int.
+    an error, which is Text.
+
+## Note
+The shape of `largo … --kernel --json`'s report. It is read OPEN, so a later
+`largo` that adds a field still reads; every field named here must be there.
+
+## To kernelReportShape () -> Seq of Text:
+    Return ["blocks:array", "checked:bool", "error:opttext", "failed_block:optint", "file:text", "surface:text"].
+
+## Note
+A kernel report read from what `largo` printed, or why it is not one. The blocks
+must be numbered 1, 2, 3, … with a text output each, and the surface must be the
+kernel's document door.
+
+## To parseKernelReport (stdout: Text) -> Result of KernelReport and Text:
+    Inspect parseStrict(trim(stdout)):
+        When Err (e):
+            Return a new Err with error "the report is not JSON: " + e.
+        When Ok (v):
+            Let problem be openShapeProblem(v, kernelReportShape()).
+            If problem is not equal to "":
+                Return a new Err with error "the report is not a kernel report: " + problem.
+            Let surface be textAt(v, "surface").
+            If surface is not equal to "kernel_document":
+                Return a new Err with error "the report's surface is {surface}, not kernel_document".
+            Let mutable outputs be a new Seq of Text.
+            Let mutable expected be 1.
+            Inspect jsonGet(v, "blocks"):
+                When JArr (elems):
+                    Repeat for b in elems:
+                        If openShapeProblem(b, ["block:int", "output:text"]) is not equal to "":
+                            Return a new Err with error "block entry {expected} of the report is malformed".
+                        Let numbered be intAt(b, "block").
+                        If numbered is not equal to expected:
+                            Return a new Err with error "the report numbers block {numbered} where {expected} belongs".
+                        Push textAt(b, "output") to outputs.
+                        Set expected to expected + 1.
+                Otherwise:
+                    Return a new Err with error "the report has no block list".
+            Return a new Ok with value (a new KernelReport with checked boolAt(v, "checked") and outputs outputs and failedBlock intAt(v, "failed_block") and error textAt(v, "error")).
+    Return a new Err with error "unreadable report".
+
+## Note
+The axioms a `Print Axioms <name>.` output names, or why the output is not that
+report for that name. The kernel prints `'n' depends on no axioms` or
+`'n' depends on axioms: [a, b]`.
+
+## To axiomsOf (output: Text, name: Text) -> Result of Seq of Text and Text:
+    Let nothingSaid be "'" + name + "' depends on no axioms".
+    If output is equal to nothingSaid:
+        Return a new Ok with value (a new Seq of Text).
+    Let lead be "'" + name + "' depends on axioms: [".
+    If startsWith(output, lead) and endsWith(output, "]"):
+        Let inner be removeSuffix(removePrefix(output, lead), "]").
+        Let mutable out be a new Seq of Text.
+        Repeat for part in split(inner, ","):
+            If trim(part) is not equal to "":
+                Push trim(part) to out.
+        Return a new Ok with value out.
+    Return a new Err with error "`{output}` is not the axiom report of {name}".
+
+## Note
+The axioms of `axioms` that the policy does not allow, in the order given.
+
+## To disallowedAxioms (axioms: Seq of Text) -> Seq of Text:
+    Let mutable out be a new Seq of Text.
+    Repeat for a in axioms:
+        If allowedAxioms() contains a is equal to false:
+            Push a to out.
+    Return out.
+
+## Note
+A verdict for a run that failed for reasons of its own.
+
+## To infrastructureVerdict (why: Text) -> Verdict:
+    Return newVerdict("infrastructure", 0, why, [], "the check itself did not complete; the attempt is retried, not blamed").
+
+## Note
+The verdict on one run of `largo prove --kernel <document> --json`: its exit
+status, what it printed, and whether its deadline stopped it, for the theorem
+`proofName` that must have type `goalName`.
+
+`largo` exits 0 exactly when the document checked and 1 when a block was refused,
+and a run whose exit disagrees with its own report is an infrastructure failure,
+never a verdict.
+
+## To kernelVerdict (exitCode: Int, stdout: Text, timedOut: Bool, proofName: Text, goalName: Text) -> Verdict:
+    If timedOut:
+        Return infrastructureVerdict("largo ran past its deadline").
+    Inspect parseKernelReport(stdout):
+        When Err (e):
+            Return infrastructureVerdict("largo exited {exitCode}; " + e).
+        When Ok (report):
+            If report's checked is equal to false:
+                If exitCode is not equal to 1:
+                    Return infrastructureVerdict("the report says the document did not check, but largo exited {exitCode}").
+                Return newVerdict("rejected", report's failedBlock, report's error, [], "the kernel refused the document").
+            If exitCode is not equal to 0:
+                Return infrastructureVerdict("the report says the document checked, but largo exited {exitCode}").
+            Let n be length of report's outputs.
+            If n is less than 2:
+                Return newVerdict("rejected", n, "the document has no closing checks", [], "the factory's closing checks did not run as written").
+            Let typed be item (n - 1) of report's outputs.
+            If typed is not equal to proofName + " : " + goalName:
+                Return newVerdict("rejected", n - 1, "`Check {proofName}.` printed `{typed}`, not `{proofName} : {goalName}`", [], "the proof does not have the statement's goal as its type").
+            Inspect axiomsOf(item n of report's outputs, proofName):
+                When Err (e):
+                    Return newVerdict("rejected", n, e, [], "the factory's closing checks did not run as written").
+                When Ok (axioms):
+                    Let outside be disallowedAxioms(axioms).
+                    If length of outside is equal to 0:
+                        Return newVerdict("verified", 0, "", axioms, "every block checked; the proof rests on " + axiomPhrase(axioms) + ", within propext, Quot_sound and Classical_choice").
+                    Return newVerdict("admitted_axiom", 0, "", axioms, "every block checked, but the proof rests on " + join(outside, ", ") + ", outside propext, Quot_sound and Classical_choice").
+    Return infrastructureVerdict("unreadable run").
+
+## Note
+How a list of axioms reads in a verdict's detail.
+
+## To axiomPhrase (axioms: Seq of Text) -> Text:
+    If length of axioms is equal to 0:
+        Return "no axioms".
+    Return join(axioms, ", ").
+
+## Note
+What a name probe found: `bound` when the name already exists, `free` when the
+kernel answered that it is unbound, and `unknown` when the run answered anything
+else — which is not evidence either way.
+
+## To probeOutcome (exitCode: Int, stdout: Text, name: Text) -> Text:
+    Inspect parseKernelReport(stdout):
+        When Err (e):
+            Return "unknown".
+        When Ok (report):
+            If report's checked and exitCode is equal to 0:
+                Return "bound".
+            If report's checked is equal to false and report's error is equal to "Kernel error: Unbound variable: " + name:
+                Return "free".
+            Return "unknown".
+    Return "unknown".
+
+## Note
+The verdict the name probes add, or `none` when every declared name was free.
+`names` and `outcomes` are parallel: the name, and what its probe found. `what` is
+the document whose names were probed and `boundBy` what they were probed against,
+so the refusal says which.
+
+## To nameProbeVerdict (what: Text, boundBy: Text, names: Seq of Text, outcomes: Seq of Text) -> Option of Verdict:
+    Repeat for i from 1 to length of names:
+        If item i of outcomes is equal to "bound":
+            Return some newVerdict("rejected", 0, "the {what} declares {item i of names}, which {boundBy} already binds", [], "a {what} may only add new names").
+    Repeat for i from 1 to length of names:
+        If item i of outcomes is not equal to "free":
+            Return some infrastructureVerdict("the probe of {item i of names} did not answer").
+    Return none.
+
+## Note
+The verdict on a submission that `submission.lg` refused before the kernel ran.
+
+## To refusedSubmissionVerdict (problems: Seq of Text) -> Verdict:
+    Return newVerdict("rejected", 0, join(problems, "; "), [], "the submission was refused before the kernel saw it").
+
+## Note
+Whether a proof document is bound to an accepted statement: the statement's
+recorded hash is the hash of its document, and the proof document begins with
+that document exactly as `assembleProofDocument` places it.
+
+## To boundToStatement (statement: Statement, document: Text) -> Bool:
+    If sha256Hex(statement's document) is not equal to statement's sha256:
+        Return false.
+    Return startsWith(document, trimEnd(statement's document) + "\n\n/-! ## Submission -/\n\n").
+
+## Note
+What `largo prove --kernel <fixture>.lg --json` printed for each document in
+`tests/fixtures/kernel/`, copied byte for byte from the `<fixture>.prove.json`
+recordings (without the final newline `println` adds). `largo check --kernel
+--json` printed the same bytes for every one. The live test at the end of this
+file holds each copy to its recording, so the two cannot drift apart.
+
+## To recordedReport (fixture: Text) -> Text:
+    If fixture is equal to "verified":
+        Return "{{\"blocks\":[{{\"block\":1,\"output\":\"\"}},{{\"block\":2,\"output\":\"\"}},{{\"block\":3,\"output\":\"\"}},{{\"block\":4,\"output\":\"\"}},{{\"block\":5,\"output\":\"\"}},{{\"block\":6,\"output\":\"\"}},{{\"block\":7,\"output\":\"proof_of_goal : goal\"}},{{\"block\":8,\"output\":\"'proof_of_goal' depends on no axioms\"}}],\"checked\":true,\"error\":null,\"failed_block\":null,\"file\":\"verified.lg\",\"surface\":\"kernel_document\"}}".
+    If fixture is equal to "rejected":
+        Return "{{\"blocks\":[],\"checked\":false,\"error\":\"Tactic error: step 2 (`rfl`): `rfl` does not apply: Nat_add Zero n and n do not convert\\nin the goal\\nn : Nat\\n⊢ Eq Nat (Nat_add Zero n) n\",\"failed_block\":4,\"file\":\"rejected.lg\",\"surface\":\"kernel_document\"}}".
+    If fixture is equal to "admitted_axiom":
+        Return "{{\"blocks\":[{{\"block\":1,\"output\":\"\"}},{{\"block\":2,\"output\":\"\"}},{{\"block\":3,\"output\":\"\"}},{{\"block\":4,\"output\":\"\"}},{{\"block\":5,\"output\":\"\"}},{{\"block\":6,\"output\":\"\"}},{{\"block\":7,\"output\":\"proof_of_goal : goal\"}},{{\"block\":8,\"output\":\"'proof_of_goal' depends on axioms: [zero_add_axiom]\"}}],\"checked\":true,\"error\":null,\"failed_block\":null,\"file\":\"admitted_axiom.lg\",\"surface\":\"kernel_document\"}}".
+    If fixture is equal to "parse_error":
+        Return "{{\"blocks\":[],\"checked\":false,\"error\":\"Parse error: Expected `[names | names …]`, found [ | k ih; rfl\",\"failed_block\":null,\"file\":\"parse_error.lg\",\"surface\":\"kernel_document\"}}".
+    If fixture is equal to "shadowed":
+        Return "{{\"blocks\":[{{\"block\":1,\"output\":\"\"}},{{\"block\":2,\"output\":\"\"}},{{\"block\":3,\"output\":\"\"}},{{\"block\":4,\"output\":\"\"}},{{\"block\":5,\"output\":\"\"}},{{\"block\":6,\"output\":\"\"}},{{\"block\":7,\"output\":\"proof_of_goal : goal\"}},{{\"block\":8,\"output\":\"'proof_of_goal' depends on no axioms\"}}],\"checked\":true,\"error\":null,\"failed_block\":null,\"file\":\"shadowed.lg\",\"surface\":\"kernel_document\"}}".
+    If fixture is equal to "classical":
+        Return "{{\"blocks\":[{{\"block\":1,\"output\":\"\"}},{{\"block\":2,\"output\":\"\"}},{{\"block\":3,\"output\":\"\"}},{{\"block\":4,\"output\":\"\"}},{{\"block\":5,\"output\":\"\"}},{{\"block\":6,\"output\":\"proof_of_goal : goal\"}},{{\"block\":7,\"output\":\"'proof_of_goal' depends on axioms: [Classical_choice, Quot_sound, propext]\"}}],\"checked\":true,\"error\":null,\"failed_block\":null,\"file\":\"classical.lg\",\"surface\":\"kernel_document\"}}".
+    If fixture is equal to "probe_bound":
+        Return "{{\"blocks\":[{{\"block\":1,\"output\":\"\"}},{{\"block\":2,\"output\":\"\"}},{{\"block\":3,\"output\":\"goal : Prop\"}}],\"checked\":true,\"error\":null,\"failed_block\":null,\"file\":\"probe_bound.lg\",\"surface\":\"kernel_document\"}}".
+    If fixture is equal to "probe_free":
+        Return "{{\"blocks\":[],\"checked\":false,\"error\":\"Kernel error: Unbound variable: succ_step\",\"failed_block\":3,\"file\":\"probe_free.lg\",\"surface\":\"kernel_document\"}}".
+    Return "".
+
+## Note
+The exit status `largo` ended each recorded run with.
+
+## To recordedExit (fixture: Text) -> Int:
+    If fixture is equal to "verified":
+        Return 0.
+    If fixture is equal to "rejected":
+        Return 1.
+    If fixture is equal to "admitted_axiom":
+        Return 0.
+    If fixture is equal to "parse_error":
+        Return 1.
+    If fixture is equal to "shadowed":
+        Return 0.
+    If fixture is equal to "classical":
+        Return 0.
+    If fixture is equal to "probe_bound":
+        Return 0.
+    If fixture is equal to "probe_free":
+        Return 1.
+    Return 0 - 1.
+
+## Test: a checked report reads block by block
+
+Inspect parseKernelReport(recordedReport("verified")):
+    When Ok (r):
+        Expect that r's checked is equal to true.
+        Expect that length of r's outputs is equal to 8.
+        Expect that item 7 of r's outputs is equal to "proof_of_goal : goal".
+        Expect that item 8 of r's outputs is equal to "'proof_of_goal' depends on no axioms".
+        Expect that r's failedBlock is equal to 0.
+    When Err (e):
+        Expect that e is equal to "no error".
+
+## Test: a refused report keeps its block and its error
+
+Inspect parseKernelReport(recordedReport("rejected")):
+    When Ok (r):
+        Expect that r's checked is equal to false.
+        Expect that r's failedBlock is equal to 4.
+        Expect that r's outputs is equal to [].
+        Expect that r's error is equal to "Tactic error: step 2 (`rfl`): `rfl` does not apply: Nat_add Zero n and n do not convert\nin the goal\nn : Nat\n⊢ Eq Nat (Nat_add Zero n) n".
+    When Err (e):
+        Expect that e is equal to "no error".
+
+## Test: the axiom report reads both of its forms
+
+Inspect axiomsOf("'p' depends on no axioms", "p"):
+    When Ok (xs):
+        Expect that xs is equal to [].
+    When Err (e):
+        Expect that e is equal to "no error".
+Inspect axiomsOf("'p' depends on axioms: [Classical_choice, Quot_sound, propext]", "p"):
+    When Ok (xs):
+        Expect that xs is equal to ["Classical_choice", "Quot_sound", "propext"].
+    When Err (e):
+        Expect that e is equal to "no error".
+Inspect axiomsOf("'q' depends on no axioms", "p"):
+    When Ok (xs):
+        Expect that xs is equal to ["refused"].
+    When Err (e):
+        Expect that e is equal to "`'q' depends on no axioms` is not the axiom report of p".
+
+## Test: only Lean's three axioms are allowed, under the kernel's spellings
+
+Expect that disallowedAxioms(["Classical_choice", "Quot_sound", "propext"]) is equal to [].
+Expect that disallowedAxioms(["collatz_lemma", "propext"]) is equal to ["collatz_lemma"].
+Expect that disallowedAxioms(["Classical.choice", "Quot.sound"]) is equal to ["Classical.choice", "Quot.sound"].
+Expect that disallowedAxioms(["sorryAx"]) is equal to ["sorryAx"].
+
+## Test: a correct proof is verified
+
+Let v be kernelVerdict(recordedExit("verified"), recordedReport("verified"), false, "proof_of_goal", "goal").
+Expect that v's kind is equal to "verified".
+Expect that v's axioms is equal to [].
+Expect that v's detail is equal to "every block checked; the proof rests on no axioms, within propext, Quot_sound and Classical_choice".
+
+## Test: a classical proof is verified with the axioms it rests on
+
+Let v be kernelVerdict(recordedExit("classical"), recordedReport("classical"), false, "proof_of_goal", "goal").
+Expect that v's kind is equal to "verified".
+Expect that v's axioms is equal to ["Classical_choice", "Quot_sound", "propext"].
+
+## Test: a wrong proof is rejected with the kernel's block and error
+
+Let v be kernelVerdict(recordedExit("rejected"), recordedReport("rejected"), false, "proof_of_goal", "goal").
+Expect that v's kind is equal to "rejected".
+Expect that v's block is equal to 4.
+Expect that v's error contains "`rfl` does not apply: Nat_add Zero n and n do not convert".
+Expect that blockText(assembleProofDocument(fixtureStatement(), "Theorem proof_of_goal : goal := by intro n; rfl.", "proof_of_goal"), v's block) is equal to "Theorem proof_of_goal : goal := by intro n; rfl.".
+
+## Test: a document that does not parse is rejected whole
+
+Let v be kernelVerdict(recordedExit("parse_error"), recordedReport("parse_error"), false, "proof_of_goal", "goal").
+Expect that v's kind is equal to "rejected".
+Expect that v's block is equal to 0.
+Expect that v's error is equal to "Parse error: Expected `[names | names …]`, found [ | k ih; rfl".
+
+## Test: a proof resting on its own axiom is admitted, not verified
+
+Let v be kernelVerdict(recordedExit("admitted_axiom"), recordedReport("admitted_axiom"), false, "proof_of_goal", "goal").
+Expect that v's kind is equal to "admitted_axiom".
+Expect that v's axioms is equal to ["zero_add_axiom"].
+Expect that v's detail is equal to "every block checked, but the proof rests on zero_add_axiom, outside propext, Quot_sound and Classical_choice".
+
+## Test: the kernel alone would accept a shadowed goal, which is why names are probed
+
+Let v be kernelVerdict(recordedExit("shadowed"), recordedReport("shadowed"), false, "proof_of_goal", "goal").
+Expect that v's kind is equal to "verified".
+Let shadow be "Definition goal : Prop := True.\n\nTheorem proof_of_goal : goal := by exact I.".
+Expect that submissionProblems(shadow, "proof_of_goal", "goal") is equal to ["the submission redeclares the goal goal"].
+Expect that probeOutcome(recordedExit("probe_bound"), recordedReport("probe_bound"), "goal") is equal to "bound".
+
+## Test: a probe tells a bound name from a free one, and anything else from both
+
+Expect that probeOutcome(recordedExit("probe_bound"), recordedReport("probe_bound"), "goal") is equal to "bound".
+Expect that probeOutcome(recordedExit("probe_free"), recordedReport("probe_free"), "succ_step") is equal to "free".
+Expect that probeOutcome(recordedExit("probe_free"), recordedReport("probe_free"), "other_name") is equal to "unknown".
+Expect that probeOutcome(1, "segmentation fault", "x") is equal to "unknown".
+
+## Test: one bound name rejects a submission, and an unanswered probe is infrastructure
+
+Inspect nameProbeVerdict("submission", "the statement or the prelude", ["succ_step", "goal"], ["free", "bound"]):
+    When Some (v):
+        Expect that v's kind is equal to "rejected".
+        Expect that v's error is equal to "the submission declares goal, which the statement or the prelude already binds".
+    When None:
+        Expect that "a verdict" is equal to "none".
+Inspect nameProbeVerdict("submission", "the statement or the prelude", ["succ_step"], ["unknown"]):
+    When Some (v):
+        Expect that v's kind is equal to "infrastructure".
+    When None:
+        Expect that "a verdict" is equal to "none".
+Expect that nameProbeVerdict("submission", "the statement or the prelude", ["succ_step", "proof_of_goal"], ["free", "free"]) is none.
+
+## Test: a deadline, a non-report and an exit that contradicts its report are infrastructure
+
+Expect that (kernelVerdict(0, recordedReport("verified"), true, "proof_of_goal", "goal"))'s kind is equal to "infrastructure".
+Expect that (kernelVerdict(101, "thread 'main' panicked", false, "proof_of_goal", "goal"))'s kind is equal to "infrastructure".
+Expect that (kernelVerdict(1, recordedReport("verified"), false, "proof_of_goal", "goal"))'s kind is equal to "infrastructure".
+Expect that (kernelVerdict(0, recordedReport("rejected"), false, "proof_of_goal", "goal"))'s kind is equal to "infrastructure".
+Expect that (kernelVerdict(0, "{{\"blocks\":[],\"checked\":true}}", false, "proof_of_goal", "goal"))'s kind is equal to "infrastructure".
+
+## Test: a theorem of another type does not pass the closing Check
+
+Let v be kernelVerdict(recordedExit("verified"), recordedReport("verified"), false, "proof_of_goal", "other_goal").
+Expect that v's kind is equal to "rejected".
+Expect that v's block is equal to 7.
+Expect that v's error is equal to "`Check proof_of_goal.` printed `proof_of_goal : goal`, not `proof_of_goal : other_goal`".
+
+## Test: a report whose block numbers skip is not a report
+
+Inspect parseKernelReport("{{\"blocks\":[{{\"block\":2,\"output\":\"\"}}],\"checked\":true,\"error\":null,\"failed_block\":null,\"file\":\"f\",\"surface\":\"kernel_document\"}}"):
+    When Ok (r):
+        Expect that r's checked is equal to false.
+    When Err (e):
+        Expect that e is equal to "the report numbers block 2 where 1 belongs".
+
+## Test: a proof document is bound to the statement it begins with
+
+Let doc be fixtureStatement().
+Let st be a new Statement with id "stmt:x" and problemId "p" and document doc and sha256 sha256Hex(doc) and goalName "goal" and route "C" and reviewState "accepted" and author "c" and model "m" and createdAt 0.
+Expect that boundToStatement(st, assembleProofDocument(doc, fixtureProof(), "proof_of_goal")) is equal to true.
+Expect that boundToStatement(st, assembleProofDocument(doc + "\n\nDefinition extra : Nat := Zero.", fixtureProof(), "proof_of_goal")) is equal to false.
+Let mutable stale be st.
+Set stale's sha256 to sha256Hex("another statement").
+Expect that boundToStatement(stale, assembleProofDocument(doc, fixtureProof(), "proof_of_goal")) is equal to false.
+
+## Test: each embedded report is the recorded file, byte for byte
+
+This test may use the real filesystem.
+Repeat for fixture in ["verified", "rejected", "admitted_axiom", "parse_error", "shadowed", "classical", "probe_bound", "probe_free"]:
+    Inspect read("tests/fixtures/kernel/" + fixture + ".prove.json"):
+        When Ok (text):
+            Expect that trimEnd(text) is equal to recordedReport(fixture).
+        When Err (e):
+            Expect that e is equal to "readable " + fixture.
+    Inspect read("tests/fixtures/kernel/" + fixture + ".check.json"):
+        When Ok (text):
+            Expect that trimEnd(text) is equal to recordedReport(fixture).
+        When Err (e):
+            Expect that e is equal to "readable " + fixture.
+    Inspect read("tests/fixtures/kernel/" + fixture + ".exit"):
+        When Ok (text):
+            Expect that parseInt(trim(text)) is equal to recordedExit(fixture).
+        When Err (e):
+            Expect that e is equal to "readable " + fixture.
+
+## Test: the assembled fixture documents are the recorded ones
+
+This test may use the real filesystem.
+Inspect read("tests/fixtures/kernel/verified.lg"):
+    When Ok (text):
+        Expect that text is equal to assembleProofDocument(fixtureStatement(), fixtureProof(), "proof_of_goal").
+    When Err (e):
+        Expect that e is equal to "readable".
+Inspect read("tests/fixtures/kernel/rejected.lg"):
+    When Ok (text):
+        Expect that text is equal to assembleProofDocument(fixtureStatement(), "Theorem proof_of_goal : goal := by intro n; rfl.", "proof_of_goal").
+    When Err (e):
+        Expect that e is equal to "readable".

@@ -1,0 +1,227 @@
+# Factory
+
+The MaCSad math factory, one program with one role per process. Which role runs
+is the first argument:
+
+- `ingest fc <manifest.json> <out>` — the formalization lab's 200 statements;
+- `ingest opdp <atlas.json[.gz]> <out> [chunk-mb]` — the OPDP atlas, streamed;
+- `verifier judge <statement.lg> <goal> <submission.lg>` — one submission judged;
+- `verifier statement <statement.lg> <goal>` — a statement checked well-formed;
+- `verifier reference` — the kernel reference checked against the kernel;
+- `reference` — the kernel reference, as a model reads it;
+- `local <workspace> <problem-id> [attempts]` — the whole loop on one machine:
+  prompt, model (replay or OpenRouter), kernel, trail, result;
+- `worker` and `coordinator` — the distributed roles, which need the coordinator's
+  routes and database first.
+
+Every role prints what it did and exits non-zero when it did not do it.
+
+Import Wire.
+Import Shared.
+Import Trail.
+Import Rank.
+Import Submission.
+Import Verdict.
+Import OpenRouter from "openrouter.lg".
+Import Host.
+Import Verifier.
+Import Replay.
+Import Reference.
+Import Prompts.
+Import IngestFc from "ingest_fc.lg".
+Import IngestOpdp from "ingest_opdp.lg".
+Import Local.
+
+## Note
+How the factory is run.
+
+## To usage () -> Text:
+    Return joinLines(["usage: factory <role> …", "  ingest fc <manifest.json> <out-dir>", "  ingest opdp <atlas.json | atlas.json.gz> <out-dir> [chunk-mb]", "  verifier judge <statement.lg> <goal> <submission.lg>", "  verifier statement <statement.lg> <goal>", "  verifier reference", "  reference", "  local <workspace> <problem-id> [attempts]", "  worker | coordinator"]).
+
+## Note
+The argument at a position (counting the program's own name as the first), or `""`.
+
+## To argAt (xs: Seq of Text, i: Int) -> Text:
+    If i is greater than length of xs:
+        Return "".
+    Return item i of xs.
+
+## Note
+What a role reports: a line for the operator, and whether it did its job.
+
+## An Outcome has:
+    a message, which is Text.
+    an ok, which is Bool.
+
+## Note
+A successful outcome.
+
+## To done (message: Text) -> Outcome:
+    Return a new Outcome with message message and ok true.
+
+## Note
+A failed outcome.
+
+## To failed (message: Text) -> Outcome:
+    Return a new Outcome with message message and ok false.
+
+## Note
+The formalization lab's manifest, ingested into `out`.
+
+## To runIngestFc (manifestPath: Text, out: Text) -> Outcome:
+    Inspect readText(manifestPath):
+        When Err (e):
+            Return failed("cannot read the manifest: " + e).
+        When Ok (text):
+            Inspect ingestManifest(text):
+                When Err (e):
+                    Return failed(e).
+                When Ok (got):
+                    Let made be ensureDir(out).
+                    Let mutable problemLines be a new Seq of Text.
+                    Repeat for p in got's problems:
+                        Push toJson_Problem(p) to problemLines.
+                    Let mutable nodeLines be a new Seq of Text.
+                    Repeat for n in got's nodes:
+                        Push toJson_Node(n) to nodeLines.
+                    Let w1 be writeAtomically(out + "/problems.jsonl", join(problemLines, "\n") + "\n").
+                    Let w2 be writeAtomically(out + "/nodes.jsonl", join(nodeLines, "\n") + "\n").
+                    Return done("ingested {length of got's problems} problems and {length of got's nodes} nodes into " + out).
+    Return failed("unreachable").
+
+## Note
+The OPDP atlas, streamed into `out`, with the time each stage took.
+
+## To runIngestOpdp (atlasPath: Text, out: Text, chunkMb: Int) -> Outcome:
+    Let t0 be clockMs().
+    Inspect prepareAtlas(atlasPath, out + "/work", chunkMb):
+        When Err (e):
+            Return failed(e).
+        When Ok (chunks):
+            Let t1 be clockMs().
+            Inspect ingestAtlasChunks(chunks, out, "UnsolvedMath"):
+                When Err (e):
+                    Return failed(e).
+                When Ok (s):
+                    Let t2 be clockMs().
+                    Let mutable line be "cohort {s's cohort}: declared {s's declared}, scanned {s's scanned}, written {s's written}, refused {s's refused}; {s's chunks} chunks, {s's bytes} bytes; prepare {t1 - t0} ms, scan {s's scanMs} ms, project {s's projectMs} ms, write {s's writeMs} ms, total {t2 - t0} ms".
+                    If s's firstRefusal is not equal to "":
+                        Set line to line + "; first refusal: " + s's firstRefusal.
+                    If s's declared is at least 0 and s's declared is not equal to s's scanned:
+                        Return failed(line + "; the atlas declares a different number of records than it holds").
+                    Return done(line).
+    Return failed("unreachable").
+
+## Note
+One submission file judged against one statement file.
+
+## To runJudge (statementPath: Text, goal: Text, submissionPath: Text) -> Outcome:
+    Inspect readText(statementPath):
+        When Err (e):
+            Return failed("cannot read the statement: " + e).
+        When Ok (statement):
+            Inspect readText(submissionPath):
+                When Err (e):
+                    Return failed("cannot read the submission: " + e).
+                When Ok (submission):
+                    Let v be judgeSubmission(defaultToolchain(), statement, goal, submission).
+                    Let line be toJson_Verdict(v).
+                    If v's kind is equal to "verified":
+                        Return done(line).
+                    Return failed(line).
+    Return failed("unreachable").
+
+## Note
+One statement file checked well-formed.
+
+## To runStatementCheck (statementPath: Text, goal: Text) -> Outcome:
+    Inspect readText(statementPath):
+        When Err (e):
+            Return failed("cannot read the statement: " + e).
+        When Ok (statement):
+            Let v be judgeStatement(defaultToolchain(), statement, goal).
+            If v's kind is equal to "verified":
+                Return done(toJson_Verdict(v)).
+            Return failed(toJson_Verdict(v)).
+    Return failed("unreachable").
+
+## Note
+The kernel reference checked against the kernel.
+
+## To runReferenceCheck () -> Outcome:
+    Let problems be referenceProblems(defaultToolchain()).
+    If length of problems is equal to 0:
+        Return done("every one of the {length of allExamples()} reference examples is what the kernel says it is, and every promised prelude name is bound").
+    Return failed(join(problems, "\n")).
+
+## Note
+The role the arguments name, run.
+
+## To dispatch (xs: Seq of Text) -> Outcome:
+    Let role be argAt(xs, 2).
+    Let sub be argAt(xs, 3).
+    If role is equal to "ingest" and sub is equal to "fc" and length of xs is at least 5:
+        Return runIngestFc(argAt(xs, 4), argAt(xs, 5)).
+    If role is equal to "ingest" and sub is equal to "opdp" and length of xs is at least 5:
+        Let mutable chunkMb be 32.
+        If length of xs is at least 6:
+            Set chunkMb to parseInt(argAt(xs, 6)).
+        Return runIngestOpdp(argAt(xs, 4), argAt(xs, 5), chunkMb).
+    If role is equal to "verifier" and sub is equal to "judge" and length of xs is at least 6:
+        Return runJudge(argAt(xs, 4), argAt(xs, 5), argAt(xs, 6)).
+    If role is equal to "verifier" and sub is equal to "statement" and length of xs is at least 5:
+        Return runStatementCheck(argAt(xs, 4), argAt(xs, 5)).
+    If role is equal to "verifier" and sub is equal to "reference":
+        Return runReferenceCheck().
+    If role is equal to "reference":
+        Return done(kernelReference()).
+    If role is equal to "local" and length of xs is at least 4:
+        Let mutable attempts be 1.
+        If length of xs is at least 5:
+            Set attempts to parseInt(argAt(xs, 5)).
+        Return runLocal(argAt(xs, 3), argAt(xs, 4), attempts).
+    If role is equal to "worker" or role is equal to "coordinator":
+        Return failed("the {role} role needs the coordinator's routes and database, which are not built yet; use `local`.\n" + usage()).
+    Return failed(usage()).
+
+## Main
+
+Let outcome be dispatch(programArgs()).
+Show outcome's message.
+If outcome's ok is equal to false:
+    Fail with "the role did not complete".
+
+## Test: no arguments print the usage and fail
+
+Let o be dispatch(["factory"]).
+Expect that o's ok is equal to false.
+Expect that o's message is equal to usage().
+
+## Test: the distributed roles say what they need
+
+Let o be dispatch(["factory", "worker"]).
+Expect that o's ok is equal to false.
+Expect that o's message contains "the worker role needs the coordinator's routes and database".
+
+## Test: the reference role prints the reference
+
+Let o be dispatch(["factory", "reference"]).
+Expect that o's ok is equal to true.
+Expect that o's message is equal to kernelReference().
+
+## Test: ingest fc reads a manifest from the sealed filesystem and writes the graph
+
+Let w be writeText("manifest.json", sampleManifest()).
+Let o be dispatch(["factory", "ingest", "fc", "manifest.json", "out"]).
+Expect that o's ok is equal to true.
+Expect that o's message is equal to "ingested 2 problems and 5 nodes into out".
+Inspect readText("out/problems.jsonl"):
+    When Ok (t):
+        Expect that length of lines(trimEnd(t)) is equal to 2.
+    When Err (e):
+        Expect that e is equal to "readable".
+
+## Test: an argument past the end is empty
+
+Expect that argAt(["a"], 2) is equal to "".
+Expect that argAt(["a", "b"], 2) is equal to "b".

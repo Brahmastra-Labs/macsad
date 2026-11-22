@@ -1,0 +1,157 @@
+# Replay
+
+The replay provider: model answers read from recordings instead of bought.
+
+A recording is keyed by the PROMPT HASH — the SHA-256 of the exact request body
+`chatRequestJson` builds — so a recording answers exactly one question: this
+model, these messages, this temperature and token allowance. Change any of them
+and the hash changes, and the replay provider says it has no recording rather than
+answering a different question with an old answer.
+
+A recording directory holds, per prompt hash `h`:
+
+- `h.json` — the reply, in OpenRouter's own reply shape, so a recorded reply is
+  read by the same `parseChatReply` a live one is, cost and all;
+- `h.request.json` — the request it answers, so a reader can see what was asked.
+
+When a prompt has no recording, the provider writes `h.request.json` and stops
+with the hash, so the missing answer can be recorded (by a person, or by running
+once against the live provider) and the run repeated. That is how the factory runs
+end to end before anyone has an OpenRouter key.
+
+Import Shared.
+Import Submission.
+Import OpenRouter from "openrouter.lg".
+Import Host.
+
+## Note
+Where the recorded reply to the prompt `sha` lives.
+
+## To replayReplyPath (dir: Text, sha: Text) -> Text:
+    Return dir + "/" + sha + ".json".
+
+## Note
+Where the request a recording answers lives.
+
+## To replayRequestPath (dir: Text, sha: Text) -> Text:
+    Return dir + "/" + sha + ".request.json".
+
+## Note
+A reply in OpenRouter's shape, for authoring a recording by hand: the answer as
+the first choice's message, its token counts and its cost in micro-dollars.
+
+## To replyDocument (id: Text, model: Text, content: Text, promptTokens: Int, completionTokens: Int, costMicros: Int) -> Text:
+    Let message be a new JObj with entries [jfield("role", jstr("assistant")), jfield("content", jstr(content))].
+    Let choice be a new JObj with entries [jfield("index", jint(0)), jfield("finish_reason", jstr("stop")), jfield("message", message)].
+    Let mutable costValue be jint(0).
+    If costMicros is greater than 0:
+        Set costValue to jsonParse(jsonRenderDec(costMicros, 0 - 6)).
+    Let usage be a new JObj with entries [jfield("prompt_tokens", jint(promptTokens)), jfield("completion_tokens", jint(completionTokens)), jfield("total_tokens", jint(promptTokens + completionTokens)), jfield("cost", costValue)].
+    Let reply be a new JObj with entries [jfield("id", jstr(id)), jfield("model", jstr(model)), jfield("object", jstr("chat.completion")), jfield("choices", a new JArr with elems [choice]), jfield("usage", usage)].
+    Return jsonSerialize(reply).
+
+## Note
+The recorded answer to `request`, or the stop that names the missing recording
+after writing down the request it would answer.
+
+## To replayComplete (dir: Text, request: ChatRequest) -> Result of ChatReply and Text:
+    Let sha be promptSha(request).
+    Let path be replayReplyPath(dir, sha).
+    If pathExists(path):
+        Inspect readText(path):
+            When Err (e):
+                Return a new Err with error "the recording {path} is unreadable: " + e.
+            When Ok (text):
+                Inspect parseChatReply(text):
+                    When Err (e):
+                        Return a new Err with error "the recording {path} is not a reply: " + e.
+                    When Ok (reply):
+                        Return a new Ok with value reply.
+    Let ignored be ensureDir(dir).
+    Let written be writeText(replayRequestPath(dir, sha), chatRequestJson(request)).
+    Return a new Err with error "no recorded reply for prompt {sha}; its request is at " + replayRequestPath(dir, sha).
+
+## Note
+A recording made: the reply to `request` written under its prompt hash, with the
+request beside it. Answers the prompt hash.
+
+## To recordReply (dir: Text, request: ChatRequest, replyText: Text) -> Result of Text and Text:
+    Let sha be promptSha(request).
+    Inspect ensureDir(dir):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (made):
+            Inspect writeText(replayRequestPath(dir, sha), chatRequestJson(request)):
+                When Err (e):
+                    Return a new Err with error e.
+                When Ok (wrote):
+                    Inspect writeText(replayReplyPath(dir, sha), replyText):
+                        When Err (e):
+                            Return a new Err with error e.
+                        When Ok (done):
+                            Return a new Ok with value sha.
+    Return a new Err with error "unrecorded".
+
+## Test: a recording is found by the prompt's hash and read like a live reply
+
+Let request be sampleRequest().
+Let reply be replyDocument("replay-1", "openai/gpt-4o-mini", "```logos-kernel\nTheorem proof_of_goal : goal := by exact I.\n```", 100, 20, 231).
+Inspect recordReply("replays", request, reply):
+    When Ok (sha):
+        Expect that sha is equal to promptSha(request).
+        Expect that pathExists("replays/" + sha + ".json") is equal to true.
+        Expect that pathExists("replays/" + sha + ".request.json") is equal to true.
+    When Err (e):
+        Expect that e is equal to "recorded".
+Inspect replayComplete("replays", request):
+    When Ok (r):
+        Expect that r's model is equal to "openai/gpt-4o-mini".
+        Expect that r's costMicros is equal to some 231.
+        Expect that r's promptTokens is equal to 100.
+        Expect that (extractSubmission(r's content))'s block is equal to "Theorem proof_of_goal : goal := by exact I.".
+    When Err (e):
+        Expect that e is equal to "a recorded reply".
+
+## Test: a prompt without a recording stops with its hash and leaves its request
+
+Let request be sampleRequest().
+Let sha be promptSha(request).
+Inspect replayComplete("empty-replays", request):
+    When Ok (r):
+        Expect that r's content is equal to "refused".
+    When Err (e):
+        Expect that e is equal to "no recorded reply for prompt {sha}; its request is at empty-replays/{sha}.request.json".
+Inspect readText("empty-replays/" + sha + ".request.json"):
+    When Ok (t):
+        Expect that t is equal to chatRequestJson(request).
+    When Err (e):
+        Expect that e is equal to "written".
+
+## Test: a different temperature is a different question
+
+Let mutable other be sampleRequest().
+Set other's temperatureBp to 9000.
+Let reply be replyDocument("replay-2", "openai/gpt-4o-mini", "x", 1, 1, 1).
+Let made be recordReply("temps", sampleRequest(), reply).
+Inspect replayComplete("temps", other):
+    When Ok (r):
+        Expect that r's content is equal to "refused".
+    When Err (e):
+        Expect that startsWith(e, "no recorded reply for prompt") is equal to true.
+
+## Test: an authored reply is a well-formed OpenRouter reply
+
+Let text be replyDocument("replay-3", "m", "answer", 10, 5, 1500000).
+Expect that jsonValid(text) is equal to true.
+Inspect parseChatReply(text):
+    When Ok (r):
+        Expect that r's content is equal to "answer".
+        Expect that r's costMicros is equal to some 1500000.
+        Expect that r's usageKnown is equal to true.
+    When Err (e):
+        Expect that e is equal to "no error".
+Inspect parseChatReply(replyDocument("replay-4", "m", "free", 0, 0, 0)):
+    When Ok (r):
+        Expect that r's costMicros is equal to some 0.
+    When Err (e):
+        Expect that e is equal to "no error".

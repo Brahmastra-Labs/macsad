@@ -1,0 +1,346 @@
+# Rank
+
+The scheduler's priority for a problem: which problem the factory works on next.
+
+A rank is never an agent's reward and never a claim about a problem's difficulty.
+It is the coordinator's answer to one practical question — where is the next
+dollar of model time most likely to produce kernel-checked progress? — computed
+from what the OPDP atlas says about the problem, whether a formal statement
+exists, and what the problem's own trail has shown so far.
+
+Everything is integer arithmetic in basis points (10,000 is the top of a scale),
+so a rank computed by a worker, the coordinator and the website is the same
+number, and every number below can be reproduced by hand from the atlas record.
+
+Import Wire.
+Import Shared.
+Import Trail.
+
+## Note
+What the atlas (or a source without an atlas profile) tells the scheduler.
+
+All scores are basis points of their scale. `progressLowBp`/`progressHighBp` are the
+atlas's tractability band, the probability of checked partial progress in 100
+combined expert and AI hours. `tractable` is false when the atlas deliberately
+has no tractability score (a solved or ill-posed record): such a problem is not
+scheduled at all. `formalizationBp` and `verificationBp` are BURDENS — higher is
+harder — and `verificationBp` is the mean of the atlas's if-true and if-false
+checking burdens. `availability` is `logos` (an accepted LOGOS statement exists),
+`lean` (a formal Lean statement exists) or `informal`. `category` is the atlas's
+category slug, which decides how much of the problem the LOGOS prelude can say.
+
+## A RankInputs has:
+    a progressLowBp, which is Int.
+    a progressHighBp, which is Int.
+    a tractable, which is Bool.
+    an aiFit, which is Text.
+    a toolLeverageBp, which is Int.
+    a formalizationBp, which is Int.
+    a verificationBp, which is Int.
+    an availability, which is Text.
+    a category, which is Text.
+
+## Note
+What a problem's trail tells the scheduler: how many attempts ended verified, and
+the largest number of times one failure reason has repeated.
+
+## A TrailSignals has:
+    a verified, which is Int.
+    a repeats, which is Int.
+
+## Note
+The inputs for a problem no atlas has profiled (a formal-conjectures statement
+outside the atlas): the atlas's median band (T5, 25–40%), a neutral AI fit, and
+neutral leverage and burdens. A formal statement still counts, through
+`availability`, and the category still decides expressibility.
+
+## To unprofiledInputs (availability: Text, category: Text) -> RankInputs:
+    Return a new RankInputs with progressLowBp 2500 and progressHighBp 4000 and tractable true and aiFit "unknown" and toolLeverageBp 5000 and formalizationBp 5000 and verificationBp 5000 and availability availability and category category.
+
+## Note
+The signals of a trail.
+
+## To trailSignals (trail: Seq of TrailEntry) -> TrailSignals:
+    Return a new TrailSignals with verified verifiedCount(trail) and repeats repeatedFailures(trail).
+
+## Note
+The signals of an empty trail.
+
+## To noSignals () -> TrailSignals:
+    Return a new TrailSignals with verified 0 and repeats 0.
+
+## Note
+A score held to its scale: below zero is zero, above 10,000 is 10,000.
+
+## To clampBp (x: Int) -> Int:
+    If x is less than 0:
+        Return 0.
+    If x is greater than 10000:
+        Return 10000.
+    Return x.
+
+## Note
+The progress component: the midpoint of the tractability band. A band of 40–55%
+is 4,750.
+
+## To progressComponent (r: RankInputs) -> Int:
+    Return clampBp((r's progressLowBp + r's progressHighBp) / 2).
+
+## Note
+The AI-fit component: the atlas's verdict on whether current frontier agents are
+helped or hindered by the problem's shape. An unknown fit is neutral.
+
+## To aiFitComponent (fit: Text) -> Int:
+    If fit is equal to "ai_favored":
+        Return 10000.
+    If fit is equal to "ai_hostile":
+        Return 0.
+    Return 5000.
+
+## Note
+The availability component: an accepted LOGOS statement means work can start on
+proofs at once; a Lean statement means one mechanical translation first; an
+informal statement means a statement has to be written and reviewed before
+anything can be proved.
+
+## To availabilityComponent (availability: Text) -> Int:
+    If availability is equal to "logos":
+        Return 10000.
+    If availability is equal to "lean":
+        Return 6000.
+    Return 2000.
+
+## Note
+The expressibility component: how much of the category the LOGOS kernel prelude
+can state today. The prelude has `Nat`, `Int` with its ring and order laws, lists,
+options, products, `Fin` and quotients, and no reals, sets or topology, so
+discrete mathematics is stated directly and continuous mathematics needs a
+library first. This is a prior written down where it can be argued with, and the
+place to raise a category when the prelude grows.
+
+## To expressibilityComponent (category: Text) -> Int:
+    If category is equal to "number-theory":
+        Return 8000.
+    If category is equal to "combinatorics":
+        Return 7000.
+    If category is equal to "graph-theory" or category is equal to "logic" or category is equal to "computer-science":
+        Return 6000.
+    If category is equal to "algebra":
+        Return 5000.
+    If category is equal to "group-theory":
+        Return 4500.
+    If category is equal to "set-theory":
+        Return 4000.
+    If category is equal to "probability" or category is equal to "geometry":
+        Return 3000.
+    If category is equal to "dynamical-systems":
+        Return 2500.
+    If category is equal to "analysis" or category is equal to "algebraic-geometry":
+        Return 2000.
+    If category is equal to "topology":
+        Return 1500.
+    If category is equal to "pde" or category is equal to "physics":
+        Return 1000.
+    Return 3000.
+
+## Note
+The weights of the components, in percent, summing to 100: progress 35, AI fit 10,
+tool leverage 15, formalization ease 10, verification ease 5, availability 15,
+expressibility 10. Progress dominates because it is the atlas's direct forecast of
+the thing the factory produces; leverage and availability come next because they
+are what separates a problem the kernel can give feedback on from one it cannot.
+
+## To rankWeights () -> Seq of Int:
+    Return [35, 10, 15, 10, 5, 15, 10].
+
+## Note
+The seven components of a problem's base score, each in basis points, higher always
+more favourable, in the order of `rankWeights`.
+
+## To rankComponents (r: RankInputs) -> Seq of Int:
+    Return [progressComponent(r), aiFitComponent(r's aiFit), clampBp(r's toolLeverageBp), 10000 - clampBp(r's formalizationBp), 10000 - clampBp(r's verificationBp), availabilityComponent(r's availability), expressibilityComponent(r's category)].
+
+## Note
+The base score: the weighted mean of the components, in basis points.
+
+## To baseScore (r: RankInputs) -> Int:
+    Let parts be rankComponents(r).
+    Let weights be rankWeights().
+    Let mutable total be 0.
+    Repeat for i from 1 to length of parts:
+        Set total to total + (item i of parts) * (item i of weights).
+    Return total / 100.
+
+## Note
+The trail factor, in percent. Each verified attempt adds ten points, up to thirty:
+progress makes more progress likely and is worth following. Each repetition of the
+same failure beyond the first takes fifteen points, down to sixty off: the factory
+keeps coming back to a wall only while the wall is new.
+
+## To trailFactor (s: TrailSignals) -> Int:
+    Let mutable bonus be s's verified * 10.
+    If bonus is greater than 30:
+        Set bonus to 30.
+    Let mutable penalty be 0.
+    If s's repeats is greater than 1:
+        Set penalty to (s's repeats - 1) * 15.
+    If penalty is greater than 60:
+        Set penalty to 60.
+    Return 100 + bonus - penalty.
+
+## Note
+A problem's scheduling priority, in basis points: the base score scaled by the
+trail factor and held to the scale. A problem the atlas marks untractable (solved
+or ill-posed) has priority zero and is never scheduled automatically.
+
+## To priority (r: RankInputs, s: TrailSignals) -> Int:
+    If r's tractable is equal to false:
+        Return 0.
+    Return clampBp(baseScore(r) * trailFactor(s) / 100).
+
+## Note
+The atlas record 116 profile (GREEN-028, Gowers box norms): band 40–55%, AI-favored,
+tool leverage 5.3, formalization 3.7, verification 5.2 and 4.5, combinatorics,
+informal only.
+
+## To sampleInputs () -> RankInputs:
+    Return a new RankInputs with progressLowBp 4000 and progressHighBp 5500 and tractable true and aiFit "ai_favored" and toolLeverageBp 5300 and formalizationBp 3700 and verificationBp 4850 and availability "informal" and category "combinatorics".
+
+## Note
+The sample inputs with one field changed, for the monotonicity properties below.
+
+## To withLeverage (bp: Int) -> RankInputs:
+    Let mutable r be sampleInputs().
+    Set r's toolLeverageBp to bp.
+    Return r.
+
+## Note
+The sample inputs with a different formalization burden.
+
+## To withFormalization (bp: Int) -> RankInputs:
+    Let mutable r be sampleInputs().
+    Set r's formalizationBp to bp.
+    Return r.
+
+## Note
+The sample inputs with a different progress band.
+
+## To withBand (low: Int, high: Int) -> RankInputs:
+    Let mutable r be sampleInputs().
+    Set r's progressLowBp to low.
+    Set r's progressHighBp to high.
+    Return r.
+
+## Note
+An arbitrary integer folded onto a basis-point scale, so a property test can range
+over every integer and still speak about scores.
+
+## To toBp (n: Int) -> Int:
+    Return foldTo(n, 10001).
+
+## Test: the weights sum to one hundred
+
+Let mutable total be 0.
+Repeat for w in rankWeights():
+    Set total to total + w.
+Expect that total is equal to 100.
+Expect that length of rankWeights() is equal to length of rankComponents(sampleInputs()).
+
+## Test: record 116 is scored component by component
+
+Let r be sampleInputs().
+Expect that rankComponents(r) is equal to [4750, 10000, 5300, 6300, 5150, 2000, 7000].
+Expect that baseScore(r) is equal to 5345.
+Expect that priority(r, noSignals()) is equal to 5345.
+
+## Test: the base score is the weighted mean, worked by hand
+
+Let r be sampleInputs().
+Let byHand be (4750 * 35 + 10000 * 10 + 5300 * 15 + 6300 * 10 + 5150 * 5 + 2000 * 15 + 7000 * 10) / 100.
+Expect that baseScore(r) is equal to byHand.
+
+## Test: an untractable record is never scheduled
+
+Let mutable r be sampleInputs().
+Set r's tractable to false.
+Expect that priority(r, noSignals()) is equal to 0.
+
+## Test: a formal statement raises a problem
+
+Let mutable informal be sampleInputs().
+Let mutable lean be sampleInputs().
+Set lean's availability to "lean".
+Let mutable logos be sampleInputs().
+Set logos's availability to "logos".
+Expect that priority(lean, noSignals()) is greater than priority(informal, noSignals()).
+Expect that priority(logos, noSignals()) is greater than priority(lean, noSignals()).
+Expect that priority(lean, noSignals()) - priority(informal, noSignals()) is equal to 600.
+
+## Test: the trail factor rewards progress and punishes repeated walls
+
+For each of these cases:
+
+| verified | repeats | factor |
+|----------|---------|--------|
+| 0        | 0       | 100    |
+| 1        | 0       | 110    |
+| 5        | 0       | 130    |
+| 0        | 1       | 100    |
+| 0        | 2       | 85     |
+| 0        | 4       | 55     |
+| 0        | 9       | 40     |
+| 2        | 3       | 90     |
+
+Expect that trailFactor(a new TrailSignals with verified verified and repeats repeats) is equal to factor.
+
+## Test: a repeated failure on the trail lowers the rank
+
+Let r be sampleInputs().
+Let t be sampleTrail().
+Let s be trailSignals(t).
+Expect that s's verified is equal to 1.
+Expect that s's repeats is equal to 2.
+Expect that priority(r, s) is equal to 5345 * 95 / 100.
+
+## Test: a priority stays on its scale even at the top
+
+Let r be a new RankInputs with progressLowBp 9000 and progressHighBp 10000 and tractable true and aiFit "ai_favored" and toolLeverageBp 10000 and formalizationBp 0 and verificationBp 0 and availability "logos" and category "number-theory".
+Expect that priority(r, a new TrailSignals with verified 3 and repeats 0) is equal to 10000.
+
+## Test: an unprofiled formal statement sits at the atlas median
+
+Let r be unprofiledInputs("lean", "number-theory").
+Expect that progressComponent(r) is equal to 3250.
+Expect that priority(r, noSignals()) is equal to (3250 * 35 + 5000 * 10 + 5000 * 15 + 5000 * 10 + 5000 * 5 + 6000 * 15 + 8000 * 10) / 100.
+
+## Test: more tool leverage never lowers a priority
+
+For all integers a and b:
+    Let x be toBp(a).
+    Let y be toBp(b).
+    If x is at most y:
+        Expect that priority(withLeverage(x), noSignals()) is at most priority(withLeverage(y), noSignals()).
+    Otherwise:
+        Expect that priority(withLeverage(y), noSignals()) is at most priority(withLeverage(x), noSignals()).
+
+## Test: a heavier formalization burden never raises a priority
+
+For all integers a and b:
+    Let x be toBp(a).
+    Let y be toBp(b).
+    If x is at most y:
+        Expect that priority(withFormalization(y), noSignals()) is at most priority(withFormalization(x), noSignals()).
+    Otherwise:
+        Expect that priority(withFormalization(x), noSignals()) is at most priority(withFormalization(y), noSignals()).
+
+## Test: every priority lies on the basis-point scale
+
+For all integers lo and hi and lev and verified and repeats:
+    Let r be withBand(toBp(lo), toBp(hi)).
+    Let mutable q be withLeverage(toBp(lev)).
+    Set q's progressLowBp to r's progressLowBp.
+    Set q's progressHighBp to r's progressHighBp.
+    Let s be a new TrailSignals with verified (toBp(verified) % 7) and repeats (toBp(repeats) % 9).
+    Let p be priority(q, s).
+    Expect that p is at least 0.
+    Expect that p is at most 10000.

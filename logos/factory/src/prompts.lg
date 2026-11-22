@@ -1,0 +1,325 @@
+# Prompts
+
+What a model is asked, for each kind of unit.
+
+Every prompt is built from the same parts, so a model always finds things in the
+same place: a SYSTEM message that says what it is doing and carries the whole
+kernel reference (`reference.lg`), and a USER message with the problem, the
+accepted statement document (when there is one), the trail digest (what was
+already tried and why it failed), the verified lemmas it may cite, the strategy's
+playbook, the task itself, and the output contract.
+
+The prompt is data the strategy shapes — the playbook and the sampling budget are
+the strategy's — but the parts that keep the factory honest are not the
+strategy's to change: the reference, the output contract and the acceptance
+rules are written here and read by `submission.lg` and `verdict.lg`, the same
+words on both sides.
+
+Import Shared.
+Import Submission.
+Import OpenRouter from "openrouter.lg".
+Import Reference.
+
+## Note
+Everything a prompt may draw on. `statement` is the accepted statement document
+(`""` before there is one), `previous` and `diagnostics` the last submission and
+what the kernel said about it (for a repair), and `failedBlock` the text of the
+block the kernel refused.
+
+## A PromptContext has:
+    a problem, which is Problem.
+    a statement, which is Text.
+    a goalName, which is Text.
+    a trailDigest, which is Text.
+    a lemmas, which is Seq of Lemma.
+    a playbook, which is Text.
+    a previous, which is Text.
+    a diagnostics, which is Text.
+    a failedBlock, which is Text.
+
+## Note
+A prompt: the unit kind it is for, and its two messages.
+
+## A Prompt has:
+    a kind, which is Text.
+    a system, which is Text.
+    a user, which is Text.
+
+## Note
+The opening of every system message.
+
+## To roleText (kind: Text) -> Text:
+    If kind is equal to "review":
+        Return "You review formal statements of mathematical problems. You are independent of whoever wrote the statement, and you are paid for catching a statement that does not say what the problem says, not for agreeing.".
+    If kind is equal to "summarize_trail":
+        Return "You keep the research log of a mathematical problem. You turn a long record of attempts into what the next person needs: what is known, what failed and why, and what to try next.".
+    Return "You are a proof engineer. You write proofs and formal statements in the LOGOS kernel vernacular, and every one is checked by the LOGOS kernel: nothing counts until it checks.".
+
+## Note
+The system message: the role, then (for every unit that writes vernacular) the
+reference. The reviewer gets the reference too, so it can read the statement.
+
+## To systemText (kind: Text) -> Text:
+    Return roleText(kind) + "\n\n" + kernelReference().
+
+## Note
+The problem as the model reads it: identity, title, source, the informal
+statement, and the Lean statement when there is one.
+
+## To problemSection (p: Problem) -> Text:
+    Let mutable out be "## The problem\n\n" + p's id + " — " + p's title + "\nSource: " + p's source + ", collection " + p's collection + ", category " + p's category + ".".
+    If p's statementInformal is not equal to "":
+        Set out to out + "\n\n" + p's statementInformal.
+    Inspect p's leanStatement:
+        When Some (lean):
+            Set out to out + "\n\nThe Lean statement:\n\n```lean\n" + lean + "\n```".
+        When None:
+            Set out to out + "\n\nThere is no formal statement yet.".
+    Return out.
+
+## Note
+The accepted statement, verbatim, and what a proof must be.
+
+## To statementSection (c: PromptContext) -> Text:
+    If c's statement is equal to "":
+        Return "".
+    Return "## The statement\n\nThis document is checked first, exactly as written. It defines `" + c's goalName + "`, the proposition to prove.\n\n```logos-kernel\n" + c's statement + "\n```".
+
+## Note
+The lemmas already verified for this problem, each a statement the model may
+restate and cite as an `Axiom`-free theorem of its own.
+
+## To lemmaSection (lemmas: Seq of Lemma) -> Text:
+    If length of lemmas is equal to 0:
+        Return "".
+    Let mutable lines be a new Seq of Text.
+    Repeat for l in lemmas:
+        Push "- `" + l's name + "` (" + l's status + "): " + l's statement to lines.
+    Return "## Verified lemmas\n\nThese are proved. To use one, include its statement and proof in your block under a new name.\n\n" + join(lines, "\n").
+
+## Note
+The trail digest, under its heading.
+
+## To trailSection (c: PromptContext) -> Text:
+    Return "## What has been tried\n\n" + c's trailDigest.
+
+## Note
+The strategy's playbook, under its heading, when it has one.
+
+## To playbookSection (c: PromptContext) -> Text:
+    If c's playbook is equal to "":
+        Return "".
+    Return "## Playbook\n\n" + c's playbook.
+
+## Note
+What the unit asks for, in words.
+
+## To taskText (kind: Text, c: PromptContext) -> Text:
+    Let proofName be proofNameFor(c's goalName).
+    If kind is equal to "formalize":
+        Return "## Task\n\nWrite the statement of this problem as a kernel-vernacular document. Define every notion it needs with `Definition` or `Inductive`, and end with `Definition " + c's goalName + " : Prop := …` saying exactly what the problem says — no more, no less. Do not prove anything and declare no `Axiom`: a statement asserts nothing. Prefer the prelude's own types (`Nat`, `Int`, `List`) to new ones.".
+    If kind is equal to "prove":
+        Return "## Task\n\nProve `" + c's goalName + "`. Your block may define helper lemmas first; it must contain `Theorem " + proofName + " : " + c's goalName + " := …`.".
+    If kind is equal to "decompose":
+        Return "## Task\n\nDo not prove `" + c's goalName + "` outright. Split it into lemmas, each stated as an `Axiom` with a short comment saying why it should hold, and prove `Theorem " + proofName + " : " + c's goalName + " := …` from them. Each lemma becomes a problem of its own, so make each one smaller and more concrete than the goal.".
+    If kind is equal to "special_case":
+        Return "## Task\n\nState a special case of `" + c's goalName + "` that a computation can settle — the claim for every n up to a bound, a fixed small instance — as `Definition special_goal : Prop := …`, and prove it as `Theorem proof_of_special_goal : special_goal := …`, by `decide` or by computation where you can.".
+    If kind is equal to "counterexample":
+        Return "## Task\n\nLook for a counterexample. If you find one, prove `Not " + c's goalName + "` as `Theorem refutation_of_" + c's goalName + " : Not " + c's goalName + " := …`; if you find none, say so in `Summary:` and give what you checked in `Next:` lines.".
+    If kind is equal to "repair":
+        Return "## Task\n\nThe submission below was refused by the kernel. Fix it so that it checks, keeping what was right. It must still contain `Theorem " + proofName + " : " + c's goalName + " := …`.\n\n```logos-kernel\n" + c's previous + "\n```\n\nThe kernel refused the block\n\n```logos-kernel\n" + c's failedBlock + "\n```\n\nwith\n\n```text\n" + c's diagnostics + "\n```".
+    If kind is equal to "review":
+        Return "## Task\n\nRead the statement document above as mathematics. First, paraphrase `" + c's goalName + "` in plain mathematical English from the document alone. Then compare your paraphrase with the problem as stated and decide whether the document says the same thing: not a special case, not a stronger claim, not a vacuous or trivially true one, with every quantifier and every definition meaning what the problem means.".
+    If kind is equal to "summarize_trail":
+        Return "## Task\n\nSummarize the attempts above for the next attempt: what is established, which approaches failed and why, and the two or three most promising next steps.".
+    Return "## Task\n\nWork on `" + c's goalName + "`.".
+
+## Note
+How the model must answer, for each unit kind. Every vernacular-writing unit
+answers with one `logos-kernel` block; the reviewer answers with one `review`
+block, which `extractReview` reads; the summarizer answers in plain lines.
+
+## To contractText (kind: Text) -> Text:
+    If kind is equal to "review":
+        Return "## Answer\n\nAnswer with exactly one fenced block opened by ```review, holding three lines:\n\n```review\nverdict: faithful | unfaithful | unsure\nparaphrase: <your plain-English reading of the goal>\nissues: <what differs from the problem, or none>\n```".
+    If kind is equal to "summarize_trail":
+        Return "## Answer\n\nAnswer with one line `Summary: …` and up to three lines `Next: …`, and nothing else.".
+    Return "## Answer\n\nAnswer with exactly one fenced block opened by ```logos-kernel and closed by ```. After it, write one line `Summary: …` saying what your attempt does, and `Next: …` lines for what to try if it fails. The rules of a submission in the reference apply.".
+
+## Note
+The user message: every section that has something in it, in a fixed order.
+
+## To userText (kind: Text, c: PromptContext) -> Text:
+    Let mutable parts be a new Seq of Text.
+    Push problemSection(c's problem) to parts.
+    Repeat for section in [statementSection(c), trailSection(c), lemmaSection(c's lemmas), playbookSection(c)]:
+        If section is not equal to "":
+            Push section to parts.
+    Push taskText(kind, c) to parts.
+    Push contractText(kind) to parts.
+    Return join(parts, "\n\n").
+
+## Note
+The prompt for a unit of `kind` in context `c`.
+
+## To buildPrompt (kind: Text, c: PromptContext) -> Prompt:
+    Return a new Prompt with kind kind and system systemText(kind) and user userText(kind, c).
+
+## Note
+A prompt as the request a strategy sends.
+
+## To promptRequest (p: Prompt, s: Strategy) -> ChatRequest:
+    Return a new ChatRequest with model s's model and messages [a new ChatMessage with role "system" and content p's system, a new ChatMessage with role "user" and content p's user] and maxTokens s's maxTokens and temperatureBp s's temperatureBp.
+
+## Note
+What a reviewer answered: its verdict (`faithful`, `unfaithful` or `unsure`), its
+paraphrase and the issues it saw, or why the answer is not a review.
+
+## A Review has:
+    a verdict, which is Text.
+    a paraphrase, which is Text.
+    an issues, which is Text.
+    a problem, which is Text.
+
+## Note
+The review in a reviewer's answer: the one ```review block, its three lines. A
+verdict outside the three words is not a review, so an unclear reviewer can
+never be counted as agreeing.
+
+## To extractReview (answer: Text) -> Review:
+    Let mutable inside be false.
+    Let mutable found be 0.
+    Let mutable verdict be "".
+    Let mutable paraphrase be "".
+    Let mutable issues be "".
+    Repeat for line in lines(answer):
+        If inside:
+            If closesFence(line):
+                Set inside to false.
+            Otherwise:
+                Let t be trim(line).
+                If startsWith(t, "verdict:"):
+                    Set verdict to trim(removePrefix(t, "verdict:")).
+                If startsWith(t, "paraphrase:"):
+                    Set paraphrase to trim(removePrefix(t, "paraphrase:")).
+                If startsWith(t, "issues:"):
+                    Set issues to trim(removePrefix(t, "issues:")).
+        Otherwise:
+            If opensFence(line, "review"):
+                Set inside to true.
+                Set found to found + 1.
+    Let mutable problem be "".
+    If ["faithful", "unfaithful", "unsure"] contains verdict is equal to false:
+        Set problem to "the review's verdict is `{verdict}`, not faithful, unfaithful or unsure".
+    If found is not equal to 1:
+        Set problem to "the answer has {found} ```review blocks; exactly one is required".
+    Return a new Review with verdict verdict and paraphrase paraphrase and issues issues and problem problem.
+
+## Note
+A context for the tests: the fixture statement, an empty trail, no lemmas.
+
+## To sampleContext () -> PromptContext:
+    Return a new PromptContext with problem sampleProblem() and statement fixtureStatement() and goalName "goal" and trailDigest "Trail of op:OP022: 0 entries. No attempt has been made yet." and lemmas [] and playbook "Try induction on the first natural number." and previous "" and diagnostics "" and failedBlock "".
+
+## Test: a prove prompt carries the reference, the statement, the trail and the contract
+
+Let p be buildPrompt("prove", sampleContext()).
+Expect that p's system contains "# The LOGOS kernel vernacular".
+Expect that p's system contains "## The rules of a submission".
+Expect that p's user contains "## The problem".
+Expect that p's user contains fixtureStatement().
+Expect that p's user contains "## What has been tried".
+Expect that p's user contains "## Playbook\n\nTry induction on the first natural number.".
+Expect that p's user contains "Theorem proof_of_goal : goal := …".
+Expect that p's user contains "```logos-kernel and closed by ```".
+
+## Test: the sections come in a fixed order
+
+Let u be (buildPrompt("prove", sampleContext()))'s user.
+Expect that indexOf(u, "## The problem") is less than indexOf(u, "## The statement").
+Expect that indexOf(u, "## The statement") is less than indexOf(u, "## What has been tried").
+Expect that indexOf(u, "## What has been tried") is less than indexOf(u, "## Task").
+Expect that indexOf(u, "## Task") is less than indexOf(u, "## Answer").
+
+## Test: a formalize prompt has no statement yet and asks for one
+
+Let mutable c be sampleContext().
+Set c's statement to "".
+Let u be (buildPrompt("formalize", c))'s user.
+Expect that u contains "## The statement" is equal to false.
+Expect that u contains "Definition goal : Prop := …".
+Expect that u contains "The Lean statement:".
+
+## Test: an informal problem says it has no formal statement
+
+Let mutable c be sampleContext().
+Let mutable p be c's problem.
+Set p's leanStatement to none.
+Set c's problem to p.
+Expect that (buildPrompt("formalize", c))'s user contains "There is no formal statement yet.".
+
+## Test: a repair prompt shows the refused submission, the refused block and the error
+
+Let mutable c be sampleContext().
+Set c's previous to "Theorem proof_of_goal : goal := by intro n; rfl.".
+Set c's failedBlock to "Theorem proof_of_goal : goal := by intro n; rfl.".
+Set c's diagnostics to "Tactic error: step 2 (`rfl`): `rfl` does not apply: Nat_add Zero n and n do not convert".
+Let u be (buildPrompt("repair", c))'s user.
+Expect that u contains "The kernel refused the block".
+Expect that u contains "do not convert".
+Expect that u contains "```logos-kernel\nTheorem proof_of_goal : goal := by intro n; rfl.\n```".
+
+## Test: verified lemmas are listed when there are some
+
+Let mutable c be sampleContext().
+Set c's lemmas to [a new Lemma with id "lemma:1" and name "succ_step" and statement "forall (k : Nat), Eq Nat (Nat_add Zero (Succ k)) (Succ (Nat_add Zero k))" and statementSha "s" and problemId "op:OP022" and documentSha "d" and status "verified" and axioms []].
+Let u be (buildPrompt("prove", c))'s user.
+Expect that u contains "## Verified lemmas".
+Expect that u contains "- `succ_step` (verified): forall (k : Nat)".
+Expect that (buildPrompt("prove", sampleContext()))'s user contains "## Verified lemmas" is equal to false.
+
+## Test: every unit kind that writes vernacular names the theorem or definition it wants
+
+Expect that (buildPrompt("decompose", sampleContext()))'s user contains "stated as an `Axiom`".
+Expect that (buildPrompt("special_case", sampleContext()))'s user contains "Theorem proof_of_special_goal : special_goal".
+Expect that (buildPrompt("counterexample", sampleContext()))'s user contains "Theorem refutation_of_goal : Not goal".
+
+## Test: the reviewer and the summarizer get their own roles and contracts
+
+Let r be buildPrompt("review", sampleContext()).
+Expect that r's system contains "You review formal statements".
+Expect that r's user contains "```review".
+Expect that r's user contains "paraphrase `goal` in plain mathematical English from the document alone".
+Let s be buildPrompt("summarize_trail", sampleContext()).
+Expect that s's user contains "Summary: …".
+Expect that s's system contains "research log".
+
+## Test: a prompt becomes the strategy's request
+
+Let st be a new Strategy with id "s1" and version 1 and parentId none and unitKind "prove" and model "openai/gpt-4o-mini" and temperatureBp 2000 and maxTokens 4096 and playbook "" and contextRules "" and status "incumbent" and createdAt 0.
+Let p be buildPrompt("prove", sampleContext()).
+Let r be promptRequest(p, st).
+Expect that r's model is equal to "openai/gpt-4o-mini".
+Expect that length of r's messages is equal to 2.
+Expect that (item 1 of r's messages)'s role is equal to "system".
+Expect that (item 2 of r's messages)'s content is equal to p's user.
+Expect that r's maxTokens is equal to 4096.
+
+## Test: a model's answer to a prove prompt is read by the submission extractor
+
+Let answer be "```logos-kernel\nTheorem proof_of_goal : goal := by intro n; induction n as [ | k ih]; rfl; rw [ih]; rfl.\n```\nSummary: induction on n.\nNext: prove the successor step separately.".
+Let x be extractSubmission(answer).
+Expect that x's problem is equal to "".
+Expect that submissionProblems(x's block, "proof_of_goal", "goal") is equal to [].
+Expect that x's suggestions is equal to ["prove the successor step separately."].
+
+## Test: a review is read from its block, and a vague one is refused
+
+Let good be extractReview("I read it.\n```review\nverdict: faithful\nparaphrase: every natural n satisfies 0 + n = n\nissues: none\n```").
+Expect that good's problem is equal to "".
+Expect that good's verdict is equal to "faithful".
+Expect that good's paraphrase is equal to "every natural n satisfies 0 + n = n".
+Let vague be extractReview("```review\nverdict: probably fine\n```").
+Expect that vague's problem is equal to "the review's verdict is `probably fine`, not faithful, unfaithful or unsure".
+Let missing be extractReview("verdict: faithful").
+Expect that missing's problem is equal to "the answer has 0 ```review blocks; exactly one is required".

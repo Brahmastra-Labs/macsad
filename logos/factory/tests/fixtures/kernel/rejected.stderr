@@ -1,0 +1,4 @@
+error: rejected.lg: block 4 does not check: Tactic error: step 2 (`rfl`): `rfl` does not apply: Nat_add Zero n and n do not convert
+in the goal
+n : Nat
+⊢ Eq Nat (Nat_add Zero n) n
