@@ -1,0 +1,119 @@
+# Trail record
+
+One entry of a problem's trail, the hash-chained memory every attempt reads
+first. Each `hash` is the SHA-256 of the previous hash and the entry's canonical
+body, so changing, dropping or reordering an entry breaks the chain from there.
+Genesis is sixty-four zeros, as the coordinator's schema enforces.
+
+## A TrailEntry has:
+    a seq, which is Int.
+    a ts, which is Int.
+    a problemId, which is Text.
+    a stage, which is Text.
+    a kind, which is Text.
+    a contributor, which is Text.
+    a model, which is Text.
+    a strategyId, which is Text.
+    a promptSha, which is Text.
+    an approachFingerprint, which is Text.
+    an artifactShas, which is Seq of Text.
+    a verdict, which is Text.
+    an exitCode, which is Int.
+    a diagnostics, which is Text.
+    a costMicros, which is Int.
+    a summary, which is Text.
+    a nextSuggestions, which is Seq of Text.
+    a prevHash, which is Text.
+    a hash, which is Text.
+
+## Note
+The canonical body: every field but the hashes, in order, with `json.lg`'s
+canonical escaping — written out so the chain never changes with the encoder.
+
+## To canonicalTrailBody (e: TrailEntry) -> Text:
+    Let mutable parts be ["\"seq\":{e's seq}", "\"ts\":{e's ts}", "\"problemId\":" + jsonQuote(e's problemId), "\"stage\":" + jsonQuote(e's stage)].
+    Push "\"kind\":" + jsonQuote(e's kind) + ",\"contributor\":" + jsonQuote(e's contributor) + ",\"model\":" + jsonQuote(e's model) to parts.
+    Push "\"strategyId\":" + jsonQuote(e's strategyId) + ",\"promptSha\":" + jsonQuote(e's promptSha) to parts.
+    Push "\"approachFingerprint\":" + jsonQuote(e's approachFingerprint) + ",\"artifactShas\":" + jsonSerialize(textArray(e's artifactShas)) to parts.
+    Push "\"verdict\":" + jsonQuote(e's verdict) + ",\"exitCode\":{e's exitCode},\"diagnostics\":" + jsonQuote(e's diagnostics) to parts.
+    Push "\"costMicros\":{e's costMicros},\"summary\":" + jsonQuote(e's summary) to parts.
+    Push "\"nextSuggestions\":" + jsonSerialize(textArray(e's nextSuggestions)) to parts.
+    Return "{{" + join(parts, ",") + "}}".
+
+## To textArray (xs: Seq of Text) -> Json:
+    Let mutable elems be a new Seq of Json.
+    Repeat for x in xs:
+        Push (a new JStr with s x) to elems.
+    Return a new JArr with elems elems.
+
+## To trailHash (prevHash: Text, e: TrailEntry) -> Text:
+    Return bytesToHex(sha256(text_bytes(prevHash + canonicalTrailBody(e)))).
+
+## To sealEntry (e: TrailEntry, seq: Int, prevHash: Text) -> TrailEntry:
+    Let mutable out be e.
+    Set out's seq to seq.
+    Set out's prevHash to prevHash.
+    Set out's hash to trailHash(prevHash, out).
+    Return out.
+
+## Note
+The trail with `e` sealed onto its end: the trail numbers and chains it.
+
+## To appendToTrail (trail: Seq of TrailEntry, e: TrailEntry) -> Seq of TrailEntry:
+    Let mutable prev be repeatText("0", 64).
+    If length of trail is greater than 0:
+        Set prev to (item (length of trail) of trail)'s hash.
+    Let mutable out be copy of trail.
+    Push sealEntry(e, length of trail + 1, prev) to out.
+    Return out.
+
+## Note
+The first broken link, or the empty text when every link holds.
+
+## To verifyTrail (trail: Seq of TrailEntry) -> Text:
+    Let mutable prev be repeatText("0", 64).
+    Let mutable i be 0.
+    Repeat for e in trail:
+        Set i to i + 1.
+        If e's seq is not equal to i:
+            Return "entry {i}: seq is {e's seq}, expected {i}".
+        If e's problemId is not equal to (item 1 of trail)'s problemId:
+            Return "entry {i}: belongs to {e's problemId}".
+        If e's prevHash is not equal to prev or e's hash is not equal to trailHash(prev, e):
+            Return "entry {i}: does not chain from entry {i - 1}".
+        Set prev to e's hash.
+    Return "".
+
+## Note
+An entry with the fields every attempt has and the rest empty.
+
+## To blankEntry (problemId: Text, kind: Text, verdict: Text, diagnostics: Text) -> TrailEntry:
+    Let mutable e be a new TrailEntry with seq 0 and ts 0 and problemId problemId and stage "in_progress" and kind kind and verdict verdict.
+    Set e's diagnostics to diagnostics.
+    Return e.
+
+## Test: the canonical body is valid JSON that names no hash
+
+Let mutable e be blankEntry("opdp:116", "prove", "rejected", "block 3: `rfl` \"x\"\n").
+Set e's artifactShas to ["d1", "d2"].
+Expect that jsonValid(canonicalTrailBody(e)) is equal to true.
+Expect that canonicalTrailBody(e) contains "\"artifactShas\":[\"d1\",\"d2\"]".
+Expect that jsonHas(jsonParse(canonicalTrailBody(e)), "prevHash") is equal to false.
+
+## Test: appending chains entries and editing one breaks the chain there
+
+Let mutable t be appendToTrail(appendToTrail([], blankEntry("p", "prove", "rejected", "x")), blankEntry("p", "repair", "verified", "")).
+Expect that verifyTrail(t) is equal to "" and (item 2 of t)'s prevHash is equal to (item 1 of t)'s hash.
+Set item 1 of t to blankEntry("p", "prove", "verified", "x").
+Expect that verifyTrail(t) is equal to "entry 1: seq is 0, expected 1".
+
+## Test: a sealed entry edited in any field no longer chains
+
+For all booleans tamper:
+    Let mutable t be appendToTrail([], blankEntry("p", "prove", "rejected", "block 4: x")).
+    Let mutable e be item 1 of t.
+    If tamper:
+        Set e's diagnostics to "it worked, honest".
+    Set item 1 of t to e.
+    Let holds be verifyTrail(t) is equal to "".
+    Expect that holds is equal to (not tamper).

@@ -1,0 +1,111 @@
+# Vernacular command
+
+What a block of kernel vernacular is: its command, its body and its statement,
+and the shape of its proof. A submission may use only the commands that add
+names or ask questions; everything else the vernacular offers — notation, macros,
+fixity, namespaces, sections, `Open`, `Export`, `Structure`, `Quotient`, `Opaque`,
+the literate forms — changes how later text reads, so it is refused rather than
+reasoned about.
+
+## Note
+Whether a block is a comment.
+
+## To isCommentBlock (block: Text) -> Bool:
+    Return startsWith(block, "--") or startsWith(block, "/-").
+
+## Note
+A block's command: its first word after the visibility words the kernel reads
+past; `comment` for a comment and `literate` for the literate forms.
+
+## To commandOf (block: Text) -> Text:
+    If isCommentBlock(block):
+        Return "comment".
+    Let ws be words(block).
+    If startsWith(block, "##") or length of ws is equal to 0:
+        Return "literate".
+    Let mutable i be 1.
+    While i is less than length of ws and ["Local", "Private", "Protected"] contains item i of ws:
+        Set i to i + 1.
+    Let w be item i of ws.
+    If w is equal to "Let" or ((w is equal to "A" or w is equal to "An") and block contains " is either"):
+        Return "literate".
+    Return w.
+
+## Note
+The commands a submission may use, and the fewer a statement may: a statement
+asserts nothing, so it has no `Axiom` and no `Theorem`.
+
+## To submissionCommands () -> Seq of Text:
+    Return ["comment", "Definition", "Theorem", "Axiom", "Inductive", "Check", "Eval", "Print"].
+
+## To statementCommands () -> Seq of Text:
+    Return ["comment", "Definition", "Inductive", "Check", "Eval"].
+
+## Note
+The text after a block's first `:=`, trimmed, without its closing period.
+
+## To bodyOf (block: Text) -> Text:
+    Let parts be splitN(block, ":=", 2).
+    If length of parts is less than 2:
+        Return "".
+    Return removeSuffix(trim(item 2 of parts), ".").
+
+## Note
+The statement between a declaration's name and its `:=`.
+
+## To headTypeOf (block: Text) -> Text:
+    Let parts be splitN(item 1 of splitN(block, ":=", 2), ":", 2).
+    If length of parts is less than 2:
+        Return "".
+    Return trim(item 2 of parts).
+
+## Note
+The steps of a tactic script, each its first word: the SHAPE of a proof with
+every name and term taken out. A proof by a term is the one step `term`.
+
+## To tacticSkeleton (block: Text) -> Seq of Text:
+    Let body be bodyOf(block).
+    Let mutable out be a new Seq of Text.
+    If startsWith(body, "by ") is equal to false:
+        Return ["term"].
+    Repeat for step in split(removePrefix(body, "by "), ";"):
+        If length of words(step) is greater than 0:
+            Push item 1 of words(step) to out.
+    Return out.
+
+## Note
+The theorem a submission must contain to prove the goal `goalName`.
+
+## To proofNameFor (goalName: Text) -> Text:
+    Return "proof_of_" + goalName.
+
+## Test: a block's command is read past visibility words
+
+For each of these cases:
+
+| block                                   | command      |
+|-----------------------------------------|--------------|
+| "Private Definition x : Nat := Zero."   | "Definition" |
+| "Local Notation \"a ++ b\" := (f a b)." | "Notation"   |
+| "-- note"                               | "comment"    |
+| "## Theorem: T"                         | "literate"   |
+| "A Colour is either Red or Blue."       | "literate"   |
+| "Print Axioms t."                       | "Print"      |
+
+Expect that commandOf(block) is equal to command.
+
+## Test: a theorem's statement, body and skeleton are read
+
+Let t be "Theorem p : goal := by intro n; induction n as [ | k ih]; rfl; rw [ih]; rfl.".
+Expect that headTypeOf(t) is equal to "goal".
+Expect that tacticSkeleton(t) is equal to ["intro", "induction", "rfl", "rw", "rfl"].
+Expect that tacticSkeleton("Theorem p : goal := fun (n : Nat) => refl Nat n.") is equal to ["term"].
+Expect that proofNameFor("goal") is equal to "proof_of_goal".
+
+## Test: names and spacing do not change a skeleton
+
+For all booleans spaced:
+    Let mutable t be "Theorem a : goal := by intro m; rfl.".
+    If spaced:
+        Set t to "Theorem b  :  goal :=  by intro z ;  rfl.".
+    Expect that tacticSkeleton(t) is equal to ["intro", "rfl"].

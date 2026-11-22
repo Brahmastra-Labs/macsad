@@ -1,0 +1,118 @@
+# Kernel blocks
+
+A kernel-vernacular document split into blocks exactly as the kernel's document
+door splits it: a comment is a block (`-- …` to its line's end, `/- … -/`
+nested), and a command ends at the first `.` outside a string and outside a
+«quoted name» that is followed by whitespace or the end. So a block number here
+is the block number the kernel reports, and a refused block can be shown back.
+
+## Note
+A document's blocks, or the reason it has none: an unterminated comment, which
+the kernel refuses too.
+
+## A Blocks has:
+    an items, which is Seq of Text.
+    a problem, which is Text.
+
+## Note
+Whether a byte is whitespace, and the byte at a 1-based position (0 past either end).
+
+## To isSpaceByte (b: Int) -> Bool:
+    Return b is equal to 32 or b is equal to 9 or b is equal to 10 or b is equal to 13.
+
+## To byteAt (bs: Seq of Int, i: Int) -> Int:
+    If i is less than 1 or i is greater than length of bs:
+        Return 0.
+    Return item i of bs.
+
+## Note
+The last byte of a block that starts at `i`, or `-1` for a comment never closed.
+
+## To blockEnd (bs: Seq of Int, i: Int) -> Int:
+    Let n be length of bs.
+    Let mutable j be i.
+    If byteAt(bs, i) is equal to 45 and byteAt(bs, i + 1) is equal to 45:
+        While j is less than n and item j of bs is not equal to 10:
+            Set j to j + 1.
+        Return j.
+    Let mutable depth be 0.
+    If byteAt(bs, i) is equal to 47 and byteAt(bs, i + 1) is equal to 45:
+        While j is less than n:
+            Let pair be byteAt(bs, j) * 256 + byteAt(bs, j + 1).
+            If pair is equal to 47 * 256 + 45:
+                Set depth to depth + 1.
+                Set j to j + 1.
+            If pair is equal to 45 * 256 + 47:
+                Set depth to depth - 1.
+                Set j to j + 1.
+                If depth is equal to 0:
+                    Return j.
+            Set j to j + 1.
+        Return 0 - 1.
+    Let mutable mode be 0.
+    While j is at most n:
+        Let b be item j of bs.
+        If mode is equal to 2:
+            Set mode to 1.
+        Otherwise:
+            If mode is equal to 3:
+                If b is equal to 194 and byteAt(bs, j + 1) is equal to 187:
+                    Set mode to 0.
+            Otherwise:
+                If b is equal to 34:
+                    Set mode to 1 - mode.
+                If mode is equal to 1 and b is equal to 92:
+                    Set mode to 2.
+                If mode is equal to 0 and b is equal to 194 and byteAt(bs, j + 1) is equal to 171:
+                    Set mode to 3.
+                If mode is equal to 0 and b is equal to 46 and (j is equal to n or isSpaceByte(byteAt(bs, j + 1))):
+                    Return j.
+        Set j to j + 1.
+    Return n.
+
+## Note
+The blocks of a document, in order, each trimmed.
+
+## To kernelBlocks (doc: Text) -> Blocks:
+    Let bs be text_bytes(doc).
+    Let mutable out be a new Seq of Text.
+    Let mutable i be 1.
+    While i is at most length of bs:
+        If isSpaceByte(item i of bs):
+            Set i to i + 1.
+        Otherwise:
+            Let last be blockEnd(bs, i).
+            If last is less than 0:
+                Return a new Blocks with items out and problem "an unterminated `/-` comment opens block {length of out + 1}".
+            Push trim(text_from_bytes(items i through last of bs)) to out.
+            Set i to last + 1.
+    Return a new Blocks with items out and problem "".
+
+## Note
+The text of block `k` of a document, or the empty text.
+
+## To blockText (doc: Text, k: Int) -> Text:
+    Let blocks be (kernelBlocks(doc))'s items.
+    If k is less than 1 or k is greater than length of blocks:
+        Return "".
+    Return item k of blocks.
+
+## Test: a period inside a name or a string does not end a command
+
+Let blocks be (kernelBlocks("Definition Lean.Eq.rec.{{u}} : Prop := True.\nCheck «a. b».\nEval \"x. y\"."))'s items.
+Expect that blocks is equal to ["Definition Lean.Eq.rec.{{u}} : Prop := True.", "Check «a. b».", "Eval \"x. y\"."].
+
+## Test: comments are blocks, nested ones whole, and an unclosed one is refused
+
+Let ok be kernelBlocks("/- outer /- inner -/ still -/\n-- a note. with a period\nCheck Zero.").
+Expect that ok's items is equal to ["/- outer /- inner -/ still -/", "-- a note. with a period", "Check Zero."].
+Expect that (kernelBlocks("Check Zero.\n/- never closed"))'s problem is equal to "an unterminated `/-` comment opens block 2".
+Expect that blockText("Check Zero.\n\nEval Zero.", 2) is equal to "Eval Zero.".
+
+## Test: an escaped quote does not end a string
+
+For all booleans escaped:
+    Let mutable inner be "x".
+    If escaped:
+        Set inner to "x\\\". y".
+    Expect that length of (kernelBlocks("Eval \"" + inner + "\".\nCheck Zero."))'s items is equal to 2.

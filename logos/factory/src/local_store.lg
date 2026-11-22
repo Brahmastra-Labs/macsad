@@ -1,0 +1,112 @@
+# Local store
+
+Import Conventions from "./conventions.lg".
+Import HostFiles from "./host_files.lg".
+Import ProblemRecord from "./problem_record.lg".
+Import NodeRecord from "./node_record.lg".
+Import WorkRecord from "./work_record.lg".
+Import TrailRecord from "./trail_record.lg".
+Import RecordsDecode from "./records_decode.lg".
+Import LocalSettings from "./local_settings.lg".
+
+A workspace on disk: `statements/<slug>.json` (the accepted statement),
+`problems.jsonl`, `strategy.json`, `trails/<slug>.jsonl` (append-only),
+`attempts/<slug>.jsonl`, `dead-ends/<slug>.txt`, `artifacts/<sha>.txt` (every
+prompt, answer, submission and document under its own hash) and `results/`.
+
+## Note
+A trail read and checked: a trail that does not hold is reported, never read
+past, because every later attempt would build on a record nobody can trust.
+
+## To loadTrail (path: Text) -> Result of Seq of TrailEntry and Text:
+    Let mutable out be a new Seq of TrailEntry.
+    If pathExists(path) is equal to false:
+        Return a new Ok with value out.
+    Inspect readText(path):
+        When Err (e):
+            Return a new Err with error "cannot read the trail: " + e.
+        When Ok (text):
+            Repeat for line in lines(text):
+                If trim(line) is not equal to "":
+                    Inspect readTrailEntry(line):
+                        When Err (e):
+                            Return a new Err with error "trail line {length of out + 1}: " + e.
+                        When Ok (entry):
+                            Push entry to out.
+            If verifyTrail(out) is not equal to "":
+                Return a new Err with error "the trail does not hold: " + verifyTrail(out).
+            Return a new Ok with value out.
+    Return a new Err with error "unreadable trail".
+
+## Note
+A text stored under its own hash, answering the hash.
+
+## To storeArtifact (workspace: Text, content: Text) -> Text:
+    Let sha be sha256Hex(content).
+    Let made be ensureDir(workspace + "/artifacts").
+    If pathExists(workspace + "/artifacts/" + sha + ".txt") is equal to false:
+        Let written be writeText(workspace + "/artifacts/" + sha + ".txt", content).
+    Return sha.
+
+## Note
+The artifact an entry names under `kind` (`submission:<sha>`), or the empty text.
+
+## To artifactOf (workspace: Text, e: TrailEntry, kind: Text) -> Text:
+    Repeat for a in e's artifactShas:
+        If startsWith(a, kind + ":"):
+            Inspect readText(workspace + "/artifacts/" + removePrefix(a, kind + ":") + ".txt"):
+                When Ok (t):
+                    Return t.
+                When Err (e2):
+                    Return "".
+    Return "".
+
+## Note
+A problem's accepted statement, held to its own hash.
+
+## To loadStatement (workspace: Text, problemId: Text) -> Result of Statement and Text:
+    Let path be workspace + "/statements/" + slugOf(problemId) + ".json".
+    Inspect readText(path):
+        When Err (e):
+            Return a new Err with error "no statement for {problemId} at {path}: " + e.
+        When Ok (text):
+            Inspect fromJson_Statement(trim(text)):
+                When Err (e):
+                    Return a new Err with error "the statement at {path} is not a Statement: " + e.
+                When Ok (st):
+                    If st's problemId is not equal to problemId or sha256Hex(st's document) is not equal to st's sha256:
+                        Return a new Err with error "the statement at {path} is not {problemId}'s, or does not hash to itself".
+                    If st's reviewState is not equal to "accepted":
+                        Return a new Err with error "the statement at {path} is {st's reviewState}, not accepted".
+                    Return a new Ok with value st.
+    Return a new Err with error "unreadable statement".
+
+## Note
+The problem from `problems.jsonl`, else what its id alone says; the strategy
+from `strategy.json`, else the default.
+
+## To loadProblem (workspace: Text, problemId: Text) -> Problem:
+    Inspect readText(workspace + "/problems.jsonl"):
+        When Ok (text):
+            Repeat for line in lines(text):
+                If line contains "\"id\":" + jsonQuote(problemId):
+                    Inspect fromJson_Problem(line):
+                        When Ok (p):
+                            Return p.
+                        When Err (e):
+                            Let ignored be e.
+        When Err (e):
+            Let ignored be e.
+    Return bareProblem(problemId, problemId, "local").
+
+## To loadStrategy (workspace: Text) -> Strategy:
+    Inspect readText(workspace + "/strategy.json"):
+        When Ok (text):
+            Inspect fromJson_Strategy(trim(text)):
+                When Ok (s):
+                    Return s.
+                When Err (e):
+                    Return defaultStrategy().
+        When Err (e):
+            Return defaultStrategy().
+    Return defaultStrategy().

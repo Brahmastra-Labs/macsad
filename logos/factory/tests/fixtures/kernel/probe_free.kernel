@@ -1,0 +1,7 @@
+/-! # Statement: zero is a left identity of addition on Nat
+
+Route C. A proof must establish `goal`. -/
+
+Definition goal : Prop := forall (n : Nat), Eq Nat (Nat_add Zero n) n.
+
+Check succ_step.

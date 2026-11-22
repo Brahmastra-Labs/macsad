@@ -1,0 +1,99 @@
+# Ref prose
+
+The prose of the kernel reference: how a document is shaped, what the prelude
+offers, the closed list of tactics, and the rules of a submission in the words
+`submission_policy.lg` enforces them. Every prelude name it promises is bound,
+which `factory selftest --live` checks against the kernel.
+
+## Note
+The opening: the shape of a document, the commands and the terms.
+
+## To referenceIntro () -> Text:
+    Let mutable out be a new Seq of Text.
+    Push "# The LOGOS kernel vernacular" to out.
+    Push "" to out.
+    Push "A document is a sequence of commands. Every command ends with a period followed by whitespace or the" to out.
+    Push "end. Prose goes in comments only: `-- to the end of the line`, `/- a block -/`, `/-- a doc comment" to out.
+    Push "-/`, `/-! a module comment -/`. There is no Markdown outside comments." to out.
+    Push "" to out.
+    Push "Commands: `Definition name : Type := term.` · `Theorem name : Prop := proof.` (a term, or `by` and a" to out.
+    Push "script) · `Axiom name : Type.` (an ASSUMPTION — see the rules) · `Inductive Name : arity := c1 : t1" to out.
+    Push "| c2 : t2.` · `Check term.` · `Eval term.` · `Print Axioms name.`" to out.
+    Push "" to out.
+    Push "Terms: `forall (x : A), P` · `fun (x : A) => t` · `A -> B` · application by juxtaposition, `f a b` ·" to out.
+    Push "`Prop` and `Type` · `match t return (fun (x : T) => R) with case1 | case2 end` (one case per" to out.
+    Push "constructor, in order, each constructor argument a `fun`) · `fix f => fun (x : A) => …` for" to out.
+    Push "recursion. Arrows associate to the right, so write the parentheses of `(A -> B) -> C`." to out.
+    Return join(out, "\n").
+
+## Note
+The opening of the tactic section: the closed list of steps.
+
+## To tacticsIntro () -> Text:
+    Let mutable out be a new Seq of Text.
+    Push "## Tactics" to out.
+    Push "" to out.
+    Push "A script is `by` and steps separated by `;`. The steps are exactly: `intro`, `exact`, `apply`," to out.
+    Push "`refine`, `assumption`, `exfalso`, `constructor`, `left`, `right`, `exists`, `have`, `rfl`," to out.
+    Push "`change`, `rw`, `subst`, `injection`, `calc`, `cc`, `decide`, `simp`, `induction`, `cases`. Each" to out.
+    Push "step works on the first open goal, and the script must close every goal." to out.
+    Return join(out, "\n").
+
+## Note
+The rules of a submission, as the factory enforces them.
+
+## To submissionRules () -> Text:
+    Let mutable out be a new Seq of Text.
+    Push "## The rules of a submission" to out.
+    Push "" to out.
+    Push "- Answer with exactly one fenced block opened by ```logos-kernel and closed by ```. Outside it, you" to out.
+    Push "  may write `Summary: …` (one line about your attempt) and `Next: …` lines (what the next attempt" to out.
+    Push "  should try)." to out.
+    Push "- The block is checked after the statement document, which defines the goal. Prove it as `Theorem" to out.
+    Push "  proof_of_<goal> : <goal> := …`, with the type written exactly as the goal's name." to out.
+    Push "- You may use only `Definition`, `Theorem`, `Axiom`, `Inductive`, `Check`, `Eval`, `Print Axioms`" to out.
+    Push "  and comments. No `Notation`, `Macro`, `Open`, `Namespace`, `Section`, `Structure` or literate `##`" to out.
+    Push "  forms." to out.
+    Push "- Every name you declare must be new: you may not redefine a prelude name or anything in the" to out.
+    Push "  statement." to out.
+    Push "- A proof that rests on an `Axiom` you declare is recorded as progress modulo that axiom, never as a" to out.
+    Push "  proof. Only `propext`, `Quot_sound` and `Classical_choice` are allowed underneath an accepted" to out.
+    Push "  proof." to out.
+    Return join(out, "\n").
+
+## Note
+The prelude names the reference promises, with their types written with every
+parenthesis (the kernel prints arrows in an argument without them, issue 3).
+
+## To preludeTable () -> Seq of Text:
+    Let mutable out be a new Seq of Text.
+    Push "Nat : Type, with Zero : Nat and Succ : Nat -> Nat" to out.
+    Push "Nat_add, Nat_sub, Nat_mul, Nat_pow : Nat -> Nat -> Nat (Nat_add recurses on its second argument; Nat_sub stops at Zero)" to out.
+    Push "Nat_le, Nat_lt : Nat -> Nat -> Prop, and natLe : Nat -> Nat -> Bool" to out.
+    Push "Bool : Type, with true and false" to out.
+    Push "True : Prop, with I : True; False : Prop, with no constructor" to out.
+    Push "Not : Prop -> Prop, where Not P is P -> False" to out.
+    Push "And : Prop -> Prop -> Prop, with conj : forall (P Q : Prop), P -> Q -> And P Q" to out.
+    Push "Or : Prop -> Prop -> Prop, with left : forall (P Q : Prop), P -> Or P Q and right : forall (P Q : Prop), Q -> Or P Q" to out.
+    Push "Iff : Prop -> Prop -> Prop" to out.
+    Push "Ex : forall (A : Type), (A -> Prop) -> Prop, with witness : forall (A : Type) (P : A -> Prop) (x : A), P x -> Ex A P" to out.
+    Push "Eq : forall (A : Type), A -> A -> Prop, with refl : forall (A : Type) (x : A), Eq A x x" to out.
+    Push "Eq_sym : forall (A : Type) (x y : A), Eq A x y -> Eq A y x; Eq_trans : forall (A : Type) (x y z : A), Eq A x y -> Eq A y z -> Eq A x z" to out.
+    Push "Int : Type, with add, sub, mul, div, mod : Int -> Int -> Int and the laws add_comm, add_assoc, add_zero, mul_comm, mul_assoc, mul_one, mul_distrib_add" to out.
+    Push "List : Type -> Type, with nil : forall (A : Type), List A and cons : forall (A : Type), A -> List A -> List A" to out.
+    Push "Option, Prod (with Prod_mk) and Fin : Nat -> Type" to out.
+    Push "propext : forall (p q : Prop), Iff p q -> Eq Prop p q; Classical_em : forall (P : Prop), Or P (Not P); Classical_choice : forall (A : Type), Nonempty A -> A" to out.
+    Return out.
+
+## Note
+The names the prelude table promises, each checked to be bound.
+
+## To referenceNames () -> Seq of Text:
+    Let mutable out be a new Seq of Text.
+    Set out to out + ["Nat", "Zero", "Succ", "Nat_add", "Nat_sub", "Nat_mul", "Nat_pow", "Nat_le", "Nat_lt", "natLe"].
+    Set out to out + ["Bool", "true", "false", "True", "I", "False", "Not", "And", "conj", "Or"].
+    Set out to out + ["left", "right", "Iff", "Ex", "witness", "Eq", "refl", "Eq_sym", "Eq_trans", "Int"].
+    Set out to out + ["add", "sub", "mul", "div", "mod", "add_comm", "add_assoc", "add_zero", "mul_comm", "mul_assoc"].
+    Set out to out + ["mul_one", "mul_distrib_add", "le_refl", "le_trans", "List", "nil", "cons", "Option", "Prod", "Prod_mk"].
+    Set out to out + ["Fin", "propext", "Classical_em", "Classical_choice", "Nonempty"].
+    Return out.

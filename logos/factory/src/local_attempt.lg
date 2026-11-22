@@ -1,0 +1,99 @@
+# Local attempt
+
+Import Conventions from "./conventions.lg".
+Import HostFiles from "./host_files.lg".
+Import HostTools from "./host_tools.lg".
+Import NodeRecord from "./node_record.lg".
+Import WorkRecord from "./work_record.lg".
+Import VerdictRecord from "./verdict_record.lg".
+Import TrailRecord from "./trail_record.lg".
+Import TrailMemory from "./trail_memory.lg".
+Import AttemptRecord from "./attempt_record.lg".
+Import Extraction from "./extraction.lg".
+Import VernacularCommand from "./vernacular_command.lg".
+Import SubmissionPolicy from "./submission_policy.lg".
+Import Verifier from "./verifier.lg".
+Import LocalStore from "./local_store.lg".
+
+What one answer comes to: the submission taken out of it, the approach it takes,
+the kernel's verdict — skipped when the same approach already failed on this
+statement — and every artifact stored under its hash.
+
+## A Judged has:
+    a verdict, which is Verdict.
+    a fingerprint, which is Text.
+    a documentSha, which is Text.
+    an artifacts, which is Seq of Text.
+    an extraction, which is Extraction.
+
+## To judgeAnswer (workspace: Text, statement: Statement, kind: Text, strategyId: Text, trail: Seq of TrailEntry, content: Text) -> Judged:
+    Let x be extractSubmission(content).
+    Let mutable j be a new Judged with verdict refusedSubmissionVerdict([x's problem]) and fingerprint "" and documentSha "" and artifacts [] and extraction x.
+    Set j's fingerprint to approachFingerprint(kind, statement's sha256, strategyId, "no-submission").
+    If x's problem is not equal to "":
+        Return j.
+    Set j's fingerprint to approachFingerprint(kind, statement's sha256, strategyId, submissionSkeleton(x's block)).
+    Let document be assembleProofDocument(statement's document, x's block, proofNameFor(statement's goalName)).
+    Set j's documentSha to storeArtifact(workspace, document).
+    Set j's artifacts to ["submission:" + storeArtifact(workspace, x's block), "document:" + j's documentSha].
+    If fingerprintFailed(trail, j's fingerprint):
+        Set j's verdict to refusedSubmissionVerdict(["this approach already failed on this statement (fingerprint " + j's fingerprint + ")"]).
+        Return j.
+    Set j's verdict to judgeSubmission(defaultToolchain(), statement's document, statement's goalName, x's block).
+    Return j.
+
+## Note
+The diagnostics a trail entry records: the refused block and the kernel's error
+(or the refusal), then the policy's reason.
+
+## To verdictDiagnostics (v: Verdict) -> Text:
+    If v's kind is equal to "verified":
+        Return "".
+    If v's block is greater than 0:
+        Return "block {v's block}: " + v's error + "\n" + v's detail.
+    Return v's error + "\n" + v's detail.
+
+## Note
+The exit code an entry records: 0 the kernel checked, 1 refused, 2 infrastructure.
+
+## To verdictExit (v: Verdict) -> Int:
+    If v's kind is equal to "verified" or v's kind is equal to "admitted_axiom":
+        Return 0.
+    If v's kind is equal to "rejected":
+        Return 1.
+    Return 2.
+
+## Note
+The trail entry an attempt adds.
+
+## To attemptEntry (e: TrailEntry, j: Judged, costMicros: Int, promptArtifacts: Seq of Text) -> TrailEntry:
+    Let mutable out be e.
+    Set out's approachFingerprint to j's fingerprint.
+    Set out's artifactShas to promptArtifacts + j's artifacts.
+    Set out's verdict to j's verdict's kind.
+    Set out's exitCode to verdictExit(j's verdict).
+    Set out's diagnostics to verdictDiagnostics(j's verdict).
+    Set out's costMicros to costMicros.
+    Set out's summary to j's extraction's summary.
+    Set out's nextSuggestions to j's extraction's suggestions.
+    Return out.
+
+## Note
+Everything an attempt writes: its trail line, its attempt line, the dead end of a
+refused approach, and a verified proof with its verdict in the results.
+
+## To recordAttempt (workspace: Text, resultsDir: Text, entry: TrailEntry, attempt: Attempt, j: Judged) -> Text:
+    Let slug be slugOf(entry's problemId).
+    Let a be appendLine(workspace + "/trails", slug + ".jsonl", toJson_TrailEntry(entry)).
+    Let b be appendLine(workspace + "/attempts", slug + ".jsonl", toJson_Attempt(attempt)).
+    If j's verdict's kind is equal to "rejected" and j's extraction's problem is equal to "":
+        Let c be appendLine(workspace + "/dead-ends", slug + ".txt", j's fingerprint).
+    If j's verdict's kind is equal to "verified":
+        Let made be ensureDir(resultsDir + "/" + slug).
+        Inspect readText(workspace + "/artifacts/" + j's documentSha + ".txt"):
+            When Ok (doc):
+                Let d be writeAtomically(resultsDir + "/" + slug + "/" + j's documentSha + ".kernel", doc).
+            When Err (e):
+                Return "the verified document is missing: " + e.
+        Let v be writeAtomically(resultsDir + "/" + slug + "/" + j's documentSha + ".verdict.json", toJson_Verdict(j's verdict)).
+    Return "".

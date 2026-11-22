@@ -1,0 +1,108 @@
+# Atlas ingest
+
+Import Conventions from "./conventions.lg".
+Import HostFiles from "./host_files.lg".
+Import WireRead from "./wire_read.lg".
+Import ProblemRecord from "./problem_record.lg".
+Import NodeRecord from "./node_record.lg".
+Import AtlasScan from "./atlas_scan.lg".
+Import OpdpRow from "./opdp_row.lg".
+Import AtlasGraph from "./atlas_graph.lg".
+
+A release streamed from its chunk files into an output directory:
+`problems.jsonl` (one problem a line), `nodes.jsonl` (the graph above the
+problems first, then a node a problem) and `records.jsonl` (each atlas record as
+one compact line — the release pre-split, readable record by record). A chunk's
+records are projected and appended and dropped before the next chunk is read.
+A record that does not project is counted and the first one named.
+
+## An AtlasSummary has:
+    a cohort, which is Text.
+    a declared, which is Int.
+    a scanned, which is Int.
+    a written, which is Int.
+    a refused, which is Int.
+    a firstRefusal, which is Text.
+    a bytes, which is Int.
+    a elapsedMs, which is Int.
+
+## Note
+The corpus a release's header names and how many records it declares.
+
+## To atlasHeader (st: AtlasScan) -> (Text, Int):
+    Inspect parseStrict(text_from_bytes(st's headerBytes)):
+        When Ok (v):
+            Let mutable declared be 0 - 1.
+            Inspect jsonPath(v, "summary.records_total"):
+                When JNum (n):
+                    Set declared to n.
+                Otherwise:
+                    Set declared to 0 - 1.
+            Return (textAt(jsonGet(v, "dataset_snapshot"), "name"), declared).
+        When Err (e):
+            Return ("", 0 - 1).
+    Return ("", 0 - 1).
+
+## Note
+One chunk's records projected and appended; the summary and graph after them.
+
+## To ingestRecords (records: Seq of Text, out: Text, s: AtlasSummary, g: AtlasGraph) -> (AtlasSummary, AtlasGraph):
+    Let mutable summary be s.
+    Let mutable graph be g.
+    Let mutable problems be a new Seq of Text.
+    Let mutable leaves be a new Seq of Text.
+    Repeat for text in records:
+        Inspect opdpRowOf(text, s's cohort):
+            When Err (e):
+                If summary's refused is equal to 0:
+                    Set summary's firstRefusal to "record {summary's written + 1}: " + e.
+                Set summary's refused to summary's refused + 1.
+            When Ok (row):
+                Push toJson_Problem(row's problem) to problems.
+                Push toJson_Node(rowNode(row)) to leaves.
+                Set graph to graphWithRow(graph, row).
+                Set summary's written to summary's written + 1.
+    If length of records is greater than 0:
+        Let a be appendText(out + "/problems.jsonl", join(problems, "\n") + "\n").
+        Let b be appendText(out + "/problem-nodes.jsonl", join(leaves, "\n") + "\n").
+        Let c be appendText(out + "/records.jsonl", join(records, "\n") + "\n").
+    Return (summary, graph).
+
+## Note
+A release from its chunk files, in order.
+
+## To ingestAtlasChunks (chunkPaths: Seq of Text, out: Text, defaultCohort: Text) -> Result of AtlasSummary and Text:
+    Let made be ensureDir(out).
+    Repeat for name in ["problems.jsonl", "problem-nodes.jsonl", "records.jsonl"]:
+        Let cleared be writeText(out + "/" + name, "").
+    Let started be clockMs().
+    Let mutable st be newAtlasScan().
+    Let mutable g be newAtlasGraph().
+    Let mutable s be a new AtlasSummary with cohort defaultCohort and declared 0 and scanned 0 and written 0 and refused 0 and firstRefusal "" and bytes 0 and elapsedMs 0.
+    Repeat for path in chunkPaths:
+        Inspect readText(path):
+            When Err (e):
+                Return a new Err with error "cannot read {path}: " + e.
+            When Ok (chunkText):
+                Let piece be text_bytes(chunkText).
+                Set s's bytes to s's bytes + length of piece.
+                Set st to scanChunk(st, piece).
+                Let (s2, g2) be ingestRecords(st's records, out, s, g).
+                Set s to s2.
+                Set g to g2.
+                Set st's records to [].
+    If scanComplete(st) is equal to false:
+        Return a new Err with error "the atlas ends inside a value".
+    Let (named, declared) be atlasHeader(st).
+    Set s's declared to declared.
+    Set s's scanned to st's count.
+    Let mutable aggregate be a new Seq of Text.
+    Repeat for node in graphNodes(g):
+        Push toJson_Node(node) to aggregate.
+    Inspect readText(out + "/problem-nodes.jsonl"):
+        When Ok (leaves):
+            Let written be writeText(out + "/nodes.jsonl", join(aggregate, "\n") + "\n" + leaves).
+        When Err (e):
+            Return a new Err with error e.
+    Set s's elapsedMs to clockMs() - started.
+    Return a new Ok with value s.

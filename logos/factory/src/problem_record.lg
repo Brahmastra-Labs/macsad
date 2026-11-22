@@ -1,0 +1,102 @@
+# Problem record
+
+A problem, from any source, under one identity, as the wire carries it. The JSON
+is derived from this block (`toJson_Problem`, `fromJson_Problem`), so the wire is
+a contract nobody writes a serializer for.
+
+`id` names the problem across the factory: `opdp:116` for atlas record 116,
+`op:OP001` for formalization-lab statement OP001, `fc:ErdosProblems/10` for a
+formal-conjectures file. `cohort`, `collection` and `category` place it in the
+atlas graph. The Lean fields are `none` for an informal problem, never an empty
+text pretending to be a statement. `externalKey` is the source's own identity and
+`crossRef` a source-independent handle (`erdos:10`) the link stage joins on.
+
+## A Problem has:
+    an id, which is Text.
+    a title, which is Text.
+    a source, which is Text.
+    a cohort, which is Text.
+    a collection, which is Text.
+    a category, which is Text.
+    a statementInformal, which is Text.
+    a leanStatement, which is Option of Text.
+    a leanModule, which is Option of Text.
+    a leanDeclaration, which is Option of Text.
+    an externalKey, which is Option of Text.
+    a crossRef, which is Option of Text.
+    a status, which is Text.
+
+## Note
+A problem's status as the coordinator records it, whatever words its source
+uses: open, `solved_upstream`, `ill_posed`, `disputed`, or `unknown` — never a guess.
+
+## To problemStatus (sourceStatus: Text) -> Text:
+    If ["open", "source-reported-open", "partially_solved", "source_claimed_open", "status_unclear"] contains sourceStatus:
+        Return "open".
+    If sourceStatus is equal to "solved":
+        Return "solved_upstream".
+    If sourceStatus is equal to "ill_posed" or sourceStatus is equal to "disputed":
+        Return sourceStatus.
+    Return "unknown".
+
+## Note
+A problem with only an identity and a title, for sources that know no more.
+
+## To bareProblem (id: Text, title: Text, source: Text) -> Problem:
+    Let mutable p be a new Problem with id id and title title and source source and cohort source and collection source and category "miscellaneous".
+    Set p's statementInformal to "".
+    Set p's leanStatement to none.
+    Set p's leanModule to none.
+    Set p's leanDeclaration to none.
+    Set p's externalKey to none.
+    Set p's crossRef to none.
+    Set p's status to "open".
+    Return p.
+
+## Note
+A formalization-lab problem with every field filled, for the tests.
+
+## To sampleProblem () -> Problem:
+    Let mutable p be bareProblem("op:OP022", "ErdosProblems / 10", "formalization-lab").
+    Set p's cohort to "formalization-lab-200".
+    Set p's collection to "ErdosProblems".
+    Set p's category to "number-theory".
+    Set p's leanStatement to some "theorem erdos_10 : True".
+    Set p's leanModule to some "FormalConjectures.ErdosProblems.«10»".
+    Set p's leanDeclaration to some "Erdos10.erdos_10".
+    Set p's externalKey to some "fc:ErdosProblems/10".
+    Set p's crossRef to some "erdos:10".
+    Return p.
+
+## Test: a problem round-trips through its derived codec
+
+Let p be sampleProblem().
+Expect that fromJson_Problem(toJson_Problem(p)) is equal to a new Ok with value p.
+
+## Test: an absent Lean statement travels as null, not as an empty text
+
+Let p be bareProblem("opdp:116", "Gowers Box Norms", "opdp").
+Expect that toJson_Problem(p) contains "\"leanStatement\":null".
+Expect that fromJson_Problem(toJson_Problem(p)) is equal to a new Ok with value p.
+
+## Test: source statuses map onto the coordinator's five
+
+For each of these cases:
+
+| source                 | status            |
+|------------------------|-------------------|
+| "source-reported-open" | "open"            |
+| "partially_solved"     | "open"            |
+| "solved"               | "solved_upstream" |
+| "ill_posed"            | "ill_posed"       |
+| "whatever"             | "unknown"         |
+
+Expect that problemStatus(source) is equal to status.
+
+## Test: a status is one of the coordinator's words whatever the source says
+
+For all booleans solved:
+    Let mutable said be "open".
+    If solved:
+        Set said to "solved".
+    Expect that ["open", "solved_upstream", "ill_posed", "disputed", "unknown"] contains problemStatus(said) is equal to true.

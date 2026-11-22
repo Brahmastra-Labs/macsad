@@ -1,0 +1,100 @@
+# Chat request
+
+The one door to a model: an OpenAI-shaped chat-completions request through
+OpenRouter, paid for from the contributor's own key. Building it is pure; the
+call is made by `host_tools.lg`, the only place the key is read, and the key goes
+into one request header and nowhere else.
+
+## Note
+One message — `system`, `user` or `assistant` — and what is asked of a model;
+`temperatureBp` is the temperature in basis points (2,000 is 0.2).
+
+## A ChatMessage has:
+    a role, which is Text.
+    a content, which is Text.
+
+## A ChatRequest has:
+    a model, which is Text.
+    a messages, which is Seq of ChatMessage.
+    a maxTokens, which is Int.
+    a temperatureBp, which is Int.
+
+## Note
+Where requests and the price list (which needs no key) are.
+
+## To chatCompletionsUrl () -> Text:
+    Return "https://openrouter.ai/api/v1/chat/completions".
+
+## To modelsUrl () -> Text:
+    Return "https://openrouter.ai/api/v1/models".
+
+## Note
+The headers: the key as a bearer token, and OpenRouter's two attribution headers.
+
+## To openRouterHeaders (apiKey: Text) -> Map of Text to Text:
+    Let mutable h be a new Map of Text to Text.
+    Set h at "Authorization" to "Bearer " + apiKey.
+    Set h at "Content-Type" to "application/json".
+    Set h at "HTTP-Referer" to "https://macsad.com".
+    Set h at "X-Title" to "MaCSad factory".
+    Return h.
+
+## Note
+Basis points as the exact JSON decimal they stand for: `2000` is `0.2`.
+
+## To bpDecimal (bp: Int) -> Json:
+    If bp % 10000 is equal to 0:
+        Return a new JNum with n (bp / 10000).
+    Let mutable m be bp.
+    Let mutable sc be 0 - 4.
+    While m % 10 is equal to 0:
+        Set m to m / 10.
+        Set sc to sc + 1.
+    Return a new JDec with mant m and scale sc.
+
+## Note
+The request body, in a fixed order and canonical form, so the prompt hash over it
+is the same on every machine. `usage.include` asks for the call's cost.
+
+## To chatRequestJson (r: ChatRequest) -> Text:
+    Let mutable msgs be a new Seq of Json.
+    Repeat for m in r's messages:
+        Push (a new JObj with entries [a new JEntry with key "role" and val (a new JStr with s m's role), a new JEntry with key "content" and val (a new JStr with s m's content)]) to msgs.
+    Let usage be a new JObj with entries [a new JEntry with key "include" and val (a new JBool with b true)].
+    Let head be [a new JEntry with key "model" and val (a new JStr with s r's model), a new JEntry with key "messages" and val (a new JArr with elems msgs)].
+    Let tail be [a new JEntry with key "max_tokens" and val (a new JNum with n r's maxTokens), a new JEntry with key "temperature" and val bpDecimal(r's temperatureBp)].
+    Return jsonSerialize(a new JObj with entries (head + tail + [a new JEntry with key "usage" and val usage])).
+
+## Note
+The prompt hash: the SHA-256 of the exact body. Two calls with one hash asked one
+model one thing, which is what replay recordings are keyed by.
+
+## To promptSha (r: ChatRequest) -> Text:
+    Return bytesToHex(sha256(text_bytes(chatRequestJson(r)))).
+
+## Note
+A request for the tests.
+
+## To sampleRequest () -> ChatRequest:
+    Let system be a new ChatMessage with role "system" and content "You write LOGOS kernel proofs.".
+    Return a new ChatRequest with model "openai/gpt-4o-mini" and messages [system, a new ChatMessage with role "user" and content "Prove goal."] and maxTokens 1000 and temperatureBp 2000.
+
+## Test: a request body is canonical JSON in a fixed order
+
+Let body be "{{\"model\":\"openai/gpt-4o-mini\",\"messages\":[{{\"role\":\"system\",\"content\":\"You write LOGOS kernel proofs.\"}},{{\"role\":\"user\",\"content\":\"Prove goal.\"}}],".
+Expect that chatRequestJson(sampleRequest()) is equal to body + "\"max_tokens\":1000,\"temperature\":0.2,\"usage\":{{\"include\":true}}}}".
+
+## Test: temperatures are exact decimals and the key stays in its header
+
+Expect that jsonSerialize(bpDecimal(15)) is equal to "0.0015".
+Expect that jsonSerialize(bpDecimal(12500)) is equal to "1.25".
+Expect that item "Authorization" of openRouterHeaders("sk-or-test") is equal to "Bearer sk-or-test".
+Expect that chatRequestJson(sampleRequest()) contains "sk-or" is equal to false.
+
+## Test: a different temperature is a different prompt
+
+For all booleans hotter:
+    Let mutable r be sampleRequest().
+    If hotter:
+        Set r's temperatureBp to 9000.
+    Expect that (promptSha(r) is equal to promptSha(sampleRequest())) is equal to (not hotter).

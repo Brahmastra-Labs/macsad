@@ -1,0 +1,85 @@
+# Chat reply
+
+Import WireShape from "./wire_shape.lg".
+Import WireRead from "./wire_read.lg".
+Import WireNumber from "./wire_number.lg".
+
+What a model answered, read: the first choice's text and finish reason, the
+reported token counts, and the reported cost in dollars rounded up to a
+micro-dollar. An OpenRouter error document is an error, with its code.
+
+## Note
+`costMicros` is OpenRouter's own reported cost when the reply carries one;
+`usageKnown` says whether the reply reported its token counts at all.
+
+## A ChatReply has:
+    an id, which is Text.
+    a model, which is Text.
+    a content, which is Text.
+    a finishReason, which is Text.
+    a usageKnown, which is Bool.
+    a promptTokens, which is Int.
+    a completionTokens, which is Int.
+    a costMicros, which is Option of Int.
+
+## Note
+The message of an error document, or the empty text.
+
+## To errorOfReply (v: Json) -> Text:
+    If jsonHas(v, "error") is equal to false:
+        Return "".
+    Let e be jsonGet(v, "error").
+    Inspect jsonGet(e, "code"):
+        When JNum (code):
+            Return "OpenRouter error {code}: " + textAt(e, "message").
+        Otherwise:
+            Return "OpenRouter error: " + textAt(e, "message").
+    Return "OpenRouter error".
+
+## Note
+The first choice's content and finish reason, or why there is none.
+
+## To firstChoice (v: Json) -> Result of (Text, Text) and Text:
+    Inspect jsonGet(v, "choices"):
+        When JArr (choices):
+            If length of choices is equal to 0:
+                Return a new Err with error "the reply has no choices".
+            Let first be item 1 of choices.
+            Inspect jsonGet(jsonGet(first, "message"), "content"):
+                When JStr (s):
+                    Return a new Ok with value (s, textAt(first, "finish_reason")).
+                Otherwise:
+                    Return a new Err with error "the first choice has no text content".
+        Otherwise:
+            Return a new Err with error "the reply has no choices".
+    Return a new Err with error "the reply has no choices".
+
+## Note
+A reply's text, read.
+
+## To parseChatReply (text: Text) -> Result of ChatReply and Text:
+    Inspect parseStrict(text):
+        When Err (e):
+            Return a new Err with error "the reply is not JSON: " + e.
+        When Ok (v):
+            If errorOfReply(v) is not equal to "":
+                Return a new Err with error errorOfReply(v).
+            Inspect firstChoice(v):
+                When Err (e):
+                    Return a new Err with error e.
+                When Ok (choice):
+                    Let (content, finish) be choice.
+                    Let usage be jsonGet(v, "usage").
+                    Let mutable reply be a new ChatReply with id textAt(v, "id") and model textAt(v, "model") and content content and finishReason finish.
+                    Set reply's usageKnown to openShapeProblem(usage, ["prompt_tokens:int", "completion_tokens:int"]) is equal to "".
+                    Set reply's promptTokens to intAt(usage, "prompt_tokens").
+                    Set reply's completionTokens to intAt(usage, "completion_tokens").
+                    Set reply's costMicros to none.
+                    If jsonHas(usage, "cost"):
+                        Inspect jsonScaledCeil(jsonGet(usage, "cost"), 6):
+                            When Ok (micros):
+                                Set reply's costMicros to some micros.
+                            When Err (e):
+                                Return a new Err with error "the reply's cost is unreadable: " + e.
+                    Return a new Ok with value reply.
+    Return a new Err with error "unreadable reply".

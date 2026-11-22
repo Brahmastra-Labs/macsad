@@ -1,0 +1,89 @@
+# Verifier
+
+Import HostTools from "./host_tools.lg".
+Import VernacularCommand from "./vernacular_command.lg".
+Import SubmissionPolicy from "./submission_policy.lg".
+Import VerdictRecord from "./verdict_record.lg".
+Import KernelReport from "./kernel_report.lg".
+Import KernelVerdict from "./kernel_verdict.lg".
+
+The judgement of a submission, start to finish, cheapest first: read it, probe
+every name it declares, check the assembled document with the kernel, apply the
+acceptance policy. A worker runs this to learn how its attempt went; the trusted
+verifier runs the same function on its own pinned toolchain before anything is
+recorded as proved, so the two disagree only if their toolchains do.
+
+## Note
+What each name's probe found: the preamble then `Check <name>.`, run by the kernel.
+
+## To probeNames (tc: Toolchain, preamble: Text, names: Seq of Text) -> Result of Seq of Text and Text:
+    Let mutable out be a new Seq of Text.
+    Repeat for name in names:
+        Inspect kernelRun(tc, nameProbeDocument(preamble, name)):
+            When Err (e):
+                Return a new Err with error e.
+            When Ok (run):
+                If run's timedOut:
+                    Push "unknown" to out.
+                Otherwise:
+                    Push probeOutcome(run's exitCode, run's stdout, name) to out.
+    Return a new Ok with value out.
+
+## Note
+The verdict the probes give a document's names, if they give one.
+
+## To probeVerdict (tc: Toolchain, preamble: Text, names: Seq of Text, what: Text, boundBy: Text) -> Option of Verdict:
+    Inspect probeNames(tc, preamble, names):
+        When Err (e):
+            Return some infrastructureVerdict(e).
+        When Ok (outcomes):
+            Return nameProbeVerdict(what, boundBy, names, outcomes).
+    Return some infrastructureVerdict("unprobed").
+
+## Note
+The verdict on `submission` as a proof of the statement `statementDoc`.
+
+## To judgeSubmission (tc: Toolchain, statementDoc: Text, goalName: Text, submission: Text) -> Verdict:
+    Let proofName be proofNameFor(goalName).
+    Let problems be submissionProblems(submission, proofName, goalName).
+    If length of problems is greater than 0:
+        Return refusedSubmissionVerdict(problems).
+    Inspect probeVerdict(tc, statementDoc, submissionNames(submission), "submission", "the statement or the prelude"):
+        When Some (v):
+            Return v.
+        When None:
+            Inspect kernelRun(tc, assembleProofDocument(statementDoc, submission, proofName)):
+                When Err (e):
+                    Return infrastructureVerdict(e).
+                When Ok (run):
+                    Return kernelVerdict(run's exitCode, run's stdout, run's timedOut, proofName, goalName).
+    Return infrastructureVerdict("unjudged").
+
+## Note
+The verdict on a statement before review: it reads as a statement, its names are
+new to the prelude, it checks, and its goal is a proposition. `verified` here means
+well-formed, never true; whether it says what the problem says is the review's.
+
+## To judgeStatement (tc: Toolchain, statementDoc: Text, goalName: Text) -> Verdict:
+    Let problems be statementProblems(statementDoc, goalName).
+    If length of problems is greater than 0:
+        Return newVerdict("rejected", 0, join(problems, "; "), [], "the statement was refused before the kernel saw it").
+    Inspect probeVerdict(tc, "", submissionNames(statementDoc), "statement", "the prelude"):
+        When Some (v):
+            Return v.
+        When None:
+            Inspect kernelRun(tc, statementCheckDocument(statementDoc, goalName)):
+                When Err (e):
+                    Return infrastructureVerdict(e).
+                When Ok (run):
+                    Inspect parseKernelReport(run's stdout):
+                        When Err (e):
+                            Return infrastructureVerdict(e).
+                        When Ok (report):
+                            Let n be length of report's outputs.
+                            If report's checked is equal to false:
+                                Return newVerdict("rejected", report's failedBlock, report's error, [], "the kernel refused the statement").
+                            If n is equal to 0 or item n of report's outputs is not equal to goalName + " : Prop":
+                                Return newVerdict("rejected", n, "the goal is not a proposition", [], "the goal must be a Prop").
+                            Return newVerdict("verified", 0, "", [], "the statement checks and its goal is a proposition").
+    Return infrastructureVerdict("unjudged").

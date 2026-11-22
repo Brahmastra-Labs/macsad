@@ -1,0 +1,111 @@
+# Trail memory
+
+Import Conventions from "./conventions.lg".
+Import VerdictRecord from "./verdict_record.lg".
+Import TrailRecord from "./trail_record.lg".
+
+What the factory learns from a trail: which approaches already failed, which
+failure keeps recurring, and how much was verified. The coordinator refuses to
+hand out an approach that failed, and the scheduler lowers a problem whose
+attempts keep hitting the same wall.
+
+## Note
+The fingerprint of an approach: the unit kind, the exact statement, the strategy,
+and the normalized tactic skeleton of the proof (`submission_names.lg`), so two
+attempts that differ only in names or spacing are the same approach.
+
+## To approachFingerprint (kind: Text, statementSha: Text, strategyId: Text, skeleton: Text) -> Text:
+    Return sha256Hex(kind + "\n" + statementSha + "\n" + strategyId + "\n" + skeleton).
+
+## Note
+Whether an entry records an attempt that ended in a verdict, rather than an event.
+
+## To isAttemptEntry (e: TrailEntry) -> Bool:
+    Return verdictKinds() contains e's verdict.
+
+## Note
+Whether `fingerprint` already ended in `rejected` on this trail.
+
+## To fingerprintFailed (trail: Seq of TrailEntry, fingerprint: Text) -> Bool:
+    Repeat for e in trail:
+        If e's approachFingerprint is equal to fingerprint and e's verdict is equal to "rejected":
+            Return true.
+    Return false.
+
+## Note
+A failure reduced to what makes two failures the same: the first line of its
+diagnostics, trimmed, at most 240 bytes.
+
+## To failureReason (e: TrailEntry) -> Text:
+    Return shortenText(trim(item 1 of lines(e's diagnostics)), 240).
+
+## Note
+The failure reasons of a trail's rejected and infrastructure attempts, in order.
+
+## To failureReasons (trail: Seq of TrailEntry, alsoInfrastructure: Bool) -> Seq of Text:
+    Let mutable out be a new Seq of Text.
+    Repeat for e in trail:
+        If e's verdict is equal to "rejected" or (alsoInfrastructure and e's verdict is equal to "infrastructure"):
+            Push failureReason(e) to out.
+    Return out.
+
+## Note
+How many times `reason` occurs among `reasons`.
+
+## To countIn (reason: Text, reasons: Seq of Text) -> Int:
+    Let mutable n be 0.
+    Repeat for r in reasons:
+        If r is equal to reason:
+            Set n to n + 1.
+    Return n.
+
+## Note
+The distinct failure reasons, most frequent first, ties in order of first
+appearance, each as `3× reason`.
+
+## To failureCounts (trail: Seq of TrailEntry) -> Seq of Text:
+    Let all be failureReasons(trail, true).
+    Let mutable distinct be a new Seq of Text.
+    Repeat for r in all:
+        If distinct contains r is equal to false:
+            Push r to distinct.
+    Let mutable out be a new Seq of Text.
+    Let mutable want be length of all.
+    While want is at least 1:
+        Repeat for r in distinct:
+            If countIn(r, all) is equal to want:
+                Push "{want}× " + r to out.
+        Set want to want - 1.
+    Return out.
+
+## Note
+The most times one rejection reason repeats.
+
+## To repeatedFailures (trail: Seq of TrailEntry) -> Int:
+    Let all be failureReasons(trail, false).
+    Let mutable most be 0.
+    Repeat for r in all:
+        If countIn(r, all) is greater than most:
+            Set most to countIn(r, all).
+    Return most.
+
+## Note
+How many attempts ended verified.
+
+## To verifiedCount (trail: Seq of TrailEntry) -> Int:
+    Let mutable n be 0.
+    Repeat for e in trail:
+        If e's verdict is equal to "verified":
+            Set n to n + 1.
+    Return n.
+
+## Note
+The last attempt on a trail.
+
+## To lastAttempt (trail: Seq of TrailEntry) -> Option of TrailEntry:
+    Let mutable i be length of trail.
+    While i is at least 1:
+        If isAttemptEntry(item i of trail):
+            Return some (item i of trail).
+        Set i to i - 1.
+    Return none.

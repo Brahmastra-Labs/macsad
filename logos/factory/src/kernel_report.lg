@@ -1,0 +1,115 @@
+# Kernel report
+
+What `largo prove --kernel <document> --json` prints, read. (`largo check
+--kernel --json` prints the same bytes; both were recorded for every document in
+`tests/fixtures/kernel/`.) The report is one JSON object with sorted keys:
+`blocks` (each `block` number and its `output`), `checked`, `error`,
+`failed_block` (`null` when the document did not even parse), `file` and
+`surface`, which is always `kernel_document`.
+
+## Note
+A report, read: whether the document checked, each block's output in order, the
+first refused block (`0` when none is named) and the kernel's error.
+
+## A KernelReport has:
+    a checked, which is Bool.
+    an outputs, which is Seq of Text.
+    a failedBlock, which is Int.
+    an error, which is Text.
+
+## Note
+The report in `stdout`, or why it is not one: the blocks must be numbered 1, 2, 3, …
+in order with a text output each, and the surface must be the kernel's.
+
+## To parseKernelReport (stdout: Text) -> Result of KernelReport and Text:
+    Inspect jsonTryParse(trim(stdout)):
+        When JErr (m):
+            Return a new Err with error "the report is not JSON: " + m.
+        When JOk (v):
+            Let surface be jsonSerialize(jsonGet(v, "surface")).
+            If surface is not equal to "\"kernel_document\"":
+                Return a new Err with error "the report is not a kernel document report".
+            Let checked be jsonSerialize(jsonGet(v, "checked")) is equal to "true".
+            Let mutable report be a new KernelReport with checked checked and outputs [] and failedBlock 0 and error "".
+            Inspect jsonGet(v, "failed_block"):
+                When JNum (k):
+                    Set report's failedBlock to k.
+                Otherwise:
+                    Set report's failedBlock to 0.
+            Inspect jsonGet(v, "error"):
+                When JStr (m):
+                    Set report's error to m.
+                Otherwise:
+                    Set report's error to "".
+            Inspect jsonGet(v, "blocks"):
+                When JArr (blocks):
+                    Repeat for b in blocks:
+                        Let numbered be jsonSerialize(jsonGet(b, "block")).
+                        If numbered is not equal to "{length of report's outputs + 1}":
+                            Return a new Err with error "the report numbers its blocks out of order".
+                        Inspect jsonGet(b, "output"):
+                            When JStr (out):
+                                Set report's outputs to report's outputs + [out].
+                            Otherwise:
+                                Return a new Err with error "a block of the report has no output".
+                Otherwise:
+                    Return a new Err with error "the report has no block list".
+            Return a new Ok with value report.
+    Return a new Err with error "unreadable report".
+
+## Note
+The axioms a `Print Axioms <name>.` output names: the kernel prints
+`'n' depends on no axioms` or `'n' depends on axioms: [a, b]`.
+
+## To axiomsOf (output: Text, name: Text) -> Result of Seq of Text and Text:
+    If output is equal to "'" + name + "' depends on no axioms":
+        Return a new Ok with value [].
+    Let lead be "'" + name + "' depends on axioms: [".
+    If startsWith(output, lead) is equal to false or endsWith(output, "]") is equal to false:
+        Return a new Err with error "`{output}` is not the axiom report of {name}".
+    Let mutable out be a new Seq of Text.
+    Repeat for part in split(removeSuffix(removePrefix(output, lead), "]"), ","):
+        If trim(part) is not equal to "":
+            Push trim(part) to out.
+    Return a new Ok with value out.
+
+## Note
+What a name probe found: `bound` when the probe checked, `free` when the kernel
+answered that the name is unbound, `unknown` for anything else.
+
+## To probeOutcome (exitCode: Int, stdout: Text, name: Text) -> Text:
+    Inspect parseKernelReport(stdout):
+        When Ok (r):
+            If r's checked and exitCode is equal to 0:
+                Return "bound".
+            If r's checked is equal to false and r's error is equal to "Kernel error: Unbound variable: " + name:
+                Return "free".
+            Return "unknown".
+        When Err (e):
+            Return "unknown".
+    Return "unknown".
+
+## Test: a checked report reads block by block
+
+Let text be "{{\"blocks\":[{{\"block\":1,\"output\":\"\"}},{{\"block\":2,\"output\":\"proof_of_goal : goal\"}}],\"checked\":true,\"error\":null,\"failed_block\":null,\"file\":\"f\",\"surface\":\"kernel_document\"}}".
+Expect that parseKernelReport(text) is equal to a new Ok with value (a new KernelReport with checked true and outputs ["", "proof_of_goal : goal"] and failedBlock 0 and error "").
+Expect that parseKernelReport("[1]") is equal to a new Err with error "the report is not a kernel document report".
+
+## Test: the axiom report reads both of its forms
+
+Expect that axiomsOf("'p' depends on no axioms", "p") is equal to a new Ok with value [].
+Expect that axiomsOf("'p' depends on axioms: [Classical_choice, Quot_sound, propext]", "p") is equal to a new Ok with value ["Classical_choice", "Quot_sound", "propext"].
+Expect that axiomsOf("'q' depends on no axioms", "p") is equal to a new Err with error "`'q' depends on no axioms` is not the axiom report of p".
+
+## Test: a probe is bound only when it checked, free only when unbound by name
+
+For all booleans checked:
+    Let mutable text be "{{\"blocks\":[],\"checked\":false,\"error\":\"Kernel error: Unbound variable: x\",\"failed_block\":1,\"file\":\"f\",\"surface\":\"kernel_document\"}}".
+    Let mutable code be 1.
+    Let mutable expected be "free".
+    If checked:
+        Set text to "{{\"blocks\":[{{\"block\":1,\"output\":\"x : Nat\"}}],\"checked\":true,\"error\":null,\"failed_block\":null,\"file\":\"f\",\"surface\":\"kernel_document\"}}".
+        Set code to 0.
+        Set expected to "bound".
+    Expect that probeOutcome(code, text, "x") is equal to expected.
+    Expect that probeOutcome(code, text, "y") is equal to "unknown" or checked.

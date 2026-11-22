@@ -1,0 +1,120 @@
+# Rank score
+
+A problem's base score for the scheduler, in basis points, from what the atlas
+says about it — integer arithmetic, reproducible by hand from an atlas record.
+
+## Note
+The atlas's view, in basis points: the band is its probability of checked
+progress in 100 hours; `tractable` is false where it gives no score (never
+scheduled); the burdens are higher-is-harder; `availability` is `logos`, `lean` or `informal`.
+
+## A RankInputs has:
+    a progressLowBp, which is Int.
+    a progressHighBp, which is Int.
+    a tractable, which is Bool.
+    an aiFit, which is Text.
+    a toolLeverageBp, which is Int.
+    a formalizationBp, which is Int.
+    a verificationBp, which is Int.
+    an availability, which is Text.
+    a category, which is Text.
+
+## To clampBp (x: Int) -> Int:
+    If x is less than 0:
+        Return 0.
+    If x is greater than 10000:
+        Return 10000.
+    Return x.
+
+## To lookup (key: Text, keys: Seq of Text, values: Seq of Int, fallback: Int) -> Int:
+    Repeat for i from 1 to length of keys:
+        If item i of keys is equal to key:
+            Return item i of values.
+    Return fallback.
+
+## Note
+How much of a category the kernel prelude can state today — `Nat`, `Int` and its
+laws, lists, `Fin`, quotients; no reals, sets or topology. A prior, written down
+where it can be argued with, to raise as the prelude grows.
+
+## To expressibility (category: Text) -> Int:
+    Let keys be ["number-theory", "combinatorics", "graph-theory", "logic", "computer-science", "algebra", "group-theory", "set-theory"].
+    Let more be ["probability", "geometry", "dynamical-systems", "analysis", "algebraic-geometry", "topology", "pde", "physics"].
+    Return lookup(category, keys + more, [8000, 7000, 6000, 6000, 6000, 5000, 4500, 4000, 3000, 3000, 2500, 2000, 2000, 1500, 1000, 1000], 3000).
+
+## Note
+The seven components, favourable-high: band midpoint, AI fit, tool leverage,
+formalization ease, verification ease, availability, expressibility. The weights,
+in percent, sum to 100: 35, 10, 15, 10, 5, 15, 10.
+
+## To rankComponents (r: RankInputs) -> Seq of Int:
+    Let fit be lookup(r's aiFit, ["ai_favored", "ai_hostile"], [10000, 0], 5000).
+    Let available be lookup(r's availability, ["logos", "lean"], [10000, 6000], 2000).
+    Let ease be [10000 - clampBp(r's formalizationBp), 10000 - clampBp(r's verificationBp)].
+    Return [clampBp((r's progressLowBp + r's progressHighBp) / 2), fit, clampBp(r's toolLeverageBp)] + ease + [available, expressibility(r's category)].
+
+## To baseScore (r: RankInputs) -> Int:
+    Let parts be rankComponents(r).
+    Let weights be [35, 10, 15, 10, 5, 15, 10].
+    Let mutable total be 0.
+    Repeat for i from 1 to 7:
+        Set total to total + (item i of parts) * (item i of weights).
+    Return total / 100.
+
+## Note
+A problem no atlas profiles: the atlas's median band (25–40%) and neutral
+everything else; a formal statement still counts, through `availability`.
+
+## To unprofiledInputs (availability: Text, category: Text) -> RankInputs:
+    Let mutable r be a new RankInputs with progressLowBp 2500 and progressHighBp 4000 and tractable true and aiFit "unknown".
+    Set r's toolLeverageBp to 5000.
+    Set r's formalizationBp to 5000.
+    Set r's verificationBp to 5000.
+    Set r's availability to availability.
+    Set r's category to category.
+    Return r.
+
+## Note
+Atlas record 116 (GREEN-028): band 40–55%, AI-favored, leverage 5.3,
+formalization 3.7, verification 5.2 and 4.5, combinatorics, informal.
+
+## To sampleInputs () -> RankInputs:
+    Let mutable r be unprofiledInputs("informal", "combinatorics").
+    Set r's progressLowBp to 4000.
+    Set r's progressHighBp to 5500.
+    Set r's aiFit to "ai_favored".
+    Set r's toolLeverageBp to 5300.
+    Set r's formalizationBp to 3700.
+    Set r's verificationBp to 4850.
+    Return r.
+
+## Test: record 116 is scored component by component, as by hand
+
+Let r be sampleInputs().
+Expect that rankComponents(r) is equal to [4750, 10000, 5300, 6300, 5150, 2000, 7000].
+Expect that baseScore(r) is equal to (4750 * 35 + 10000 * 10 + 5300 * 15 + 6300 * 10 + 5150 * 5 + 2000 * 15 + 7000 * 10) / 100.
+Expect that baseScore(r) is equal to 5345.
+
+## Test: a formal statement raises a problem by its availability weight
+
+Let mutable lean be sampleInputs().
+Set lean's availability to "lean".
+Expect that baseScore(lean) - baseScore(sampleInputs()) is equal to 600.
+Expect that baseScore(unprofiledInputs("lean", "number-theory")) is equal to (3250 * 35 + 5000 * 40 + 6000 * 15 + 8000 * 10) / 100.
+
+## Test: more tool leverage never lowers the score
+
+For all integers a and b:
+    Let mutable x be sampleInputs().
+    Set x's toolLeverageBp to (a % 10001 + 10001) % 10001.
+    Let mutable y be sampleInputs().
+    Set y's toolLeverageBp to x's toolLeverageBp + (b % 100 + 100) % 100.
+    Expect that baseScore(x) is at most baseScore(y).
+
+## Test: being AI-favored never lowers the score
+
+For all booleans favored:
+    Let mutable r be sampleInputs().
+    If favored is equal to false:
+        Set r's aiFit to "ai_neutral_mixed".
+    Expect that baseScore(r) is at most baseScore(sampleInputs()).

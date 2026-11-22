@@ -1,0 +1,72 @@
+# Selftest policy
+
+Import HostFiles from "./host_files.lg".
+Import VerdictRecord from "./verdict_record.lg".
+Import KernelVerdict from "./kernel_verdict.lg".
+Import KernelBlocks from "./kernel_blocks.lg".
+Import SubmissionPolicy from "./submission_policy.lg".
+Import SelftestRecords from "./selftest_records.lg".
+
+The acceptance policy checked against what `largo` really printed: every report
+recorded in `tests/fixtures/kernel/` (run from the project directory) is read
+from disk and classified, and the assembled documents are compared byte for byte
+with the recorded ones the kernel checked.
+
+## To fixtureStatement () -> Text:
+    Return join(["/-! # Statement: zero is a left identity of addition on Nat", "", "Route C. A proof must establish `goal`. -/", "", "Definition goal : Prop := forall (n : Nat), Eq Nat (Nat_add Zero n) n."], "\n").
+
+## To fixtureProof () -> Text:
+    Let step be "Theorem succ_step : forall (k : Nat), Eq Nat (Nat_add Zero (Succ k)) (Succ (Nat_add Zero k)) := by intro k; rfl.".
+    Return step + "\n\nTheorem proof_of_goal : goal := by intro n; induction n as [ | k ih]; rfl; rw [succ_step k]; rw [ih]; rfl.".
+
+## Note
+The verdict on one recorded fixture, from its report and exit status on disk.
+
+## To fixtureVerdict (name: Text) -> Verdict:
+    Let base be "tests/fixtures/kernel/" + name.
+    Inspect readText(base + ".prove.json"):
+        When Ok (report):
+            Inspect readText(base + ".exit"):
+                When Ok (exit):
+                    Return kernelVerdict(parseInt(trim(exit)), report, false, "proof_of_goal", "goal").
+                When Err (e):
+                    Return infrastructureVerdict(e).
+        When Err (e):
+            Return infrastructureVerdict("cannot read the fixture " + base + ": " + e).
+    Return infrastructureVerdict("unread").
+
+## To fixtureChecks () -> Seq of Text:
+    Let mutable f be a new Seq of Text.
+    Set f to f + expectThat("the correct proof is verified", (fixtureVerdict("verified"))'s kind is equal to "verified").
+    Set f to f + expectThat("the classical proof rests on Lean's three", (fixtureVerdict("classical"))'s axioms is equal to ["Classical_choice", "Quot_sound", "propext"]).
+    Let wrong be fixtureVerdict("rejected").
+    Set f to f + expectThat("the wrong proof is rejected at block 4", wrong's kind is equal to "rejected" and wrong's block is equal to 4).
+    Let refused be assembleProofDocument(fixtureStatement(), "Theorem proof_of_goal : goal := by intro n; rfl.", "proof_of_goal").
+    Set f to f + expectThat("the refused block is shown back", blockText(refused, 4) contains "by intro n; rfl.").
+    Set f to f + expectThat("an unparsed document is rejected whole", (fixtureVerdict("parse_error"))'s block is equal to 0 and (fixtureVerdict("parse_error"))'s kind is equal to "rejected").
+    Set f to f + expectThat("a proof on its own axiom is admitted", (fixtureVerdict("admitted_axiom"))'s axioms is equal to ["zero_add_axiom"]).
+    Set f to f + expectThat("the kernel alone accepts a shadowed goal", (fixtureVerdict("shadowed"))'s kind is equal to "verified").
+    Let shadow be submissionProblems("Definition goal : Prop := True.\n\nTheorem proof_of_goal : goal := by exact I.", "proof_of_goal", "goal").
+    Set f to f + expectThat("so the shadow is refused before the kernel", shadow contains "the submission redeclares the goal goal").
+    Inspect readText("tests/fixtures/kernel/verified.kernel"):
+        When Ok (doc):
+            Set f to f + expectThat("the assembled document is the recorded one", doc is equal to assembleProofDocument(fixtureStatement(), fixtureProof(), "proof_of_goal")).
+        When Err (e):
+            Push "the recorded document is readable: " + e to f.
+    Return f.
+
+## To policyChecks () -> Seq of Text:
+    Let mutable f be a new Seq of Text.
+    Set f to f + expectThat("the fixture proof is well formed", submissionProblems(fixtureProof(), "proof_of_goal", "goal") is equal to []).
+    Set f to f + expectThat("its names are read in order", submissionNames(fixtureProof()) is equal to ["succ_step", "proof_of_goal"]).
+    Set f to f + expectThat("its skeleton drops the names", submissionSkeleton(fixtureProof()) is equal to "intro;rfl | intro;induction;rfl;rw;rw;rfl").
+    Let notation be submissionProblems("Notation \"x\" := Zero.\n\nTheorem proof_of_goal : goal := by rfl.", "proof_of_goal", "goal").
+    Set f to f + expectThat("notation is refused", notation is equal to ["block 1 uses `Notation`, which a submission may not use"]).
+    Set f to f + expectThat("the goal's theorem must be there", submissionProblems("Theorem other : goal := by rfl.", "proof_of_goal", "goal") is equal to ["the submission has no `Theorem proof_of_goal : goal := …`"]).
+    Let mistyped be submissionProblems("Theorem proof_of_goal : True := by exact I.", "proof_of_goal", "goal").
+    Set f to f + expectThat("the goal's theorem must have its type", mistyped is equal to ["the theorem proof_of_goal must have type exactly `goal`"]).
+    Set f to f + expectThat("a statement asserts nothing", statementProblems("Axiom cheat : False.\n\nDefinition goal : Prop := False.", "goal") is equal to ["block 1 uses `Axiom`, which a statement may not use"]).
+    Set f to f + expectThat("the fixture statement is well formed", statementProblems(fixtureStatement(), "goal") is equal to []).
+    Let checked be "{{\"blocks\":[],\"checked\":true,\"error\":null,\"failed_block\":null,\"file\":\"f\",\"surface\":\"kernel_document\"}}".
+    Set f to f + expectThat("an exit that contradicts its report is infrastructure", (kernelVerdict(1, checked, false, "p", "g"))'s kind is equal to "infrastructure").
+    Return f.

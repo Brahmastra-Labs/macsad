@@ -1,0 +1,57 @@
+# Prompt roles
+
+Who a model is asked to be, and how it must answer. Every unit that writes
+vernacular answers with one `logos-kernel` block that `extraction.lg` reads; a
+reviewer answers with one `review` block of three lines; a summarizer in plain
+`Summary:` and `Next:` lines. The words here and the extractor's are the same,
+so the contract a model is given is the contract it is held to.
+
+## To roleText (kind: Text) -> Text:
+    If kind is equal to "review":
+        Let a be "You review formal statements of mathematical problems. You are independent of whoever wrote the statement, ".
+        Return a + "and you are paid for catching a statement that does not say what the problem says, not for agreeing.".
+    If kind is equal to "summarize_trail":
+        Let a be "You keep the research log of a mathematical problem. You turn a long record of attempts into what the next person needs: ".
+        Return a + "what is known, what failed and why, and what to try next.".
+    Let a be "You are a proof engineer. You write proofs and formal statements in the LOGOS kernel vernacular, ".
+    Return a + "and every one is checked by the LOGOS kernel: nothing counts until it checks.".
+
+## Note
+The answer contract of a unit of `kind`.
+
+## To contractText (kind: Text) -> Text:
+    If kind is equal to "review":
+        Let a be "## Answer\n\nAnswer with exactly one fenced block opened by ```review, holding three lines:\n\n```review\n".
+        Return a + "verdict: faithful | unfaithful | unsure\nparaphrase: <your plain-English reading of the goal>\nissues: <what differs from the problem, or none>\n```".
+    If kind is equal to "summarize_trail":
+        Return "## Answer\n\nAnswer with one line `Summary: …` and up to three lines `Next: …`, and nothing else.".
+    Let a be "## Answer\n\nAnswer with exactly one fenced block opened by ```logos-kernel and closed by ```. After it, write one line `Summary: …` ".
+    Return a + "saying what your attempt does, and `Next: …` lines for what to try if it fails. The rules of a submission in the reference apply.".
+
+## Note
+The verdicts a reviewer may give; anything else is not a review, so an unclear
+reviewer is never counted as agreeing.
+
+## To reviewVerdicts () -> Seq of Text:
+    Return ["faithful", "unfaithful", "unsure"].
+
+## Test: the reviewer and the summarizer have their own roles
+
+Expect that roleText("review") contains "You review formal statements".
+Expect that roleText("summarize_trail") contains "research log".
+Expect that roleText("prove") contains "nothing counts until it checks".
+
+## Test: the answer contract names the fence the extractor reads
+
+Expect that contractText("prove") contains "opened by ```logos-kernel and closed by ```".
+Expect that contractText("review") contains "verdict: faithful | unfaithful | unsure".
+Expect that contractText("summarize_trail") contains "`Summary: …`".
+
+## Test: only a reviewer is asked for a review block
+
+For all booleans reviewing:
+    Let mutable kind be "prove".
+    If reviewing:
+        Set kind to "review".
+    Expect that (contractText(kind) contains "```review") is equal to reviewing.
+    Expect that reviewVerdicts() contains "faithful".

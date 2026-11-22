@@ -1,0 +1,112 @@
+# Extraction
+
+What is taken out of a model's answer. The output contract: exactly one fenced
+block whose info string is `logos-kernel`; fences with any other info string (an
+example in prose) are ignored. Outside the block, `Summary: …` is the attempt's
+account of itself and each `Next: …` line a suggestion for the attempts after it.
+Zero blocks, two blocks or an unclosed block is a refusal, never a guess. A
+reviewer answers the same way with one `review` block.
+
+## Note
+What an extraction found: the block, the summary, the suggestions, or the problem.
+
+## An Extraction has:
+    a block, which is Text.
+    a summary, which is Text.
+    a suggestions, which is Seq of Text.
+    a problem, which is Text.
+
+## Note
+Whether a line opens a fence with the given info string, and whether it closes one.
+
+## To opensFence (line: Text, info: Text) -> Bool:
+    Let t be trim(line).
+    Return startsWith(t, "```") and trim(trimChars(t, "`")) is equal to info.
+
+## To closesFence (line: Text) -> Bool:
+    Let t be trim(line).
+    Return startsWith(t, "```") and trimChars(t, "`") is equal to "".
+
+## Note
+The one block of `info` in an answer, and the lines outside every fence.
+
+## To extractBlock (answer: Text, info: Text) -> Extraction:
+    Let mutable found be 0.
+    Let mutable fence be 0.
+    Let mutable body be a new Seq of Text.
+    Let mutable outside be a new Seq of Text.
+    Repeat for line in lines(answer):
+        If fence is equal to 0:
+            If opensFence(line, info):
+                Set found to found + 1.
+                Set fence to 1.
+            Otherwise:
+                If startsWith(trim(line), "```"):
+                    Set fence to 2.
+                Otherwise:
+                    Push trim(line) to outside.
+        Otherwise:
+            If closesFence(line):
+                Set fence to 0.
+            Otherwise:
+                If fence is equal to 1 and found is equal to 1:
+                    Push line to body.
+    Let mutable problem be "".
+    If fence is equal to 1:
+        Set problem to "the ```{info} block is never closed".
+    If found is not equal to 1:
+        Set problem to "the answer has {found} ```{info} blocks; exactly one is allowed".
+    Let mutable summary be "".
+    Let mutable next be a new Seq of Text.
+    Repeat for t in outside:
+        If startsWith(t, "Summary:"):
+            Set summary to trim(removePrefix(t, "Summary:")).
+        If startsWith(t, "Next:"):
+            Push trim(removePrefix(t, "Next:")) to next.
+    If problem is not equal to "":
+        Set body to [].
+    Return a new Extraction with block trim(join(body, "\n")) and summary summary and suggestions next and problem problem.
+
+## Note
+The submission in a model's answer.
+
+## To extractSubmission (answer: Text) -> Extraction:
+    Return extractBlock(answer, "logos-kernel").
+
+## Note
+The value of a `key: value` line of a block, or the empty text.
+
+## To fieldLine (block: Text, key: Text) -> Text:
+    Repeat for line in lines(block):
+        If startsWith(trim(line), key + ":"):
+            Return trim(removePrefix(trim(line), key + ":")).
+    Return "".
+
+## Test: the submission is the one logos-kernel block, with its summary and suggestions
+
+Let x be extractSubmission("I will induct.\n\n```logos-kernel\nTheorem p : goal := by rfl.\n```\n\nSummary: by computation.\nNext: induct on n.\nNext: unfold first.").
+Expect that x's problem is equal to "".
+Expect that x's block is equal to "Theorem p : goal := by rfl.".
+Expect that x's summary is equal to "by computation.".
+Expect that x's suggestions is equal to ["induct on n.", "unfold first."].
+
+## Test: other fences are ignored and zero, two or an unclosed block is refused
+
+Expect that (extractSubmission("```lean\ntheorem t : True\n```\n```logos-kernel\nA.\n```"))'s block is equal to "A.".
+Expect that (extractSubmission("no code"))'s problem is equal to "the answer has 0 ```logos-kernel blocks; exactly one is allowed".
+Expect that (extractSubmission("```logos-kernel\nA.\n```\n```logos-kernel\nB.\n```"))'s block is equal to "".
+Expect that (extractSubmission("```logos-kernel\nTheorem p."))'s problem is equal to "the ```logos-kernel block is never closed".
+
+## Test: a review block's fields are read by name
+
+Let x be extractBlock("```review\nverdict: faithful\nparaphrase: 0 + n = n\nissues: none\n```", "review").
+Expect that fieldLine(x's block, "verdict") is equal to "faithful".
+Expect that fieldLine(x's block, "paraphrase") is equal to "0 + n = n".
+
+## Test: a second block is refused whatever is in it
+
+For all booleans second:
+    Let mutable answer be "```logos-kernel\nA.\n```".
+    If second:
+        Set answer to answer + "\n```logos-kernel\nB.\n```".
+    Expect that ((extractSubmission(answer))'s problem is equal to "") is equal to (not second).

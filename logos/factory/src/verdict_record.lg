@@ -1,0 +1,110 @@
+# Verdict record
+
+What the kernel and the acceptance policy said about one document, and the
+policy's fixed vocabulary. There are four verdicts: `verified` (the policy
+holds), `rejected` (the kernel refused a block, or the submission was refused
+before the kernel saw it), `admitted_axiom` (everything checked but the proof rests
+on an axiom outside Lean's three, so it is progress modulo that axiom and never a
+proof) and `infrastructure` (the run itself failed; retried, never blamed).
+
+## Note
+`block` is the first refused block, counted as the kernel counts blocks
+(comments included), `0` when none; `axioms` is the closure `Print Axioms`
+reported; `detail` is the policy's reason in words.
+
+## A Verdict has:
+    a kind, which is Text.
+    a block, which is Int.
+    an error, which is Text.
+    an axioms, which is Seq of Text.
+    a detail, which is Text.
+
+## Note
+A verdict from its parts.
+
+## To newVerdict (kind: Text, block: Int, error: Text, axioms: Seq of Text, detail: Text) -> Verdict:
+    Return a new Verdict with kind kind and block block and error error and axioms axioms and detail detail.
+
+## Note
+The four verdicts, in the order the policy decides between them.
+
+## To verdictKinds () -> Seq of Text:
+    Return ["verified", "rejected", "admitted_axiom", "infrastructure"].
+
+## Note
+The axioms an accepted proof may rest on, as the LOGOS kernel spells Lean's three.
+
+## To allowedAxioms () -> Seq of Text:
+    Return ["propext", "Quot_sound", "Classical_choice"].
+
+## Note
+The axioms of a closure that the policy does not allow, in order.
+
+## To disallowedAxioms (axioms: Seq of Text) -> Seq of Text:
+    Let mutable out be a new Seq of Text.
+    Repeat for a in axioms:
+        If allowedAxioms() contains a is equal to false:
+            Push a to out.
+    Return out.
+
+## Note
+How a closure reads in a verdict's detail.
+
+## To axiomPhrase (axioms: Seq of Text) -> Text:
+    If length of axioms is equal to 0:
+        Return "no axioms".
+    Return join(axioms, ", ").
+
+## Note
+The reason a submission was refused before the kernel ran, as its verdict's detail.
+
+## To beforeKernel () -> Text:
+    Return "the submission was refused before the kernel saw it".
+
+## Note
+A run that failed for reasons of its own.
+
+## To infrastructureVerdict (why: Text) -> Verdict:
+    Return newVerdict("infrastructure", 0, why, [], "the check itself did not complete; the attempt is retried, not blamed").
+
+## Note
+A submission refused before the kernel saw it.
+
+## To refusedSubmissionVerdict (problems: Seq of Text) -> Verdict:
+    Return newVerdict("rejected", 0, join(problems, "; "), [], beforeKernel()).
+
+## Note
+The verdict kind the coordinator's attempt table records: a refusal before the
+kernel is told apart as `refused_submission`.
+
+## To attemptVerdictKind (v: Verdict) -> Text:
+    If v's kind is equal to "rejected" and v's block is equal to 0 and v's detail is equal to beforeKernel():
+        Return "refused_submission".
+    Return v's kind.
+
+## Test: a verdict carries its closure through the derived encoder
+
+Let v be newVerdict("admitted_axiom", 0, "", ["collatz_lemma", "propext"], "rests on collatz_lemma").
+Expect that toJson_Verdict(v) contains "\"axioms\":[\"collatz_lemma\",\"propext\"]".
+
+## Test: only Lean's three axioms are allowed, under the kernel's spellings
+
+Expect that disallowedAxioms(["Classical_choice", "Quot_sound", "propext"]) is equal to [].
+Expect that disallowedAxioms(["collatz_lemma", "propext"]) is equal to ["collatz_lemma"].
+Expect that disallowedAxioms(["Classical.choice", "sorryAx"]) is equal to ["Classical.choice", "sorryAx"].
+Expect that axiomPhrase([]) is equal to "no axioms".
+
+## Test: a refusal before the kernel is its own attempt verdict kind
+
+Expect that attemptVerdictKind(refusedSubmissionVerdict(["empty"])) is equal to "refused_submission".
+Expect that attemptVerdictKind(newVerdict("rejected", 4, "x", [], "the kernel refused the document")) is equal to "rejected".
+Expect that (infrastructureVerdict("deadline"))'s kind is equal to "infrastructure".
+
+## Test: a closure is allowed exactly when it adds nothing to Lean's three
+
+For all booleans extra:
+    Let mutable closure be ["propext"].
+    If extra:
+        Push "my_axiom" to closure.
+    Let clean be length of disallowedAxioms(closure) is equal to 0.
+    Expect that clean is equal to (not extra).

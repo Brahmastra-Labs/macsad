@@ -1,0 +1,77 @@
+# Factory
+
+Import AtlasGraph from "./atlas_graph.lg".
+Import AtlasIngest from "./atlas_ingest.lg".
+Import AtlasPrepare from "./atlas_prepare.lg".
+Import AtlasScan from "./atlas_scan.lg".
+Import AttemptRecord from "./attempt_record.lg".
+Import Budget from "./budget.lg".
+Import ChatReply from "./chat_reply.lg".
+Import ChatRequest from "./chat_request.lg".
+Import Conventions from "./conventions.lg".
+Import Cost from "./cost.lg".
+Import Extraction from "./extraction.lg".
+Import HostFiles from "./host_files.lg".
+Import HostTools from "./host_tools.lg".
+Import IngestFc from "./ingest_fc.lg".
+Import KernelBlocks from "./kernel_blocks.lg".
+Import KernelReport from "./kernel_report.lg".
+Import KernelVerdict from "./kernel_verdict.lg".
+Import Local from "./local.lg".
+Import LocalAttempt from "./local_attempt.lg".
+Import LocalPlan from "./local_plan.lg".
+Import LocalRun from "./local_run.lg".
+Import LocalSettings from "./local_settings.lg".
+Import LocalStore from "./local_store.lg".
+Import ManifestEntry from "./manifest_entry.lg".
+Import ModelPrice from "./model_price.lg".
+Import MscCategory from "./msc_category.lg".
+Import NodeRecord from "./node_record.lg".
+Import OpdpRow from "./opdp_row.lg".
+Import ProblemRecord from "./problem_record.lg".
+Import PromptRoles from "./prompt_roles.lg".
+Import PromptTasks from "./prompt_tasks.lg".
+Import Prompts from "./prompts.lg".
+Import Rank from "./rank.lg".
+Import RankScore from "./rank_score.lg".
+Import RankTrail from "./rank_trail.lg".
+Import RecordsDecode from "./records_decode.lg".
+Import RefExample from "./ref_example.lg".
+Import RefFailures from "./ref_failures.lg".
+Import RefLanguage from "./ref_language.lg".
+Import RefProse from "./ref_prose.lg".
+Import RefTacticsBasic from "./ref_tactics_basic.lg".
+Import RefTacticsCompute from "./ref_tactics_compute.lg".
+Import Reference from "./reference.lg".
+Import Replay from "./replay.lg".
+Import Roles from "./roles.lg".
+Import RolesIngest from "./roles_ingest.lg".
+Import RolesVerify from "./roles_verify.lg".
+Import Selftest from "./selftest.lg".
+Import SelftestLive from "./selftest_live.lg".
+Import SelftestPolicy from "./selftest_policy.lg".
+Import SelftestRecords from "./selftest_records.lg".
+Import SelftestSources from "./selftest_sources.lg".
+Import SubmissionPolicy from "./submission_policy.lg".
+Import TrailDigest from "./trail_digest.lg".
+Import TrailMemory from "./trail_memory.lg".
+Import TrailRecord from "./trail_record.lg".
+Import VerdictRecord from "./verdict_record.lg".
+Import Verifier from "./verifier.lg".
+Import VernacularCommand from "./vernacular_command.lg".
+Import VernacularNames from "./vernacular_names.lg".
+Import WireNumber from "./wire_number.lg".
+Import WireRead from "./wire_read.lg".
+Import WireShape from "./wire_shape.lg".
+Import WorkRecord from "./work_record.lg".
+
+The entry of the MaCSad math factory. It imports every module once, as the
+pinned compiler-scope workaround the macsad projects share requires, and hands
+the arguments to `roles.lg`, which decides what runs.
+
+## Main
+
+Let outcome be dispatch(programArgs()).
+Show outcome's message.
+If outcome's ok is equal to false:
+    Fail with "the role did not complete".

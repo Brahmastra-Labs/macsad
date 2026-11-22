@@ -1,0 +1,108 @@
+# Wire number
+
+The one door between JSON decimals and the factory's integers. Scores come in
+as short decimals and the factory computes in basis points and micro-dollars, so
+a number is read as an exact count of `10^-digits` units. Scores are read
+EXACTLY — a finer value is refused, because a rank from a silently rounded input
+cannot be reproduced. Money coming IN is rounded UP, so a budget is never
+overspent by a fraction of a micro-dollar at a time.
+
+## Note
+Ten to the power `k`, for `k` at least zero.
+
+## To tenTo (k: Int) -> Int:
+    Let mutable out be 1.
+    Repeat for i from 1 to k:
+        Set out to out * 10.
+    Return out.
+
+## Note
+A JSON number as an exact count of `10^-digits` units: `5.4` at three digits is
+`5400`; `0.125` at two digits is refused.
+
+## To jsonScaled (v: Json, digits: Int) -> Result of Int and Text:
+    Inspect v:
+        When JNum (n):
+            Return a new Ok with value (n * tenTo(digits)).
+        When JDec (m, sc):
+            If 0 - sc is greater than digits:
+                Return a new Err with error "{jsonSerialize(v)} has more than {digits} decimals".
+            Return a new Ok with value (m * tenTo(digits + sc)).
+        Otherwise:
+            Return a new Err with error "expected a JSON number, found {jsonSerialize(v)}".
+    Return a new Err with error "expected a JSON number".
+
+## Note
+A non-negative JSON number as a count of `10^-digits` units, rounded up.
+
+## To jsonScaledCeil (v: Json, digits: Int) -> Result of Int and Text:
+    Inspect v:
+        When JDec (m, sc):
+            If m is less than 0:
+                Return a new Err with error "{jsonSerialize(v)} is negative".
+            If 0 - sc is at most digits:
+                Return jsonScaled(v, digits).
+            Let unit be tenTo(0 - sc - digits).
+            If m % unit is greater than 0:
+                Return a new Ok with value (m / unit + 1).
+            Return a new Ok with value (m / unit).
+        Otherwise:
+            If startsWith(jsonSerialize(v), "-"):
+                Return a new Err with error "{jsonSerialize(v)} is negative".
+            Return jsonScaled(v, digits).
+    Return a new Err with error "expected a JSON number".
+
+## Note
+A decimal written as text (`0.0000025`, `2.5e-06`), the way OpenRouter lists
+prices, read by the JSON number grammar and rounded up.
+
+## To decimalTextScaledCeil (t: Text, digits: Int) -> Result of Int and Text:
+    Inspect jsonTryParse(trim(t)):
+        When JOk (v):
+            Inspect v:
+                When JStr (s):
+                    Return a new Err with error "\"{t}\" is not a number".
+                Otherwise:
+                    Return jsonScaledCeil(v, digits).
+        When JErr (e):
+            Return a new Err with error "\"{t}\" is not a number".
+    Return a new Err with error "\"{t}\" is not a number".
+
+## Note
+An integer folded onto `0 … size - 1`, so a property can range over every integer.
+
+## To foldTo (n: Int, size: Int) -> Int:
+    Let m be n % size.
+    If m is less than 0:
+        Return m + size.
+    Return m.
+
+## Test: decimals become exact scaled integers, and a finer one is refused
+
+Expect that jsonScaled(jsonParse("5.4"), 3) is equal to a new Ok with value 5400.
+Expect that jsonScaled(jsonParse("0.07"), 4) is equal to a new Ok with value 700.
+Expect that jsonScaled(jsonParse("-1.5"), 1) is equal to a new Ok with value -15.
+Expect that jsonScaled(jsonParse("0.125"), 2) is equal to a new Err with error "0.125 has more than 2 decimals".
+
+## Test: money coming in is rounded up and never negative
+
+Expect that jsonScaledCeil(jsonParse("0.0000012"), 6) is equal to a new Ok with value 2.
+Expect that jsonScaledCeil(jsonParse("0.00000100"), 6) is equal to a new Ok with value 1.
+Expect that jsonScaledCeil(jsonParse("1e-7"), 6) is equal to a new Ok with value 1.
+Expect that jsonScaledCeil(jsonParse("3"), 6) is equal to a new Ok with value 3000000.
+Expect that jsonScaledCeil(jsonParse("-0.5"), 6) is equal to a new Err with error "-0.5 is negative".
+
+## Test: a price written as text is read by the JSON number grammar
+
+Expect that decimalTextScaledCeil("0.0000025", 12) is equal to a new Ok with value 2500000.
+Expect that decimalTextScaledCeil("2.5e-06", 12) is equal to a new Ok with value 2500000.
+Expect that decimalTextScaledCeil("free", 12) is equal to a new Err with error "\"free\" is not a number".
+
+## Test: a whole number rounds the same either way, and folding stays in range
+
+For all booleans b:
+    Let mutable n be 0.
+    If b:
+        Set n to 7.
+    Expect that jsonScaledCeil(a new JNum with n n, 6) is equal to jsonScaled(a new JNum with n n, 6).
+    Expect that foldTo(0 - n, 5) is at least 0.

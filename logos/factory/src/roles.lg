@@ -1,0 +1,81 @@
+# Roles
+
+Import Conventions from "./conventions.lg".
+Import Reference from "./reference.lg".
+Import LocalRun from "./local_run.lg".
+Import RolesIngest from "./roles_ingest.lg".
+Import RolesVerify from "./roles_verify.lg".
+Import HostFiles from "./host_files.lg".
+Import Selftest from "./selftest.lg".
+
+The MaCSad math factory is one program with one role per process; which role
+runs is the first argument. Every role prints what it did and fails when it did
+not do it. The distributed roles (`worker`, `coordinator`) need the coordinator's
+routes and database, built beside this in the same project.
+
+## To usage () -> Text:
+    Let a be ["usage: factory <role> …", "  ingest fc <manifest.json> <out-dir>", "  ingest opdp <atlas.json | atlas.json.gz> <out-dir> [chunk-mb]"].
+    Let b be ["  verifier judge <statement.kernel> <goal> <submission.kernel>", "  verifier statement <statement.kernel> <goal>", "  verifier reference"].
+    Let c be ["  local seed <workspace>", "  local answer <workspace> <problem-id> <answer-file> [cost-micros]", "  selftest [--live]"].
+    Return joinLines(a + b + c + ["  reference", "  local <workspace> <problem-id> [attempts]", "  worker | coordinator"]).
+
+## Note
+The argument at a position, the program's own name first, or the empty text.
+
+## To argAt (xs: Seq of Text, i: Int) -> Text:
+    If i is greater than length of xs:
+        Return "".
+    Return item i of xs.
+
+## Note
+A count argument, or `fallback` when it is absent or not a number.
+
+## To countAt (xs: Seq of Text, i: Int, fallback: Int) -> Int:
+    If allDigits(argAt(xs, i)) and argAt(xs, i) is not equal to "":
+        Return parseInt(argAt(xs, i)).
+    Return fallback.
+
+## Note
+A recorded answer for the next attempt on a problem, read from a file.
+
+## To runAnswer (workspace: Text, problemId: Text, answerPath: Text, costMicros: Int) -> Outcome:
+    Inspect readText(answerPath):
+        When Err (e):
+            Return failed("cannot read the answer: " + e).
+        When Ok (content):
+            Inspect answerNext(workspace, problemId, content, costMicros):
+                When Ok (sha):
+                    Return done("recorded the answer to prompt " + sha).
+                When Err (e):
+                    Return failed(e).
+    Return failed("unreachable").
+
+## Note
+The role the arguments name, run.
+
+## To dispatch (xs: Seq of Text) -> Outcome:
+    Let role be argAt(xs, 2) + " " + argAt(xs, 3).
+    If role is equal to "ingest fc" and length of xs is at least 5:
+        Return runIngestFc(argAt(xs, 4), argAt(xs, 5)).
+    If role is equal to "ingest opdp" and length of xs is at least 5:
+        Return runIngestOpdp(argAt(xs, 4), argAt(xs, 5), countAt(xs, 6, 8)).
+    If role is equal to "verifier judge" and length of xs is at least 6:
+        Return runJudge(argAt(xs, 4), argAt(xs, 5), argAt(xs, 6)).
+    If role is equal to "verifier statement" and length of xs is at least 5:
+        Return runStatementCheck(argAt(xs, 4), argAt(xs, 5)).
+    If role is equal to "verifier reference":
+        Return runReferenceCheck().
+    If argAt(xs, 2) is equal to "reference":
+        Return done(kernelReference()).
+    If role is equal to "selftest " or role is equal to "selftest --live":
+        Return runSelftest(argAt(xs, 3) is equal to "--live").
+    If role is equal to "local seed" and length of xs is at least 4:
+        Let seeded be seedWorkspace(argAt(xs, 4)).
+        Return done("seeded " + argAt(xs, 4) + " with " + seeded's problemId).
+    If role is equal to "local answer" and length of xs is at least 6:
+        Return runAnswer(argAt(xs, 4), argAt(xs, 5), argAt(xs, 6), countAt(xs, 7, 0)).
+    If argAt(xs, 2) is equal to "local" and length of xs is at least 4:
+        Return runLocal(argAt(xs, 3), argAt(xs, 4), countAt(xs, 5, 1)).
+    If argAt(xs, 2) is equal to "worker" or argAt(xs, 2) is equal to "coordinator":
+        Return failed("the " + argAt(xs, 2) + " role needs the coordinator's routes and database; use `local`.\n" + usage()).
+    Return failed(usage()).

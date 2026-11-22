@@ -1,0 +1,54 @@
+# MSC category
+
+The atlas category a Mathematics Subject Classification (MSC 2020) top-level
+subject falls under, so problems from every source sit in one vocabulary of
+categories, and the rank's expressibility prior reads them alike.
+
+## To mscCategory (code: Int) -> Text:
+    Let singles be [3, 5, 11, 14, 20, 22, 35, 37, 58, 60, 62, 68, 90, 91, 94].
+    Let named be ["logic", "combinatorics", "number-theory", "algebraic-geometry", "group-theory", "group-theory", "pde", "dynamical-systems"].
+    Let more be ["analysis", "probability", "probability", "computer-science", "computer-science", "computer-science", "computer-science"].
+    Repeat for i from 1 to length of singles:
+        If item i of singles is equal to code:
+            Return item i of (named + more).
+    If code is at least 51 and code is at most 53:
+        Return "geometry".
+    If code is at least 54 and code is at most 57:
+        Return "topology".
+    If code is at least 70 and code is at most 86:
+        Return "physics".
+    If [6, 8, 12, 13, 15, 16, 17, 18, 19] contains code:
+        Return "algebra".
+    If code is at least 26 and code is at most 49:
+        Return "analysis".
+    Return "miscellaneous".
+
+## Test: MSC subjects map onto the atlas's categories
+
+For each of these cases:
+
+| code | category           |
+|------|--------------------|
+| 3    | "logic"            |
+| 5    | "combinatorics"    |
+| 11   | "number-theory"    |
+| 13   | "algebra"          |
+| 20   | "group-theory"     |
+| 35   | "pde"              |
+| 42   | "analysis"         |
+| 52   | "geometry"         |
+| 55   | "topology"         |
+| 60   | "probability"      |
+| 68   | "computer-science" |
+| 81   | "physics"          |
+| 97   | "miscellaneous"    |
+
+Expect that mscCategory(code) is equal to category.
+
+## Test: number theory and combinatorics are told apart
+
+For all booleans numbers:
+    Let mutable code be 5.
+    If numbers:
+        Set code to 11.
+    Expect that (mscCategory(code) is equal to "number-theory") is equal to numbers.

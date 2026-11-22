@@ -1,0 +1,1 @@
+{"blocks":[],"checked":false,"error":"Tactic error: step 2 (`rfl`): `rfl` does not apply: Nat_add Zero n and n do not convert\nin the goal\nn : Nat\n⊢ Eq Nat (Nat_add Zero n) n","failed_block":4,"file":"rejected.lg","surface":"kernel_document"}

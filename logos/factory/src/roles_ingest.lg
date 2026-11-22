@@ -1,0 +1,56 @@
+# Roles ingest
+
+Import HostFiles from "./host_files.lg".
+Import ProblemRecord from "./problem_record.lg".
+Import NodeRecord from "./node_record.lg".
+Import IngestFc from "./ingest_fc.lg".
+Import AtlasIngest from "./atlas_ingest.lg".
+Import AtlasPrepare from "./atlas_prepare.lg".
+Import LocalRun from "./local_run.lg".
+
+The two ingest roles: the formalization lab's manifest, and the OPDP atlas
+streamed from its release file, each written as `problems.jsonl` and `nodes.jsonl`.
+
+## To runIngestFc (manifestPath: Text, out: Text) -> Outcome:
+    Inspect readText(manifestPath):
+        When Err (e):
+            Return failed("cannot read the manifest: " + e).
+        When Ok (text):
+            Inspect ingestManifest(text):
+                When Err (e):
+                    Return failed(e).
+                When Ok (got):
+                    Let made be ensureDir(out).
+                    Let mutable problems be a new Seq of Text.
+                    Repeat for p in got's problems:
+                        Push toJson_Problem(p) to problems.
+                    Let mutable nodes be a new Seq of Text.
+                    Repeat for n in got's nodes:
+                        Push toJson_Node(n) to nodes.
+                    Let w1 be writeAtomically(out + "/problems.jsonl", join(problems, "\n") + "\n").
+                    Let w2 be writeAtomically(out + "/nodes.jsonl", join(nodes, "\n") + "\n").
+                    Return done("ingested {length of got's problems} problems and {length of got's nodes} nodes into " + out).
+    Return failed("unreachable").
+
+## Note
+The atlas, with what each stage took and how many records it held.
+
+## To runIngestOpdp (atlasPath: Text, out: Text, chunkMb: Int) -> Outcome:
+    Let t0 be clockMs().
+    Inspect prepareAtlas(atlasPath, out + "/work", chunkMb):
+        When Err (e):
+            Return failed(e).
+        When Ok (chunks):
+            Let t1 be clockMs().
+            Inspect ingestAtlasChunks(chunks, out, "UnsolvedMath"):
+                When Err (e):
+                    Return failed(e).
+                When Ok (s):
+                    Let counts be "declared {s's declared}, scanned {s's scanned}, written {s's written}, refused {s's refused}".
+                    Let line be counts + "; {length of chunks} chunks, {s's bytes} bytes; prepare {t1 - t0} ms, ingest {s's elapsedMs} ms".
+                    If s's refused is greater than 0:
+                        Return failed(line + "; first refusal: " + s's firstRefusal).
+                    If s's declared is at least 0 and s's declared is not equal to s's scanned:
+                        Return failed(line + "; the atlas declares a different number of records than it holds").
+                    Return done(line).
+    Return failed("unreachable").

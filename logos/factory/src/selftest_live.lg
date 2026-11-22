@@ -1,0 +1,64 @@
+# Selftest live
+
+Import HostFiles from "./host_files.lg".
+Import HostTools from "./host_tools.lg".
+Import TrailRecord from "./trail_record.lg".
+Import Verifier from "./verifier.lg".
+Import LocalStore from "./local_store.lg".
+Import LocalRun from "./local_run.lg".
+Import SelftestRecords from "./selftest_records.lg".
+Import SelftestPolicy from "./selftest_policy.lg".
+
+The checks that need the real kernel: the recorded submissions judged by
+`largo` itself, a shadowing name caught by its probe, statements checked, and the
+whole local loop — a recorded correct proof verified and filed in the results,
+and a recorded wrong proof refused, repaired from the kernel's own diagnostics
+and verified. Workspaces go under `MACSAD_WORK`.
+
+## To judgeChecks () -> Seq of Text:
+    Let tc be defaultToolchain().
+    Let s be fixtureStatement().
+    Let mutable f be expectThat("the correct proof is verified by the kernel", (judgeSubmission(tc, s, "goal", fixtureProof()))'s kind is equal to "verified").
+    Let wrong be judgeSubmission(tc, s, "goal", "Theorem proof_of_goal : goal := by intro n; rfl.").
+    Set f to f + expectThat("the wrong proof is rejected at block 4", wrong's kind is equal to "rejected" and wrong's block is equal to 4).
+    Let axiom be "Axiom zero_add_axiom : forall (n : Nat), Eq Nat (Nat_add Zero n) n.\n\nTheorem proof_of_goal : goal := by exact zero_add_axiom.".
+    Set f to f + expectThat("an axiom-backed proof is admitted", (judgeSubmission(tc, s, "goal", axiom))'s axioms is equal to ["zero_add_axiom"]).
+    Let shadow be "Definition Nat_add : Nat -> Nat -> Nat := fun (a : Nat) => fun (b : Nat) => b.\n\nTheorem proof_of_goal : goal := by intro n; rfl.".
+    Let caught be judgeSubmission(tc, s, "goal", shadow).
+    Set f to f + expectThat("a shadowed prelude name is caught by its probe", caught's error is equal to "the submission declares Nat_add, which the statement or the prelude already binds").
+    Set f to f + expectThat("the fixture statement is well formed", (judgeStatement(tc, s, "goal"))'s kind is equal to "verified").
+    Let falsehood be judgeStatement(tc, "Definition False : Prop := True.\n\nDefinition goal : Prop := False.", "goal").
+    Return f + expectThat("a statement may not shadow the prelude", falsehood's error is equal to "the statement declares False, which the prelude already binds").
+
+## Note
+A fresh workspace under `MACSAD_WORK`, seeded with the fixture statement.
+
+## To freshWorkspace (name: Text) -> Text:
+    Let ws be envOr("MACSAD_WORK", ".macsad-work") + "/selftest-" + name + "-{clockMs()}".
+    Let st be seedWorkspace(ws).
+    Return ws.
+
+## To loopChecks () -> Seq of Text:
+    Let ok be freshWorkspace("correct").
+    Let r1 be answerNext(ok, "local:zero_add", "```logos-kernel\n" + fixtureProof() + "\n```\nSummary: induction on n.", 2310).
+    Let correct be runLocal(ok, "local:zero_add", 3).
+    Let mutable f be expectThat("a recorded correct proof is verified", correct's ok and correct's message contains "#1 prove: verified").
+    Let ws be freshWorkspace("repair").
+    Let r2 be answerNext(ws, "local:zero_add", "```logos-kernel\nTheorem proof_of_goal : goal := by intro n; rfl.\n```\nNext: induct on n if rfl fails.", 900).
+    Let first be runLocal(ws, "local:zero_add", 1).
+    Set f to f + expectThat("a recorded wrong proof is refused at block 4", first's message contains "#1 prove: rejected").
+    Inspect nextRequest(ws, "local:zero_add"):
+        When Ok (request):
+            Let user be (item 2 of request's messages)'s content.
+            Set f to f + expectThat("the repair prompt shows the refused block and the hint", user contains "The kernel refused the block" and user contains "induct on n").
+        When Err (e):
+            Push "a repair request is planned: " + e to f.
+    Let r3 be answerNext(ws, "local:zero_add", "```logos-kernel\n" + fixtureProof() + "\n```\nSummary: induction, not rfl.", 1200).
+    Let second be runLocal(ws, "local:zero_add", 1).
+    Set f to f + expectThat("the repair is verified", second's ok and second's message contains "#2 repair: verified").
+    Inspect loadTrail(ws + "/trails/local_zero_add.jsonl"):
+        When Ok (trail):
+            Set f to f + expectThat("the trail holds two chained entries", length of trail is equal to 2 and verifyTrail(trail) is equal to "").
+        When Err (e):
+            Push "the trail holds: " + e to f.
+    Return f + expectThat("the dead end is recorded", pathExists(ws + "/dead-ends/local_zero_add.txt")).

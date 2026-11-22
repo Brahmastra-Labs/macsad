@@ -1,0 +1,112 @@
+# Work record
+
+The board: units of work, the leases that claim them, the strategies they are
+attacked with, and the contributors who run them.
+
+## Note
+One unit of work. Only the coordinator creates units; a worker takes one through
+a lease.
+
+## A WorkUnit has:
+    an id, which is Text.
+    a problemId, which is Text.
+    a statementId, which is Option of Text.
+    a parentUnitId, which is Option of Text.
+    a kind, which is Text.
+    a priority, which is Int.
+    a state, which is Text.
+    a createdAt, which is Int.
+
+## Note
+The one live claim on a unit. Every lease on a unit carries a larger fencing
+`token`, and a result posted under a smaller one is refused, so a worker whose
+lease expired cannot overwrite the work of the worker that took the unit next.
+
+## A Lease has:
+    a unitId, which is Text.
+    a holder, which is Text.
+    a token, which is Int.
+    a grantedAt, which is Int.
+    an expiresAt, which is Int.
+    a heartbeatAt, which is Int.
+
+## Note
+A strategy is versioned data, never code: the playbook a unit kind is attacked
+with, the model and the sampling budget. Strategies evolve; the kernel, the
+acceptance policy and the budget caps do not.
+
+## A Strategy has:
+    an id, which is Text.
+    a version, which is Int.
+    a parentId, which is Option of Text.
+    a unitKind, which is Text.
+    a model, which is Text.
+    a temperatureBp, which is Int.
+    a maxTokens, which is Int.
+    a playbook, which is Text.
+    a contextRules, which is Text.
+    a status, which is Text.
+    a createdAt, which is Int.
+
+## Note
+Someone running a worker. The OpenRouter key never appears here; only spend is reported.
+
+## A Contributor has:
+    an id, which is Text.
+    a displayName, which is Text.
+    a budgetMicros, which is Int.
+    a spentMicros, which is Int.
+    a focus, which is Text.
+    a joinedAt, which is Int.
+
+## Note
+What a unit may ask for, and its life on the board.
+
+## To unitKinds () -> Seq of Text:
+    Return ["formalize", "review", "prove", "decompose", "special_case", "counterexample", "repair", "summarize_trail", "link", "improve_strategy", "verify"].
+
+## Note
+A unit's states.
+
+## To unitStates () -> Seq of Text:
+    Return ["ready", "leased", "done", "failed", "cancelled"].
+
+## Note
+Whether a lease still holds at `nowMs` for the fencing token a result was posted under.
+
+## To leaseHolds (l: Lease, token: Int, nowMs: Int) -> Bool:
+    Return l's token is equal to token and nowMs is at most l's expiresAt.
+
+## Test: a unit, a lease, a strategy and a contributor round-trip
+
+Let u be a new WorkUnit with id "u1" and problemId "opdp:116" and statementId none and parentUnitId (some "u0") and kind "prove" and priority 6100 and state "ready" and createdAt 9.
+Expect that fromJson_WorkUnit(toJson_WorkUnit(u)) is equal to a new Ok with value u.
+Let l be a new Lease with unitId "u1" and holder "c1" and token 7 and grantedAt 10 and expiresAt 70 and heartbeatAt 40.
+Expect that fromJson_Lease(toJson_Lease(l)) is equal to a new Ok with value l.
+Let mutable st be a new Strategy with id "s1" and version 2 and parentId none and unitKind "prove" and model "m" and temperatureBp 2000.
+Set st's maxTokens to 4096.
+Set st's playbook to "Induct first.".
+Set st's contextRules to "".
+Set st's status to "active".
+Set st's createdAt to 1.
+Expect that fromJson_Strategy(toJson_Strategy(st)) is equal to a new Ok with value st.
+Let c be a new Contributor with id "c1" and displayName "Ada" and budgetMicros 5000000 and spentMicros 1250 and focus "erdos" and joinedAt 3.
+Expect that fromJson_Contributor(toJson_Contributor(c)) is equal to a new Ok with value c.
+
+## Test: the board's vocabularies are the schema's
+
+Expect that length of unitKinds() is equal to 11.
+Expect that unitKinds() contains "verify".
+Expect that unitStates() is equal to ["ready", "leased", "done", "failed", "cancelled"].
+
+## Test: a stale token or an expired lease does not hold
+
+For all booleans current and early:
+    Let l be a new Lease with unitId "u" and holder "h" and token 7 and grantedAt 0 and expiresAt 100 and heartbeatAt 0.
+    Let mutable token be 6.
+    If current:
+        Set token to 7.
+    Let mutable instant be 101.
+    If early:
+        Set instant to 99.
+    Expect that leaseHolds(l, token, instant) is equal to (current and early).

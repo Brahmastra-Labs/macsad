@@ -419,6 +419,641 @@
         }
       ],
       "domBundle": false
+    },
+    {
+      "name": "factory",
+      "directory": "logos/factory",
+      "entry": "src/main.lg",
+      "logicalRoot": "src/roles.lg",
+      "entryClosureLock": "pinned-transitive-scope-workaround",
+      "allowedDiagnostics": [
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import AtlasGraph` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import AtlasIngest` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import AtlasPrepare` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import AtlasScan` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import AttemptRecord` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import Budget` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import ChatReply` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import ChatRequest` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import Conventions` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import Cost` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import Extraction` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import HostTools` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import IngestFc` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import KernelBlocks` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import KernelReport` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import KernelVerdict` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import Local` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import LocalAttempt` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import LocalPlan` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import LocalRun` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import LocalSettings` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import LocalStore` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import ManifestEntry` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import ModelPrice` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import MscCategory` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import NodeRecord` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import OpdpRow` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import ProblemRecord` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import PromptRoles` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import PromptTasks` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import Prompts` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import Rank` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import RankScore` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import RankTrail` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import RecordsDecode` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import RefExample` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import RefFailures` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import RefLanguage` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import RefProse` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import RefTacticsBasic` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import RefTacticsCompute` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import Reference` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import Replay` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import RolesIngest` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import RolesVerify` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import Selftest` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import SelftestLive` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import SelftestPolicy` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import SelftestRecords` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import SelftestSources` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import SubmissionPolicy` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import TrailDigest` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import TrailMemory` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import TrailRecord` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import VerdictRecord` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import Verifier` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import VernacularCommand` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import VernacularNames` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import WireNumber` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import WireRead` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import WireShape` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import WorkRecord` is unused \u2014 no name from it is referenced here."
+        }
+      ],
+      "domBundle": false,
+      "testLeaves": [
+        {
+          "path": "src/atlas_scan.lg",
+          "expectedTests": [
+            "records come out compact, strings keep their spaces, the header stays, and a nested records key is not the array",
+            "the scan does not depend on where the chunks are cut"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/budget.lg",
+          "expectedTests": [
+            "a budget holds, settles and stops honestly",
+            "rounding up never charges less than the exact amount",
+            "reservations never take a budget below zero",
+            "a call is made exactly when its worst case fits"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/chat_request.lg",
+          "expectedTests": [
+            "a request body is canonical JSON in a fixed order",
+            "temperatures are exact decimals and the key stays in its header",
+            "a different temperature is a different prompt"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/conventions.lg",
+          "expectedTests": [
+            "SHA-256 of abc is the FIPS vector",
+            "money prints with all six decimals",
+            "lines join with newlines and ids become path segments",
+            "a cost and its negation print the same digits"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/extraction.lg",
+          "expectedTests": [
+            "the submission is the one logos-kernel block, with its summary and suggestions",
+            "other fences are ignored and zero, two or an unclosed block is refused",
+            "a review block's fields are read by name",
+            "a second block is refused whatever is in it"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/host_files.lg",
+          "expectedTests": [
+            "an atomic write replaces a file whole and leaves no temporary behind",
+            "lines are appended one at a time under a made directory",
+            "a sealed world has no environment to read",
+            "a file exists exactly when it was written"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/kernel_blocks.lg",
+          "expectedTests": [
+            "a period inside a name or a string does not end a command",
+            "comments are blocks, nested ones whole, and an unclosed one is refused",
+            "an escaped quote does not end a string"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/kernel_report.lg",
+          "expectedTests": [
+            "a checked report reads block by block",
+            "the axiom report reads both of its forms",
+            "a probe is bound only when it checked, free only when unbound by name"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/msc_category.lg",
+          "expectedTests": [
+            "MSC subjects map onto the atlas's categories",
+            "number theory and combinatorics are told apart"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/node_record.lg",
+          "expectedTests": [
+            "a node and a statement round-trip through their derived codecs",
+            "node ids name their level and place",
+            "the graph's vocabularies are the schema's",
+            "a ranked node keeps its kind whether or not it belongs to a problem"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/problem_record.lg",
+          "expectedTests": [
+            "a problem round-trips through its derived codec",
+            "an absent Lean statement travels as null, not as an empty text",
+            "source statuses map onto the coordinator's five",
+            "a status is one of the coordinator's words whatever the source says"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/prompt_roles.lg",
+          "expectedTests": [
+            "the reviewer and the summarizer have their own roles",
+            "the answer contract names the fence the extractor reads",
+            "only a reviewer is asked for a review block"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/prompt_tasks.lg",
+          "expectedTests": [
+            "a prove task names the one theorem the verifier accepts",
+            "a repair task shows the submission, the refused block and the error",
+            "every kind that writes vernacular names what it must declare",
+            "a repair shows its diagnostics and a proof task does not"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/rank_score.lg",
+          "expectedTests": [
+            "record 116 is scored component by component, as by hand",
+            "a formal statement raises a problem by its availability weight",
+            "more tool leverage never lowers the score",
+            "being AI-favored never lowers the score"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/rank_trail.lg",
+          "expectedTests": [
+            "the trail factor rewards progress and punishes repeated walls",
+            "record 116 drops five percent after one repeated failure and one verified attempt",
+            "every priority lies on the scale",
+            "an untractable problem is never scheduled, whatever its trail"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/ref_example.lg",
+          "expectedTests": [
+            "a positive example renders as its lead and a fenced document",
+            "a failure example also shows what the kernel answers",
+            "only a failure example says what the kernel answers"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/trail_record.lg",
+          "expectedTests": [
+            "the canonical body is valid JSON that names no hash",
+            "appending chains entries and editing one breaks the chain there",
+            "a sealed entry edited in any field no longer chains"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/verdict_record.lg",
+          "expectedTests": [
+            "a verdict carries its closure through the derived encoder",
+            "only Lean's three axioms are allowed, under the kernel's spellings",
+            "a refusal before the kernel is its own attempt verdict kind",
+            "a closure is allowed exactly when it adds nothing to Lean's three"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/vernacular_command.lg",
+          "expectedTests": [
+            "a block's command is read past visibility words",
+            "a theorem's statement, body and skeleton are read",
+            "names and spacing do not change a skeleton"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/vernacular_names.lg",
+          "expectedTests": [
+            "a declaration names what it declares",
+            "an inductive declares its constructors and its mutual partners",
+            "a name is read up to a universe list or a colon"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/wire_number.lg",
+          "expectedTests": [
+            "decimals become exact scaled integers, and a finer one is refused",
+            "money coming in is rounded up and never negative",
+            "a price written as text is read by the JSON number grammar",
+            "a whole number rounds the same either way, and folding stays in range"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/wire_read.lg",
+          "expectedTests": [
+            "total readers read what is there and the empty value otherwise",
+            "a dotted path walks nested objects",
+            "a strict parse refuses a duplicated key",
+            "a boolean field reads back as itself"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/wire_shape.lg",
+          "expectedTests": [
+            "a field specification splits into its name and kind",
+            "a closed shape accepts exactly its fields and names the first wrong one",
+            "an open shape tolerates fields it does not name, and a mixed array is not texts",
+            "a boolean has the bool shape and no other"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/work_record.lg",
+          "expectedTests": [
+            "a unit, a lease, a strategy and a contributor round-trip",
+            "the board's vocabularies are the schema's",
+            "a stale token or an expired lease does not hold"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        }
+      ]
     }
   ]
 }

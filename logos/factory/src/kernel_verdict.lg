@@ -1,0 +1,70 @@
+# Kernel verdict
+
+Import Conventions from "./conventions.lg".
+Import VerdictRecord from "./verdict_record.lg".
+Import KernelReport from "./kernel_report.lg".
+Import NodeRecord from "./node_record.lg".
+
+The acceptance policy, applied to one kernel run. It is fixed, and no agent can
+edit it: every block checked; the closing `Check <proof>.` printed exactly
+`<proof> : <goal>`; the closing `Print Axioms <proof>.` reports a closure inside
+`propext`, `Quot_sound` and `Classical_choice`; and, before any of that, the
+submission's reading and its name probes let it through. `largo` exits 0 exactly
+when the document checked and 1 when a block was refused, so a run whose exit
+disagrees with its own report is infrastructure, never a verdict.
+
+## To kernelVerdict (exitCode: Int, stdout: Text, timedOut: Bool, proofName: Text, goalName: Text) -> Verdict:
+    If timedOut:
+        Return infrastructureVerdict("largo ran past its deadline").
+    Inspect parseKernelReport(stdout):
+        When Err (e):
+            Return infrastructureVerdict("largo exited {exitCode}; " + e).
+        When Ok (report):
+            Let exitedClean be exitCode is equal to 0.
+            If report's checked is not equal to exitedClean or exitCode is greater than 1:
+                Return infrastructureVerdict("the report and largo's exit status {exitCode} disagree").
+            If report's checked is equal to false:
+                Return newVerdict("rejected", report's failedBlock, report's error, [], "the kernel refused the document").
+            Return closingVerdict(report's outputs, proofName, goalName).
+    Return infrastructureVerdict("unreadable run").
+
+## Note
+The verdict the closing checks give, read off the last two block outputs.
+
+## To closingVerdict (outputs: Seq of Text, proofName: Text, goalName: Text) -> Verdict:
+    Let n be length of outputs.
+    If n is less than 2:
+        Return newVerdict("rejected", n, "the document has no closing checks", [], "the factory's closing checks did not run as written").
+    If item (n - 1) of outputs is not equal to proofName + " : " + goalName:
+        Return newVerdict("rejected", n - 1, "`Check {proofName}.` printed `{item (n - 1) of outputs}`, not `{proofName} : {goalName}`", [], "the proof does not have the goal as its type").
+    Inspect axiomsOf(item n of outputs, proofName):
+        When Err (e):
+            Return newVerdict("rejected", n, e, [], "the factory's closing checks did not run as written").
+        When Ok (axioms):
+            Let outside be disallowedAxioms(axioms).
+            If length of outside is equal to 0:
+                Return newVerdict("verified", 0, "", axioms, "every block checked; the proof rests on " + axiomPhrase(axioms) + ", within propext, Quot_sound and Classical_choice").
+            Return newVerdict("admitted_axiom", 0, "", axioms, "every block checked, but the proof rests on " + join(outside, ", ") + ", outside propext, Quot_sound and Classical_choice").
+    Return infrastructureVerdict("unreadable closing checks").
+
+## Note
+The verdict name probes add, or `none` when every declared name was free; `what`
+is the document probed and `boundBy` what it was probed against.
+
+## To nameProbeVerdict (what: Text, boundBy: Text, names: Seq of Text, outcomes: Seq of Text) -> Option of Verdict:
+    Repeat for i from 1 to length of names:
+        If item i of outcomes is equal to "bound":
+            Return some newVerdict("rejected", 0, "the {what} declares {item i of names}, which {boundBy} already binds", [], "a {what} may only add new names").
+    Repeat for i from 1 to length of names:
+        If item i of outcomes is not equal to "free":
+            Return some infrastructureVerdict("the probe of {item i of names} did not answer").
+    Return none.
+
+## Note
+Whether a proof document is bound to an accepted statement: the statement hashes
+to its recorded hash and the document begins with it as the assembler places it.
+
+## To boundToStatement (statement: Statement, document: Text) -> Bool:
+    If sha256Hex(statement's document) is not equal to statement's sha256:
+        Return false.
+    Return startsWith(document, trimEnd(statement's document) + "\n\n/-! ## Submission -/\n\n").

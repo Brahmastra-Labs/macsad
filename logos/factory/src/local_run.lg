@@ -1,0 +1,91 @@
+# Local run
+
+Import Conventions from "./conventions.lg".
+Import HostFiles from "./host_files.lg".
+Import NodeRecord from "./node_record.lg".
+Import ChatRequest from "./chat_request.lg".
+Import Budget from "./budget.lg".
+Import Cost from "./cost.lg".
+Import Replay from "./replay.lg".
+Import LocalSettings from "./local_settings.lg".
+Import LocalStore from "./local_store.lg".
+Import LocalPlan from "./local_plan.lg".
+Import Local from "./local.lg".
+
+Up to a number of attempts on one problem, stopping at the first verified one, at
+a budget stop, or when an attempt could not be made; and the two helpers that
+let a person (or a test) answer the next prompt ahead of time as a recording.
+
+## An Outcome has:
+    a message, which is Text.
+    an ok, which is Bool.
+
+## To done (message: Text) -> Outcome:
+    Return a new Outcome with message message and ok true.
+
+## To failed (message: Text) -> Outcome:
+    Return a new Outcome with message message and ok false.
+
+## To runLocal (workspace: Text, problemId: Text, attempts: Int) -> Outcome:
+    Inspect localSettings(workspace):
+        When Err (e):
+            Return failed(e).
+        When Ok (s):
+            Let mutable budget be newBudget(s's budgetMicros).
+            Let mutable out be a new Seq of Text.
+            Let mutable last be "".
+            Let mutable going be true.
+            While going and length of out is less than attempts:
+                Let (o, b) be runAttempt(workspace, problemId, s, budget).
+                Set budget to b.
+                Push o's line to out.
+                Set last to o's verdict.
+                Set going to o's proceed.
+            Push "spent " + formatMicros(budget's spentMicros) + " of " + formatMicros(budget's limitMicros) to out.
+            If last is equal to "verified":
+                Return done(join(out, "\n")).
+            Return failed(join(out, "\n")).
+    Return failed("unreachable").
+
+## Note
+A workspace holding the kernel fixture's statement (`0 + n = n`) as the accepted
+statement of `local:zero_add`.
+
+## To seedWorkspace (workspace: Text) -> Statement:
+    Let doc be join(["/-! # Statement: zero is a left identity of addition on Nat", "", "Route C. A proof must establish `goal`. -/", "", "Definition goal : Prop := forall (n : Nat), Eq Nat (Nat_add Zero n) n."], "\n").
+    Let mutable st be a new Statement with id ("stmt:" + sha256Hex(doc)) and problemId "local:zero_add" and document doc and sha256 sha256Hex(doc) and goalName "goal".
+    Set st's route to "C".
+    Set st's reviewState to "accepted".
+    Set st's author to "fixture".
+    Set st's model to "none".
+    Let made be ensureDir(workspace + "/statements").
+    Let w be writeText(workspace + "/statements/local_zero_add.json", toJson_Statement(st)).
+    Return st.
+
+## Note
+The request the next attempt on `problemId` will make.
+
+## To nextRequest (workspace: Text, problemId: Text) -> Result of ChatRequest and Text:
+    Inspect loadStatement(workspace, problemId):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (statement):
+            Inspect loadTrail(workspace + "/trails/" + slugOf(problemId) + ".jsonl"):
+                When Err (e):
+                    Return a new Err with error e.
+                When Ok (trail):
+                    Return a new Ok with value planRequest(workspace, problemId, statement, trail, nextKind(trail)).
+    Return a new Err with error "no request".
+
+## Note
+A recorded answer to the next attempt: the content a model would have sent, as a
+reply costing `costMicros`. Answers the prompt hash.
+
+## To answerNext (workspace: Text, problemId: Text, content: Text, costMicros: Int) -> Result of Text and Text:
+    Inspect nextRequest(workspace, problemId):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (request):
+            Let reply be replyDocument("replay-" + promptSha(request), request's model, content, promptTokenBound(request), length of text_bytes(content), costMicros).
+            Return recordReply(envOr("MACSAD_REPLAY_DIR", workspace + "/replays"), request, reply).
+    Return a new Err with error "unanswered".

@@ -1,0 +1,108 @@
+# Vernacular names
+
+The names a declaration adds. The kernel lets a `Definition` shadow any existing
+name, prelude names included (`LOGOS_ISSUES.md`, issue 2), so every name a
+submission declares is probed before the kernel checks it, and this is where
+those names are read: the declared name of a `Definition`, `Theorem`, `Axiom` or
+`Opaque`, and for an `Inductive` its name, its constructors and the other types
+of a mutual block.
+
+## Note
+Whether a byte can be in a declaration name: letters, digits, `_`, `'`, `.` for
+hierarchy, and any byte of a multi-byte character.
+
+## To isNameByte (b: Int) -> Bool:
+    If b is at least 128 or (b is at least 48 and b is at most 57):
+        Return true.
+    If (b is at least 65 and b is at most 90) or (b is at least 97 and b is at most 122):
+        Return true.
+    Return b is equal to 95 or b is equal to 39 or b is equal to 46.
+
+## Note
+The name starting at the first non-space byte from `start`, and where it ends; a
+universe list `.{u}` ends a name.
+
+## To nameAt (bs: Seq of Int, start: Int) -> (Text, Int):
+    Let n be length of bs.
+    Let mutable i be start.
+    While i is at most n and (item i of bs is equal to 32 or item i of bs is equal to 10):
+        Set i to i + 1.
+    Let first be i.
+    While i is at most n and isNameByte(item i of bs) and (item i of bs is not equal to 46 or i is equal to n or item (i + 1) of bs is not equal to 123):
+        Set i to i + 1.
+    Let mutable last be i - 1.
+    While last is at least first and item last of bs is equal to 46:
+        Set last to last - 1.
+    If last is less than first:
+        Return ("", i).
+    Return (text_from_bytes(items first through last of bs), i).
+
+## Note
+The constructors after each top-level `:=` (each alternative after `|` starts
+with one) and the types after each top-level `with`.
+
+## To inductiveNames (bs: Seq of Int, from: Int) -> Seq of Text:
+    Let mutable out be a new Seq of Text.
+    Let mutable depth be 0.
+    Let mutable want be false.
+    Let mutable i be from.
+    While i is at most length of bs:
+        Let b be item i of bs.
+        If b is equal to 40 or b is equal to 91 or b is equal to 123:
+            Set depth to depth + 1.
+        If b is equal to 41 or b is equal to 93 or b is equal to 125:
+            Set depth to depth - 1.
+        Let rest be text_from_bytes(items i through (length of bs) of bs).
+        If depth is equal to 0 and (startsWith(rest, ":=") or b is equal to 124):
+            Set want to true.
+            If b is equal to 58:
+                Set i to i + 1.
+        Otherwise:
+            If depth is equal to 0 and startsWith(rest, "with ") and i is greater than 1 and item (i - 1) of bs is equal to 32:
+                Let (other, next) be nameAt(bs, i + 4).
+                Push other to out.
+                Set i to next - 1.
+            Otherwise:
+                If want and b is not equal to 32 and b is not equal to 10:
+                    Let (ctor, after) be nameAt(bs, i).
+                    Push ctor to out.
+                    Set want to false.
+                    Set i to after - 1.
+        Set i to i + 1.
+    Return out.
+
+## Note
+The names a block of the given command declares.
+
+## To declaredNamesOf (block: Text, command: Text) -> Seq of Text:
+    If ["Definition", "Theorem", "Axiom", "Opaque", "Inductive"] contains command is equal to false:
+        Return [].
+    Let bs be text_bytes(block).
+    Let start be indexOf(block, command) + length of text_bytes(command) + 1.
+    Let (name, after) be nameAt(bs, start).
+    If command is equal to "Inductive":
+        Return [name] + inductiveNames(bs, after).
+    Return [name].
+
+## Test: a declaration names what it declares
+
+Expect that declaredNamesOf("Theorem proof_of_goal : goal := by rfl.", "Theorem") is equal to ["proof_of_goal"].
+Expect that declaredNamesOf("Definition Lean.Eq.rec.{{u, v}} : Prop := True.", "Definition") is equal to ["Lean.Eq.rec"].
+Expect that declaredNamesOf("Private Definition two:Nat := Succ (Succ Zero).", "Definition") is equal to ["two"].
+Expect that declaredNamesOf("Check two.", "Check") is equal to [].
+
+## Test: an inductive declares its constructors and its mutual partners
+
+Expect that declaredNamesOf("Inductive MyBool := Yes : MyBool | No : MyBool.", "Inductive") is equal to ["MyBool", "Yes", "No"].
+Let leq be "Inductive Leq (n : Nat) : Nat -> Prop := leq_n : Leq n n | leq_S : (m : Nat) -> Leq n m -> Leq n (Succ m).".
+Expect that declaredNamesOf(leq, "Inductive") is equal to ["Leq", "leq_n", "leq_S"].
+Let even be "Inductive Even : Nat -> Prop := ev0 : Even Zero | evS : (n : Nat) -> Odd n -> Even (Succ n) with Odd : Nat -> Prop := odS : (n : Nat) -> Even n -> Odd (Succ n).".
+Expect that declaredNamesOf(even, "Inductive") is equal to ["Even", "ev0", "evS", "Odd", "odS"].
+
+## Test: a name is read up to a universe list or a colon
+
+For all booleans universes:
+    Let mutable block be "Definition shift : Nat := Zero.".
+    If universes:
+        Set block to "Definition shift.{{u}} : Nat := Zero.".
+    Expect that declaredNamesOf(block, "Definition") is equal to ["shift"].

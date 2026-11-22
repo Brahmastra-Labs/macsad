@@ -1,0 +1,66 @@
+# Prompt tasks
+
+What each kind of unit asks a model to do, in words. The theorem a proof must be
+(`Theorem proof_of_goal : goal := …`) is named in every task that writes one,
+because the verifier accepts nothing else.
+
+## Note
+The task of a unit of `kind` on the goal `goal`, whose proof is `proof`; a repair
+also shows the refused submission, the refused block and the kernel's error.
+
+## To taskText (kind: Text, goal: Text, proof: Text, previous: Text, failedBlock: Text, diagnostics: Text) -> Text:
+    Let theorem be "`Theorem " + proof + " : " + goal + " := …`".
+    If kind is equal to "formalize":
+        Let a be "Write the statement of this problem as a kernel-vernacular document. Define every notion it needs with `Definition` or `Inductive`, ".
+        Let b be "and end with `Definition " + goal + " : Prop := …` saying exactly what the problem says, no more and no less. ".
+        Return "## Task\n\n" + a + b + "Prove nothing and declare no `Axiom`: a statement asserts nothing. Prefer the prelude's types (`Nat`, `Int`, `List`).".
+    If kind is equal to "prove":
+        Return "## Task\n\nProve `" + goal + "`. Your block may define helper lemmas first; it must contain " + theorem + ".".
+    If kind is equal to "decompose":
+        Let a be "## Task\n\nDo not prove `" + goal + "` outright. Split it into lemmas, each stated as an `Axiom` with a comment saying why it should hold, ".
+        Return a + "and prove " + theorem + " from them. Each lemma becomes a problem of its own, so make each smaller and more concrete than the goal.".
+    If kind is equal to "special_case":
+        Let a be "## Task\n\nState a special case of `" + goal + "` that a computation can settle (every n up to a bound, a small instance) ".
+        Return a + "as `Definition special_goal : Prop := …`, and prove it as `Theorem proof_of_special_goal : special_goal := …`, by `decide` where you can.".
+    If kind is equal to "counterexample":
+        Let a be "## Task\n\nLook for a counterexample. If you find one, prove `Theorem refutation_of_" + goal + " : Not " + goal + " := …`; ".
+        Return a + "if you find none, say so in `Summary:` and give what you checked in `Next:` lines.".
+    If kind is equal to "repair":
+        Let a be "## Task\n\nThe submission below was refused by the kernel. Fix it so that it checks, keeping what was right. It must still contain " + theorem + ".".
+        Let b be "\n\n```logos-kernel\n" + previous + "\n```\n\nThe kernel refused the block\n\n```logos-kernel\n" + failedBlock + "\n```".
+        Return a + b + "\n\nwith\n\n```text\n" + diagnostics + "\n```".
+    If kind is equal to "review":
+        Let a be "## Task\n\nRead the statement document above as mathematics. First paraphrase `" + goal + "` in plain mathematical English from the document alone. ".
+        Let b be "Then compare your paraphrase with the problem as stated: not a special case, not a stronger claim, not vacuous or trivially true, ".
+        Return a + b + "with every quantifier and definition meaning what the problem means.".
+    If kind is equal to "summarize_trail":
+        Return "## Task\n\nSummarize the attempts above for the next attempt: what is established, which approaches failed and why, and the most promising next steps.".
+    Return "## Task\n\nWork on `" + goal + "`.".
+
+## Test: a prove task names the one theorem the verifier accepts
+
+Let t be taskText("prove", "goal", "proof_of_goal", "", "", "").
+Expect that t is equal to "## Task\n\nProve `goal`. Your block may define helper lemmas first; it must contain `Theorem proof_of_goal : goal := …`.".
+
+## Test: a repair task shows the submission, the refused block and the error
+
+Let t be taskText("repair", "goal", "proof_of_goal", "Theorem proof_of_goal : goal := by intro n; rfl.", "Theorem proof_of_goal : goal := by intro n; rfl.", "`rfl` does not apply").
+Expect that t contains "The kernel refused the block".
+Expect that t contains "```logos-kernel\nTheorem proof_of_goal : goal := by intro n; rfl.\n```".
+Expect that t contains "```text\n`rfl` does not apply\n```".
+
+## Test: every kind that writes vernacular names what it must declare
+
+Expect that taskText("formalize", "goal", "proof_of_goal", "", "", "") contains "`Definition goal : Prop := …`".
+Expect that taskText("decompose", "goal", "proof_of_goal", "", "", "") contains "stated as an `Axiom`".
+Expect that taskText("special_case", "goal", "proof_of_goal", "", "", "") contains "Theorem proof_of_special_goal : special_goal".
+Expect that taskText("counterexample", "goal", "proof_of_goal", "", "", "") contains "Not goal".
+Expect that taskText("review", "goal", "proof_of_goal", "", "", "") contains "from the document alone".
+
+## Test: a repair shows its diagnostics and a proof task does not
+
+For all booleans repairing:
+    Let mutable kind be "prove".
+    If repairing:
+        Set kind to "repair".
+    Expect that (taskText(kind, "g", "proof_of_g", "p", "b", "the kernel's error") contains "the kernel's error") is equal to repairing.

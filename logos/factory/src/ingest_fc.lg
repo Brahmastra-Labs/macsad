@@ -1,0 +1,85 @@
+# Ingest fc
+
+Import WireRead from "./wire_read.lg".
+Import ProblemRecord from "./problem_record.lg".
+Import NodeRecord from "./node_record.lg".
+Import RankScore from "./rank_score.lg".
+Import RankTrail from "./rank_trail.lg".
+Import Rank from "./rank.lg".
+Import ManifestEntry from "./manifest_entry.lg".
+
+The formalization lab's whole manifest: every entry a problem, under its
+collection, under the lab's cohort. Every entry has a Lean statement and none a
+LOGOS one, so each starts `ranked`, waiting for a `formalize` unit, at the atlas's
+median prior raised for having a formal statement. A collection ranks as its
+best problem, so the graph orders its branches by where the best work is.
+
+## Note
+What an ingest produced: problems, and their graph nodes, parents first.
+
+## An Ingested has:
+    a problems, which is Seq of Problem.
+    a nodes, which is Seq of Node.
+
+## To manifestRank (p: Problem) -> Int:
+    Return priority(unprofiledInputs("lean", p's category), noSignals()).
+
+## Note
+The problems of a manifest's entries, unique by id.
+
+## To manifestProblems (entries: Seq of Json) -> Result of Seq of Problem and Text:
+    Let mutable out be a new Seq of Problem.
+    Let mutable seen be a new Set of Text.
+    Repeat for entry in entries:
+        Inspect manifestProblem(entry):
+            When Err (e):
+                Return a new Err with error e.
+            When Ok (p):
+                If seen contains p's id:
+                    Return a new Err with error "the manifest lists {p's id} twice".
+                Add p's id to seen.
+                Push p to out.
+    Return a new Ok with value out.
+
+## Note
+The graph of the lab's problems: cohort, collections in first-seen order, problems.
+
+## To manifestNodes (problems: Seq of Problem) -> Seq of Node:
+    Let cohort be labCohort().
+    Let mutable collections be a new Seq of Text.
+    Let mutable best be a new Map of Text to Int.
+    Let mutable top be 0.
+    Repeat for p in problems:
+        Let home be p's collection.
+        If collections contains home is equal to false:
+            Push home to collections.
+            Set best at home to 0.
+        If manifestRank(p) is greater than item home of best:
+            Set best at home to manifestRank(p).
+        If manifestRank(p) is greater than top:
+            Set top to manifestRank(p).
+    Let mutable nodes be [rankedNode(cohortNodeId(cohort), none, none, "cohort", "Formalization lab: 200 pinned open statements", top)].
+    Repeat for c in collections:
+        Push rankedNode(collectionNodeId(cohort, c), some cohortNodeId(cohort), none, "collection", c, item c of best) to nodes.
+    Repeat for p in problems:
+        Push rankedNode(problemNodeId(p's id), some collectionNodeId(cohort, p's collection), some p's id, "problem", p's title, manifestRank(p)) to nodes.
+    Return nodes.
+
+## Note
+A manifest document, ingested.
+
+## To ingestManifest (text: Text) -> Result of Ingested and Text:
+    Inspect parseStrict(text):
+        When Err (e):
+            Return a new Err with error "the manifest is not JSON: " + e.
+        When Ok (doc):
+            Inspect jsonGet(doc, "problems"):
+                When JArr (entries):
+                    Inspect manifestProblems(entries):
+                        When Err (e):
+                            Return a new Err with error e.
+                        When Ok (problems):
+                            Return a new Ok with value (a new Ingested with problems problems and nodes manifestNodes(problems)).
+                Otherwise:
+                    Return a new Err with error "the manifest has no problems array".
+    Return a new Err with error "unreadable manifest".

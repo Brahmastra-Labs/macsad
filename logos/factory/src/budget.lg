@@ -1,0 +1,88 @@
+# Budget
+
+A contributor's money, in micro-dollars: the limit they set, what calls have
+cost, and what is held for calls in flight. The rule is RESERVE, THEN RECONCILE:
+before a call its worst case is held, and a call whose worst case does not fit is
+not made — the worker stops honestly instead of overspending; after the call the
+hold is replaced by what the call actually cost.
+
+## A Budget has:
+    a limitMicros, which is Int.
+    a spentMicros, which is Int.
+    a reservedMicros, which is Int.
+
+## To newBudget (limitMicros: Int) -> Budget:
+    Return a new Budget with limitMicros limitMicros and spentMicros 0 and reservedMicros 0.
+
+## Note
+What is left to hold.
+
+## To budgetLeft (b: Budget) -> Int:
+    Return b's limitMicros - b's spentMicros - b's reservedMicros.
+
+## Note
+The budget with `amount` held, or the honest stop that says why the call must not
+be made; the stop is a normal outcome, written to the trail.
+
+## To reserve (b: Budget, amount: Int) -> Result of Budget and Text:
+    If amount is greater than budgetLeft(b):
+        Return a new Err with error "budget stop: the call may cost up to {amount} micro-dollars and {budgetLeft(b)} of {b's limitMicros} are left".
+    Let mutable out be b.
+    Set out's reservedMicros to b's reservedMicros + amount.
+    Return a new Ok with value out.
+
+## Note
+The budget after a call that held `held` and cost `actual`.
+
+## To settle (b: Budget, held: Int, actual: Int) -> Budget:
+    Let mutable out be b.
+    Set out's reservedMicros to b's reservedMicros - held.
+    Set out's spentMicros to b's spentMicros + actual.
+    Return out.
+
+## Note
+`a / b` rounded up, for positive `b`: money held or charged is never rounded down.
+
+## To ceilDiv (a: Int, b: Int) -> Int:
+    If a % b is greater than 0:
+        Return a / b + 1.
+    Return a / b.
+
+## Test: a budget holds, settles and stops honestly
+
+Let b be newBudget(5000000).
+Expect that reserve(b, 613) is equal to a new Ok with value (a new Budget with limitMicros 5000000 and spentMicros 0 and reservedMicros 613).
+Let done be settle(a new Budget with limitMicros 5000000 and spentMicros 0 and reservedMicros 613, 613, 231).
+Expect that budgetLeft(done) is equal to 4999769.
+Expect that reserve(newBudget(500), 613) is equal to a new Err with error "budget stop: the call may cost up to 613 micro-dollars and 500 of 500 are left".
+
+## Test: rounding up never charges less than the exact amount
+
+Expect that ceilDiv(612450000, 1000000) is equal to 613.
+Expect that ceilDiv(231000000, 1000000) is equal to 231.
+
+## Test: reservations never take a budget below zero
+
+For all integers limit and a and c:
+    Let mutable budget be newBudget((limit % 1000000 + 1000000) % 1000000).
+    Repeat for amount in [(a % 700000 + 700000) % 700000, (c % 700000 + 700000) % 700000]:
+        Inspect reserve(budget, amount):
+            When Ok (held):
+                Set budget to held.
+            When Err (e):
+                Let ignored be e.
+    Expect that budgetLeft(budget) is at least 0.
+
+## Test: a call is made exactly when its worst case fits
+
+For all booleans fits:
+    Let mutable amount be 900.
+    If fits:
+        Set amount to 400.
+    Let mutable ok be false.
+    Inspect reserve(newBudget(500), amount):
+        When Ok (held):
+            Set ok to true.
+        When Err (e):
+            Set ok to false.
+    Expect that ok is equal to fits.
