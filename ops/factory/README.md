@@ -27,8 +27,13 @@ spent, and records that on the trail.
 
 ## Run the factory
 
+LOGOS comes from the public repository, github.com/Brahmastra-Labs/logicaffeine, at the exact commit in
+`ops/factory/logos.pin`. The factory needs the std modules `process.lg`, `httpclient.lg` and `s3.lg`; `build.sh`
+refuses a pinned revision that lacks them, so pin a public commit that includes them.
+
+
 ```bash
-ops/factory/build.sh      # builds and pins largo + the factory binary (bin/toolchain.receipt.json)
+ops/factory/build.sh      # builds largo from public LOGOS at ops/factory/logos.pin + the factory binary
 ops/factory/secrets.sh    # creates local credentials under .runtime/factory/secrets (never printed)
 docker build -t macsad/factory:local -f ops/factory/factory.Dockerfile ops/factory
 docker compose -f ops/factory/compose.yaml up -d                      # database, coordinator, verifier

@@ -328,22 +328,22 @@ CREATE TRIGGER node_solved_needs_attestation BEFORE INSERT OR UPDATE ON factory.
 
 -- ── grants: the runtime reads and appends; only the owner changes the shape ─────────────────────
 
-GRANT USAGE ON SCHEMA factory TO macsad_runtime;
-GRANT SELECT ON ALL TABLES IN SCHEMA factory TO macsad_runtime;
+GRANT USAGE ON SCHEMA factory TO macsad_app;
+GRANT SELECT ON ALL TABLES IN SCHEMA factory TO macsad_app;
 GRANT INSERT ON factory.problem, factory.node, factory.statement, factory.contributor, factory.strategy,
   factory.strategy_eval, factory.work_unit, factory.attempt, factory.dead_end, factory.trail_entry,
-  factory.lemma, factory.attestation TO macsad_runtime;
-GRANT UPDATE (rank, status, opdp) ON factory.problem TO macsad_runtime;
-GRANT UPDATE (stage, rank) ON factory.node TO macsad_runtime;
-GRANT UPDATE (review_state) ON factory.statement TO macsad_runtime;
-GRANT UPDATE (spent_micros, focus, display_name) ON factory.contributor TO macsad_runtime;
-GRANT UPDATE (status) ON factory.strategy, factory.lemma TO macsad_runtime;
-GRANT UPDATE (state, holder, lease_token, leased_at, expires_at, heartbeat_at) ON factory.work_unit TO macsad_runtime;
-GRANT USAGE ON SEQUENCE factory.lease_token TO macsad_runtime;
+  factory.lemma, factory.attestation TO macsad_app;
+GRANT UPDATE (rank, status, opdp) ON factory.problem TO macsad_app;
+GRANT UPDATE (stage, rank) ON factory.node TO macsad_app;
+GRANT UPDATE (review_state) ON factory.statement TO macsad_app;
+GRANT UPDATE (spent_micros, focus, display_name) ON factory.contributor TO macsad_app;
+GRANT UPDATE (status) ON factory.strategy, factory.lemma TO macsad_app;
+GRANT UPDATE (state, holder, lease_token, leased_at, expires_at, heartbeat_at) ON factory.work_unit TO macsad_app;
+GRANT USAGE ON SEQUENCE factory.lease_token TO macsad_app;
 GRANT EXECUTE ON FUNCTION factory.claim_unit(text, integer, text[]), factory.heartbeat_unit(text, bigint, integer),
-  factory.finish_unit(text, bigint, text) TO macsad_runtime;
-GRANT SELECT ON ALL TABLES IN SCHEMA factory TO macsad_viewer;
-GRANT USAGE ON SCHEMA factory TO macsad_viewer;
+  factory.finish_unit(text, bigint, text) TO macsad_app;
+GRANT SELECT ON ALL TABLES IN SCHEMA factory TO macsad_reader;
+GRANT USAGE ON SCHEMA factory TO macsad_reader;
 
 INSERT INTO macsad_meta.schema_migration(version,name,script_sha256)
 VALUES(4,'0004_factory',decode(:'migration_sha256','hex'));

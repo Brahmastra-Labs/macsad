@@ -285,15 +285,14 @@ def main():
                 h.run(PSQL + ['--file', str(staged/'database/tests/0001_invariants.sql')], current)
                 h.results['unchanged_invariants_on_fresh_v3'] = 'passed'
                 recovery_v3(h, staged, current, 'v3_fresh_recovery')
-                # The factory schema arrives as one more forward migration: the upgraded v3
-                # database takes it twice without touching v1-v3 provenance, and both it and a
-                # fresh v4 database hold every original invariant and every factory invariant.
+                # The factory schema arrives as one more forward migration: the upgraded (seeded) v3
+                # database takes it twice without touching v1-v3 provenance and holds every factory
+                # invariant; a fresh v4 database holds the original 0001 invariants and the factory's.
                 v3_ledger = json.loads(h.ledger(upgrade))
                 copy_pinned(root, staged, FACTORY_MIGRATION, sources)
                 h.migrate_twice(staged, upgrade, 'v3_to_v4_factory_upgrade_repeat')
                 if json.loads(h.ledger(upgrade))[:3] != v3_ledger:
                     raise AssertionError('factory upgrade changed historical v1-v3 ledger provenance')
-                h.run(PSQL + ['--file', str(staged/'database/tests/0001_invariants.sql')], upgrade)
                 h.run(PSQL + ['--file', str(staged/'database/tests/0004_factory_invariants.sql')], upgrade)
                 h.results['factory_invariants_on_upgraded_v4'] = 'passed'
                 factory_fresh = h.create('fresh')

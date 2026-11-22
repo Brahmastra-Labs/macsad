@@ -209,7 +209,8 @@ In flight: the `factory local` end-to-end loop and worker/verifier roles; the co
 (hierarchical atlas graph); the comprehensive Lean→LOGOS translator in logicaffeine (version profiles 4.14→4.34.x,
 Lake/Mathlib projects, nondep let, statement packages); containers (`ops/factory/`) and the Cloudflare tunnel.
 
-Toolchain note: the factory runs the latest LOGOS, built from the local logicaffeine tree, pinned by binary sha256 and
-a source digest (`ops/factory/build.sh` → `ops/factory/bin/toolchain.receipt.json`). The original MaCSad projects keep
-the 0.10.1 lock until those logicaffeine changes are committed and promoted through
-`docs/runbooks/upgrading-logos.md`.
+Toolchain note: the factory builds LOGOS from the PUBLIC repository (github.com/Brahmastra-Labs/logicaffeine) at the
+exact commit in `ops/factory/logos.pin` (`ops/factory/build.sh` → `ops/factory/bin/toolchain.receipt.json`), never from
+the private repository. The std additions the factory needs (`process.lg`, file ops, `httpclient.lg`, `s3.lg`) must be
+published there first; `build.sh` refuses a pinned revision without them. The original MaCSad projects keep their
+0.10.1 lock until a promotion through `docs/runbooks/upgrading-logos.md`.

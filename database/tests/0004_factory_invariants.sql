@@ -1,6 +1,6 @@
--- Mechanical invariants for 0004_factory.sql, exercised as the runtime role the coordinator uses.
+-- Mechanical invariants for 0004_factory.sql, exercised as macsad_app, the role the coordinator's macsad_runtime login inherits.
 --
--- Run this as a login that may SET ROLE macsad_runtime. Every fixture is discarded by the
+-- Run this as a login that may SET ROLE macsad_app. Every fixture is discarded by the
 -- unconditional ROLLBACK below. Each refusal is asserted by its exact error, so a check that
 -- stopped refusing — or refused for a different reason — fails this file.
 
@@ -10,7 +10,8 @@ BEGIN;
 
 SET LOCAL lock_timeout = '10s';
 SET LOCAL statement_timeout = '2min';
-SET LOCAL ROLE macsad_runtime;
+SET LOCAL ROLE macsad_owner;
+SET LOCAL ROLE macsad_app;
 
 DO $invariants$
 DECLARE
