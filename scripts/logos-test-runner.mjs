@@ -1,4 +1,5 @@
-import { isAbsolute, join, normalize } from "node:path";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { dirname, isAbsolute, join, normalize, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const SHA256 = /^[0-9a-f]{64}$/;
@@ -75,4 +76,29 @@ export function sameDiagnosticInventory(actual, expected) {
   const inventory = rows => rows.map(({ file, code, severity, message }) =>
     JSON.stringify([file, code, severity, message])).sort();
   return JSON.stringify(inventory(actual)) === JSON.stringify(inventory(expected));
+}
+
+// A suite runs in a temporary project under its project's target directory. fail() ends the
+// process, which skips the suite loop's finally blocks, so every live temporary project is also
+// removed on exit; a failed suite otherwise leaves a copy that the source lint and audits then read.
+const TEMPORARY_PREFIX = "macsad-logos-tests-";
+const liveTemporaryProjects = new Set();
+process.on("exit", () => {
+  for (const path of liveTemporaryProjects) rmSync(path, { recursive: true, force: true });
+});
+
+export function makeTemporaryProject(targetRoot) {
+  const canonicalTarget = realpathSync(targetRoot);
+  const made = realpathSync(mkdtempSync(join(canonicalTarget, TEMPORARY_PREFIX)));
+  if (dirname(made) !== canonicalTarget || !made.startsWith(`${canonicalTarget}${sep}${TEMPORARY_PREFIX}`)) {
+    throw new Error(`refusing unexpected temporary project path ${made}`);
+  }
+  liveTemporaryProjects.add(made);
+  return made;
+}
+
+export function releaseTemporaryProject(path) {
+  if (!liveTemporaryProjects.has(path)) throw new Error(`${path} is not a temporary test project of this run`);
+  rmSync(path, { recursive: true });
+  liveTemporaryProjects.delete(path);
 }

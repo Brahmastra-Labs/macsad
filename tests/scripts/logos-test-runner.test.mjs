@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { sameDiagnosticInventory, selectTestRunner } from "../../scripts/logos-test-runner.mjs";
 
 const root = "/private/example/macsad";
@@ -92,6 +95,42 @@ test("actual verifier CLI rejects an unknown flag before loading projects or run
   assert.match(response.stderr, /unsupported LOGOS test arguments/);
 });
 
+
+// fail() exits the process, which skips every finally block; a failed suite must still not leave its
+// temporary project under logos/*/target, where the source lint and the audits would then read it.
+test("a temporary test project is removed when the verifier exits during its suite", () => {
+  const module = fileURLToPath(new URL("../../scripts/logos-test-runner.mjs", import.meta.url));
+  const base = mkdtempSync(join(tmpdir(), "macsad-runner-exit-"));
+  try {
+    const target = join(base, "target");
+    mkdirSync(target);
+    const child = `import { makeTemporaryProject } from ${JSON.stringify(module)};
+      const made = makeTemporaryProject(${JSON.stringify(target)});
+      process.stdout.write(made);
+      process.exit(1);`;
+    const response = spawnSync(process.execPath, ["--input-type=module", "-e", child], { encoding: "utf8" });
+    assert.equal(response.status, 1, response.stderr);
+    assert.match(response.stdout, /macsad-logos-tests-/);
+    assert.equal(existsSync(response.stdout), false);
+    assert.deepEqual(readdirSync(target), []);
+  } finally { rmSync(base, { recursive: true, force: true }); }
+});
+
+test("a released temporary project is removed at once and only its own path is touched", async () => {
+  const { makeTemporaryProject, releaseTemporaryProject } = await import("../../scripts/logos-test-runner.mjs");
+  const base = mkdtempSync(join(tmpdir(), "macsad-runner-release-"));
+  try {
+    const target = join(base, "target");
+    mkdirSync(join(target, "keep"), { recursive: true });
+    const made = makeTemporaryProject(target);
+    assert.equal(existsSync(made), true);
+    releaseTemporaryProject(made);
+    assert.equal(existsSync(made), false);
+    assert.deepEqual(readdirSync(target), ["keep"]);
+    assert.throws(() => releaseTemporaryProject(join(target, "keep")), /not a temporary test project/);
+    assert.equal(existsSync(join(target, "keep")), true);
+  } finally { rmSync(base, { recursive: true, force: true }); }
+});
 
 test("diagnostic inventory ignores property and row order without mutating inputs", () => {
   const actual = [
