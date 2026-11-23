@@ -52,7 +52,7 @@ A submission recorded in its own transaction.
             Let mutable commit be false.
             Inspect outcome:
                 When Ok (r):
-                    Set commit to r's receipt's accepted.
+                    Set commit to r's receipt's accepted or r's released.
                 When Err (e):
                     Set commit to false.
             Let ended be finishTransaction(c, commit).

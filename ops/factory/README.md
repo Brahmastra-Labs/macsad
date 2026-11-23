@@ -48,12 +48,42 @@ and paste its token into `.runtime/factory/secrets/cloudflare_tunnel_token`. Art
 `MACSAD_R2_ENDPOINT`/`MACSAD_R2_BUCKET` name the bucket; otherwise they stay in the coordinator's volume.
 
 PostgreSQL is never published to the host. Migrations are applied by `database/apply_migrations.sh`, the
-same runner and ledger the rest of MaCSad uses; `database/tests/0004_factory_invariants.sql` checks the
-factory schema's guarantees.
+same runner and ledger the rest of MaCSad uses; `database/tests/0004_factory_invariants.sql` and
+`database/tests/0005_factory_verifier_invariants.sql` check the factory schema's guarantees.
+
+## Check the verifier's word yourself
+
+The verifier's key is the 32-byte ML-DSA-65 seed in `.runtime/factory/secrets/macsad_verifier_key`
+(64 hex digits, written by `secrets.sh`, never printed), mounted into the verifier container as
+`/run/secrets/macsad_verifier_key` and named by `MACSAD_VERIFIER_KEY_FILE`. The seed never leaves that
+container. Its public half does: the verifier publishes it in `factory.verifier_key` before it signs
+anything, the database refuses a key that does not hash to the name it is published under, and nobody can
+rewrite or withdraw one.
+
+- `GET /api/v1/verifier-key` answers every published key, newest first:
+  `[{"verifier": "verifier-<12 hex>", "publicKeySha": "<sha256>", "publicKey": "<3904 hex>", "registeredAt": <ms>}]`.
+- `docker compose -f ops/factory/compose.yaml run --rm verifier verifier key` prints the same record for
+  this deployment's key, from the key file, without touching the database — the copy to publish elsewhere.
+- `GET /api/v1/problem/results?id=<problem>` answers each attestation with its `publicKeySha` and
+  `signature`.
+
+An attestation holds when `sha256(publicKey)` is its `publicKeySha` and its `signature` (hex) is an ML-DSA-65
+(FIPS 204) signature, under the context string `macsad-attestation-v1`, of the UTF-8 bytes of
+
+```text
+{"schema":"macsad-attestation/1","subject_kind":…,"subject_id":…,"statement_sha":…,"document_sha":…,"verdict_kind":…,"verifier":…,"toolchain_sha":…,"public_key_sha":…}
+```
+
+with each value a JSON string, in exactly this order and with no spaces; the attestation's id is `att:` and
+the SHA-256 of those bytes. A problem is `solved` only on a `verified` attestation of a proof attempt on
+it, made against its accepted statement (`0005_factory_verifier.sql`); the attestation that accepted the
+statement says the statement is well formed, never that it is proved.
 
 ## What a worker cannot do
 
 A worker proposes; it never decides. It cannot mark anything verified (only the verifier's signed
 attestation does), cannot rewrite or delete the trail (the database refuses), cannot finish a unit it no
-longer holds (fencing tokens), and cannot buy the same dead end twice (`factory.dead_end`). A submission
-that redeclares a name the statement or the prelude already binds is refused before the kernel runs.
+longer holds (fencing tokens), and cannot buy the same dead end twice (`factory.dead_end`). An attempt that
+repeats a dead end is refused `409 dead_end` and its lease is released at once, so the unit goes straight
+back on the board; a worker refused that way twice in a row stops. A submission that redeclares a name the
+statement or the prelude already binds is refused before the kernel runs.

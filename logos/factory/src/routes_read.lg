@@ -18,7 +18,9 @@ The factory as a whole: `GET /api/v1/board` (a `BoardLane` per stage),
 `GET /api/v1/board/cards?per=<n>` (the best `n` problems of each stage, at most
 24), `GET /api/v1/leaderboard`, `GET /api/v1/focus` (what `MACSAD_FOCUS` may
 name), and `GET /api/v1/health`, which answers `503` with the reason when the
-database does not answer.
+database does not answer. `GET /api/v1/verifier-key` answers the public keys the
+verifier signs attestations with, so anyone can check a signature without
+trusting the coordinator: a key is published only under the hash it has.
 
 ## Note
 A query parameter as a whole number, or `fallback` when absent or not a number.
@@ -75,6 +77,9 @@ The answer for one node, its page bounded by the coordinator.
 
 ## Route GET /api/v1/focus -> Response:
     Return jsonAnswer(focusOptions()).
+
+## Route GET /api/v1/verifier-key -> Response:
+    Return jsonAnswer(verifierKeys()).
 
 ## Route GET /api/v1/health -> Response:
     Let h be healthNow().

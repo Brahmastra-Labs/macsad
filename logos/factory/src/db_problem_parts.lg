@@ -43,12 +43,15 @@ the verified lemmas of the problem's shared library as rows of kind `library`.
     Return a new Err with error "unread".
 
 ## Note
-The verifier's verdicts on the problem's statements, attempts and lemmas.
+The verifier's verdicts on the problem's statements, attempts and lemmas, each
+with its ML-DSA signature and the hash of the key that made it, so anyone can
+check one against `GET /api/v1/verifier-key`.
 
 ## To resultRowsSql () -> Text:
     Let mutable q be ["SELECT coalesce(json_agg(json_build_object('id', a.id, 'subjectKind', a.subject_kind, 'subjectId', a.subject_id,"].
     Push "'verdictKind', a.verdict_kind, 'verifier', a.verifier, 'statementSha', a.statement_sha, 'documentSha', a.document_sha," to q.
-    Push "'toolchainSha', a.toolchain_sha, 'createdAt', (extract(epoch FROM a.created_at) * 1000)::bigint) ORDER BY a.created_at DESC), '[]')::text" to q.
+    Push "'toolchainSha', a.toolchain_sha, 'publicKeySha', a.public_key_sha, 'signature', a.signature," to q.
+    Push "'createdAt', (extract(epoch FROM a.created_at) * 1000)::bigint) ORDER BY a.created_at DESC), '[]')::text" to q.
     Push "FROM factory.attestation a WHERE (a.subject_kind = 'attempt' AND a.subject_id IN (SELECT id FROM factory.attempt WHERE problem_id = $1))" to q.
     Push "OR (a.subject_kind = 'statement' AND a.subject_id IN (SELECT id FROM factory.statement WHERE problem_id = $1))" to q.
     Push "OR (a.subject_kind = 'lemma' AND a.subject_id IN (SELECT id FROM factory.lemma WHERE problem_id = $1))" to q.

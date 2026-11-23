@@ -1,8 +1,10 @@
 # Verifier judge
 
 Import Attestation from "./attestation.lg".
+Import CoordinatorDb from "./coordinator_db.lg".
 Import HostFiles from "./host_files.lg".
 Import HostTools from "./host_tools.lg".
+Import IntakeWrite from "./intake_write.lg".
 Import ProofDocument from "./proof_document.lg".
 Import VerdictRecord from "./verdict_record.lg".
 Import Verifier from "./verifier.lg".
@@ -21,6 +23,7 @@ accepted statement the database holds, so nothing a worker wrote is trusted.
 ## A VerifierId has:
     a seed, which is Seq of Int.
     a holder, which is Text.
+    a publicKey, which is Text.
     a publicKeySha, which is Text.
     a toolchainSha, which is Text.
 
@@ -41,8 +44,41 @@ accepted statement the database holds, so nothing a worker wrote is trusted.
                             If r's exitCode is not equal to 0 or length of sha is not equal to 64:
                                 Return a new Err with error "the toolchain cannot be hashed: " + r's stderr.
                             Let pk be publicKeySha(seed).
-                            Return a new Ok with value (a new VerifierId with seed seed and holder "verifier-" + text_from_bytes(items 1 through 12 of text_bytes(pk)) and publicKeySha pk and toolchainSha sha).
+                            Let holder be "verifier-" + text_from_bytes(items 1 through 12 of text_bytes(pk)).
+                            Return a new Ok with value (a new VerifierId with seed seed and holder holder and publicKey bytesToHex(publicKeyOf(seed)) and publicKeySha pk and toolchainSha sha).
     Return a new Err with error "no key".
+
+## Note
+The public half of the verifier's key, as `GET /api/v1/verifier-key` serves it:
+anyone holding it checks an attestation's signature without trusting the
+coordinator, and its SHA-256 is the `public_key_sha` every attestation names.
+
+## To verifierKeyJson (id: VerifierId) -> Text:
+    Return "{{\"verifier\":" + jsonQuote(id's holder) + ",\"publicKeySha\":" + jsonQuote(id's publicKeySha) + ",\"publicKey\":" + jsonQuote(id's publicKey) + "}}".
+
+## Note
+The verifier, its key published in `factory.verifier_key` before it signs
+anything; a key already published is left as it is.
+
+## To startVerifier (tc: Toolchain) -> Result of VerifierId and Text:
+    Inspect verifierId(tc):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (id):
+            Let sql be "INSERT INTO factory.verifier_key (public_key_sha, verifier, public_key) VALUES ($1, $2, $3) ON CONFLICT (public_key_sha) DO NOTHING".
+            Inspect dbOpen():
+                When Err (e):
+                    Return a new Err with error "the verifier key cannot be published: " + e.
+                When Ok (c):
+                    Let published be runOn(c, sql, [id's publicKeySha, id's holder, id's publicKey]).
+                    Let closed be pgClose(c).
+                    Inspect published:
+                        When Err (e):
+                            Return a new Err with error "the verifier key cannot be published: " + e.
+                        When Ok (done):
+                            Show "verifier " + id's holder + ": public key sha256 " + id's publicKeySha + " (published), toolchain sha256 " + id's toolchainSha.
+                            Return a new Ok with value id.
+    Return a new Err with error "unstarted".
 
 ## Note
 The verdict on what a unit asks, and what the attestation is about.

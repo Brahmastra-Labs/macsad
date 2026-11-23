@@ -82,7 +82,7 @@ proved. `parentId` is the node it hangs from, so the rows draw as a tree.
 
 ## Note
 One verdict of the trusted verifier: what it judged, against which statement and
-document hashes, with which pinned toolchain, and when.
+document hashes, with which pinned toolchain, signed by which key, and when.
 
 ## A ResultRow has:
     an id, which is Text.
@@ -93,4 +93,6 @@ document hashes, with which pinned toolchain, and when.
     a statementSha, which is Text.
     a documentSha, which is Text.
     a toolchainSha, which is Text.
+    a publicKeySha, which is Text.
+    a signature, which is Text.
     a createdAt, which is Int.

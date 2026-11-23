@@ -79,3 +79,12 @@ Each list as its record's canonical JSON.
                 When Ok (h):
                     Return h.
     Return a new HealthView with ok false and database "no answer".
+
+## Note
+The verifiers' public keys, newest first: each ML-DSA-65 key in hex beside the
+SHA-256 every attestation it signed names, and the verifier it identifies.
+
+## To verifierKeys () -> Result of Text and Text:
+    Let mutable q be ["SELECT coalesce(json_agg(json_build_object('verifier', k.verifier, 'publicKeySha', k.public_key_sha, 'publicKey', k.public_key,"].
+    Push "'registeredAt', (extract(epoch FROM k.registered_at) * 1000)::bigint) ORDER BY k.registered_at DESC), '[]')::text FROM factory.verifier_key k" to q.
+    Return dbCell(join(q, " "), a new Seq of Text).

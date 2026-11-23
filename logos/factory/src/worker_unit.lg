@@ -36,6 +36,7 @@ attempt posted with its trail entry sealed onto the head the grant named.
 ## A UnitStep has:
     a line, which is Text.
     a stop, which is Bool.
+    a deadEnd, which is Bool.
 
 ## Note
 The attempt a judged answer makes, ready to post.
@@ -109,5 +110,5 @@ The unit `u`, leased under `token`, worked.
                                 Return (a new UnitStep with line "the lease on " + u's id + " moved on while the model answered" and stop false, after).
                             Let j be judgeWork(u's kind, grantStatement(g, u's problemId), strategyId, reply's content, ws's holder + " " + reply's model).
                             Let p be postAttempt(ws's base, submissionOf(ws, g, u, token, request, reply's model, reply's content, j, cost, startedAt)).
-                            Return (a new UnitStep with line postedLine(u, j, cost, p) and stop (p's status is equal to 0), after).
+                            Return (a new UnitStep with line postedLine(u, j, cost, p) and stop (p's status is equal to 0) and deadEnd (p's receipt's outcome is equal to "dead_end"), after).
     Return (a new UnitStep with line "unworked" and stop true, budget).

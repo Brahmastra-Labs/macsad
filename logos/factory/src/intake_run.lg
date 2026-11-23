@@ -1,6 +1,7 @@
 # Recording an attempt
 
 Import AttemptRules from "./attempt_rules.lg".
+Import CoordinatorDb from "./coordinator_db.lg".
 Import CoordinatorWire from "./coordinator_wire.lg".
 Import DbIntake from "./db_intake.lg".
 Import IntakePolicy from "./intake_policy.lg".
@@ -68,7 +69,23 @@ The attempt recorded on a connection inside a transaction, or the refusal.
             If problem is not equal to "":
                 Return a new Ok with value intakeRefusal(422, "invalid_claim", problem).
             Let d be decideIntake(intakeFactsOf(st, s, secretOk)).
+            If d's accept is equal to false and d's releaseLease:
+                Return releaseOn(c, s, d).
             If d's accept is equal to false:
                 Return a new Ok with value intakeRefusal(d's status, d's outcome, "the attempt was not recorded").
             Return recordOn(c, st, s, d).
     Return a new Err with error "no intake".
+
+## Note
+A refused attempt whose lease is released: the unit goes back on the board under
+the lease's own fencing token, so only the lease's holder can release it.
+
+## To releaseOn (c: PgConn, s: AttemptSubmission, d: IntakeDecision) -> Result of IntakeResult and Text:
+    Inspect dbCellOn(c, "SELECT factory.finish_unit($1, $2::bigint, 'ready')::text", [s's unitId, "{s's token}"]):
+        When Err (e):
+            Return a new Err with error e.
+        When Ok (finished):
+            Let mutable r be intakeRefusal(d's status, d's outcome, "the attempt was not recorded; the lease is released").
+            Set r's released to finished is equal to "true".
+            Return a new Ok with value r.
+    Return a new Err with error "no release".
