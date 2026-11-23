@@ -3,13 +3,10 @@
 import {
   linkSync,
   mkdirSync,
-  mkdtempSync,
-  realpathSync,
-  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import {
@@ -19,7 +16,12 @@ import {
 } from "./logos-project.mjs";
 
 import { stagePageSuite, verifyPageOutcomes } from "./logos-pages.mjs";
-import { sameDiagnosticInventory, selectTestRunner } from "./logos-test-runner.mjs";
+import {
+  makeTemporaryProject,
+  releaseTemporaryProject,
+  sameDiagnosticInventory,
+  selectTestRunner,
+} from "./logos-test-runner.mjs";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(scriptDirectory, "..");
@@ -144,12 +146,8 @@ for (const project of projects) {
     const suiteLabel = `${projectName}:${suite.path}`;
     const targetRoot = join(project.projectDirectory, "target");
     mkdirSync(targetRoot, { recursive: true });
-    const canonicalTarget = realpathSync(targetRoot);
-    const temporaryProject = mkdtempSync(join(canonicalTarget, "macsad-logos-tests-"));
-    const canonicalTemporary = realpathSync(temporaryProject);
-    if (!canonicalTemporary.startsWith(`${canonicalTarget}${sep}macsad-logos-tests-`)) {
-      fail(`${suiteLabel}: refusing unexpected temporary project path`);
-    }
+    let canonicalTemporary;
+    try { canonicalTemporary = makeTemporaryProject(targetRoot); } catch (error) { fail(`${suiteLabel}: ${error.message}`); }
 
     let result;
     try {
@@ -189,10 +187,7 @@ for (const project of projects) {
         "never",
       ]);
     } finally {
-      if (!canonicalTemporary.startsWith(`${canonicalTarget}${sep}macsad-logos-tests-`)) {
-        fail(`${suiteLabel}: refusing to remove unexpected temporary project path`);
-      }
-      rmSync(canonicalTemporary, { recursive: true });
+      releaseTemporaryProject(canonicalTemporary);
     }
 
     let report;
