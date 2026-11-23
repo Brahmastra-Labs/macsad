@@ -1,0 +1,26 @@
+# Lean browser transport records
+
+The server derives these codecs from the same records used by the LGX pages.
+Context values are transport data, never browser-granted authorization.
+
+## A LeanSubmitContext has:
+    a csrf, which is Text.
+    a key, which is Text.
+    an assignment, which is Text.
+    a version, which is Int.
+    a profile, which is Text.
+
+## A LeanAcceptedJob has:
+    an id, which is Text.
+
+## To leanSubmitBody (context: LeanSubmitContext, source: Text, target: Text) -> Text:
+    Let entries be a new Seq of JEntry.
+    Push a new JEntry with key "schema" and val (a new JStr with s "macsad-lean-submit/1") to entries.
+    Push a new JEntry with key "_csrf" and val (a new JStr with s (context's csrf)) to entries.
+    Push a new JEntry with key "key" and val (a new JStr with s (context's key)) to entries.
+    Push a new JEntry with key "assignment" and val (a new JStr with s (context's assignment)) to entries.
+    Push a new JEntry with key "version" and val (a new JStr with s numText(context's version)) to entries.
+    Push a new JEntry with key "profile" and val (a new JStr with s (context's profile)) to entries.
+    Push a new JEntry with key "source" and val (a new JStr with s source) to entries.
+    Push a new JEntry with key "target" and val (a new JStr with s target) to entries.
+    Return jsonSerialize(a new JObj with entries entries).

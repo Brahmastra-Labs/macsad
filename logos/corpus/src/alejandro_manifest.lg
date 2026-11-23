@@ -10,6 +10,7 @@ Import AlejandroProvenance from "./alejandro_provenance.lg".
     a rawDigest, which is Text.
 ## To alejandroManifestCounts (object: Json, rows: Seq of Json) -> Result of Bool and Text:
     Inspect jsonNoExtraKeys(object, ["translate", "degrade", "reject"]):
+        When Ok (accepted): Let _ be accepted.
         When Err (failure):
             Return a new Err with error failure.
     Repeat for expectation in ["translate", "degrade", "reject"]:
@@ -33,6 +34,7 @@ Import AlejandroProvenance from "./alejandro_provenance.lg".
 ## To alejandroManifestObject (object: Json, rawDigest: Text) -> Result of AlejandroManifest and Text:
     Let keys be ["corpus", "lean_toolchain", "logos_revision", "case_count", "verdict_counts", "cases"].
     Inspect jsonNoExtraKeys(object, keys):
+        When Ok (accepted): Let _ be accepted.
         When Err (failure):
             Return a new Err with error failure.
     Let values be a new Seq of Text.
@@ -67,6 +69,7 @@ Import AlejandroProvenance from "./alejandro_provenance.lg".
             Return a new Err with error failure.
         When Ok (counts):
             Inspect alejandroManifestCounts(counts, rows):
+                When Ok (accepted): Let _ be accepted.
                 When Err (failure):
                     Return a new Err with error failure.
     Let decoded be a new AlejandroManifest with toolchain (item 2 of values) and historicalRevision (item 3 of values) and cases rows and rawDigest rawDigest.

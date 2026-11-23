@@ -26,6 +26,7 @@
         Repeat for key in group:
             Push key to keys.
     Inspect jsonNoExtraKeys(row, keys):
+        When Ok (accepted): Let _ be accepted.
         When Err (failure):
             Return a new Err with error failure.
     Let values be a new Seq of Text.
@@ -42,6 +43,7 @@
             When Ok (items):
                 Repeat for itemValue in items:
                     Inspect jsonString(itemValue):
+                        When Ok (accepted): Let _ be accepted.
                         When Err (failure):
                             Return a new Err with error "{key}: {failure}".
     Return a new Ok with value values.

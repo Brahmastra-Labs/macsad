@@ -1,0 +1,96 @@
+# Submit Lean for independent verification
+
+Import LeanWebContract from "../src/lean_web_contract.lg".
+
+Submission keeps one exact body after the first send. Retrying a lost response
+uses that body and request key again. The server owns authorization and state.
+
+## Page /lean
+State:
+    Let source be "".
+    Let target be "".
+    Let error be "".
+    Let profile be "Loading verification profile…".
+    Let ready be false.
+    Let pending be false.
+    Let locked be false.
+    Let body be "".
+    Let context be a new LeanSubmitContext with csrf "" and key "" and assignment "" and version 0 and profile "".
+Actions:
+    When the page loads:
+        Get "/api/lean/context" as LeanSubmitContext, then initialized.
+    To initialized (answer: Result of LeanSubmitContext and HttpError):
+        Inspect answer:
+            When Ok (value):
+                Set context to value.
+                Set profile to value's profile.
+                Set ready to true.
+            When Err (e):
+                Set error to e's message.
+                Set profile to "Verification profile unavailable".
+    To submit:
+        If pending or ready is equal to false:
+            Return.
+        If trim(source) is equal to "" or trim(target) is equal to "":
+            Set error to "Enter Lean source and the declaration to verify.".
+            Return.
+        If locked is equal to false:
+            Set body to leanSubmitBody(context, source, target).
+            Set locked to true.
+        Set pending to true.
+        Set error to "".
+        Post body to "/api/lean/jobs" as LeanAcceptedJob, then accepted.
+    To accepted (answer: Result of LeanAcceptedJob and HttpError):
+        Set pending to false.
+        Inspect answer:
+            When Ok (job):
+                Navigate to "/lean/jobs/" + urlEncode(job's id).
+            When Err (e):
+                Set error to e's message.
+View:
+    <main>
+      <h1>Verify Lean in LOGOS</h1>
+      <p id="profile">{profile}</p>
+      <p>Submit a declaration, download its LOGOS source and proof package, and replay the verification independently.</p>
+      <form id="lean-submit" on-submit.prevent={submit}>
+        <label for="source">Lean source</label>
+        <textarea id="source" rows="16" bind={source} readonly={locked}></textarea>
+        <label for="target">Declaration name</label>
+        <input id="target" bind={target} readonly={locked}>
+        <button id="submit" type="submit" disabled={pending or ready is equal to false}>Submit for verification</button>
+      </form>
+      {if pending:}<p role="status">Submitting…</p>{end}
+      {if error is not "":}<p id="error" role="alert">{error}</p>{end}
+      {if locked:}<p>Retries send the same source, declaration, and request key.</p>{end}
+    </main>
+Style:
+    main { max-width: 52rem; margin: 2rem auto; padding: 1rem; color: #172033; background: #fff; }
+    form { display: grid; gap: .75rem; }
+    textarea, input, button { font: inherit; padding: .75rem; }
+    textarea { font-family: monospace; resize: vertical; }
+    [role="alert"] { color: #a01422; }
+    :focus-visible { outline: 3px solid #2457c5; outline-offset: 3px; }
+
+## Test: Lean form rejects an empty declaration without clearing source
+Given that GET "/api/lean/context" answers 200 with "{{\"csrf\":\"test\",\"key\":\"one\",\"assignment\":\"a\",\"version\":1,\"profile\":\"Lean 4.14 core\"}}".
+Type "theorem example : True := True.intro" into "#source".
+Submit "#lean-submit".
+Expect that the text of "#error" is equal to "Enter Lean source and the declaration to verify.".
+Expect that the value of "#source" is equal to "theorem example : True := True.intro".
+
+## Test: Lean form navigates only after the server accepts the job
+Given that GET "/api/lean/context" answers 200 with "{{\"csrf\":\"test\",\"key\":\"two\",\"assignment\":\"a\",\"version\":1,\"profile\":\"Lean 4.14 core\"}}".
+Given that POST "/api/lean/jobs" answers 200 with "{{\"id\":\"job-1\"}}".
+Type "theorem example : True := True.intro" into "#source".
+Type "example" into "#target".
+Submit "#lean-submit".
+Expect that the URL is equal to "/lean/jobs/job-1".
+
+## Test: Lean form retains the submitted source when the server denies it
+Given that GET "/api/lean/context" answers 200 with "{{\"csrf\":\"test\",\"key\":\"three\",\"assignment\":\"a\",\"version\":1,\"profile\":\"Lean 4.14 core\"}}".
+Given that POST "/api/lean/jobs" answers 403 with "denied".
+Type "theorem example : True := True.intro" into "#source".
+Type "example" into "#target".
+Submit "#lean-submit".
+Expect that the count of "#error" is equal to 1.
+Expect that the value of "#source" is equal to "theorem example : True := True.intro".

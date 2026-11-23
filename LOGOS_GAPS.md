@@ -1,10 +1,42 @@
 # LOGOS gaps and required framework gates
 
-MaCSad pins the **local** `Brahmastra-Labs/logicaffeine-private` source at
+## LOGOS 0.11.0 public-toolchain promotion candidate
+
+This branch proposes `.macsad/toolchains/logos.lock.toml` for the **public**
+`Brahmastra-Labs/logicaffeine` source at LOGOS `0.11.0`, commit
+`c67b633d102b6c4f00715129c22f20cbabb94262`, tree
+`43416c35b8eba40fd1f39d3280df4d6c80d9b112`, `Cargo.lock` SHA-256
+`1c53ac62fa3af819cb0a55c1e4575415ce1d6421cdf839f15dbb74dfc0c4b213`, and an
+in-tree `target/debug/largo` with SHA-256
+`7fbea20a44e215d89c4e52770a3837ab913f968b6595a04b8a739fa720e45118`.
+The wrapper still rejects another commit, tree, Cargo lock, binary, dirty or
+untracked source, or origin. Commands, counts and limits are recorded in
+[the promotion record](docs/runbooks/lgx-framework-update.md); the lock becomes
+admitted only when the reviewed promotion merges.
+
+Previously admitted: the local `Brahmastra-Labs/logicaffeine-private` source at
 LOGOS `0.10.1`, commit `132dc5346728e2d204df798dd7544e6405306a2c`,
-tree `9f251ad38ed49834d8224bbf6b928cb5ba1aa1c5`. The build wrapper rejects
-another commit, tree, Cargo lock, `largo` binary, dirty tracked source, or
-unrelated origin. MaCSad does not install or resolve LOGOS from crates.io.
+tree `9f251ad38ed49834d8224bbf6b928cb5ba1aa1c5`. The sections below are
+historical evidence for that baseline unless they say otherwise. MaCSad does
+not install or resolve LOGOS from crates.io.
+
+No gap below is closed by this candidate. Two observations from the 0.11.0
+runs are recorded with their reproducers:
+
+- **G5 (observed, still open).** A Page's `largo test` run assembles the Page's
+  import closure and runs that closure's `## Test`s as Page tests. On the
+  lowered VM it refuses every such test whose `Expect`, `Let` or `For all`
+  calls a function. Reproducer: an admin Page importing the policy-bound
+  `MacsAdAdmin` root reported 3 agreed and 9 refused tests (`vm_refused=9`) at
+  both `8ce95bd3` and `c67b633d`. MaCSad therefore requires that a Page import
+  only untested presentation modules; tested policy stays in import-free
+  leaves that no Page imports. Source-entry leaf runs still read one entry, so
+  the leaf harness stays.
+- **Mount target.** The 0.11.0 WASM-DOM HTML shell has no `#root` element, so
+  `Mount X at "#root"` stops at runtime with "no element matches that
+  selector" (observed in headless Chrome at `8ce95bd3`; the `c67b633d` shells
+  are byte-identical). The admin and public entries now mount under the page
+  body.
 
 ## September 8, 2026 integration update
 

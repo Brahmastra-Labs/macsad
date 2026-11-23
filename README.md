@@ -88,7 +88,7 @@ recorded in [`.macsad/toolchains/logos.lock.toml`](.macsad/toolchains/logos.lock
 Point `LOGOS_WORKSPACE` at that exact clean local checkout and run one gate:
 
 ```bash
-export LOGOS_WORKSPACE=/path/to/logicaffeine-private
+export LOGOS_WORKSPACE=/path/to/logicaffeine
 bash scripts/quality-gate.sh
 ```
 

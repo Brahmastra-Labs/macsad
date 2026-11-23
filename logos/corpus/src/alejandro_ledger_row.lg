@@ -1,7 +1,7 @@
 # Recorded declaration evidence schema
 
-Import AlejandroJsonFields from "./alejandro_json_fields.lg".
 Import AlejandroEvidencePolicy from "./alejandro_evidence_policy.lg".
+Import AlejandroJsonFields from "./alejandro_json_fields.lg".
 
 ## To validateAlejandroDeclaration (row: Json) -> Result of Text and Text:
     Let texts be ["lean", "lean_kind", "lean_type", "status", "test", "logos", "why"].
@@ -19,6 +19,7 @@ Import AlejandroEvidencePolicy from "./alejandro_evidence_policy.lg".
                 Return a new Err with error "unknown recorded ledger status".
             If jsonHas(row, "refusal"):
                 Inspect jsonRequireObject(jsonGet(row, "refusal")):
+                    When Ok (accepted): Let _ be accepted.
                     When Err (failure):
                         Return a new Err with error "recorded refusal must be an object".
             Return a new Ok with value name.

@@ -39,44 +39,5 @@
       "flags": "i"
     }
   ],
-  "debt": [
-    {
-      "rule": "scoped-css-preferred-length",
-      "fingerprint": "2203aa427bb0f1098bf1352a312e82e837bbb615f49f8056d11a099970733344",
-      "locations": [
-        "logos/admin/src/admin_app.lg:13"
-      ],
-      "reason": "The initial shell predates the source-size policy and LOGOS currently keeps scoped styles inline with their owning Component.",
-      "removalCondition": "Split navigation and shell layout into cohesive imported Components before this exact CSS string receives any product change."
-    },
-    {
-      "rule": "scoped-css-preferred-length",
-      "fingerprint": "cb03a1de16b4f14d5911e5e7b5ab388b528d3008de161c3ef89f7060e297e2aa",
-      "locations": [
-        "logos/admin/src/board_workspace.lg:16"
-      ],
-      "reason": "The baseline board was authored before the split threshold and its scoped CSS cannot safely move to a global host stylesheet.",
-      "removalCondition": "Extract the metrics, draft form, and board lanes into responsibility-owned imported Components before modifying this CSS."
-    },
-    {
-      "rule": "duplicate-scoped-css",
-      "fingerprint": "2297746d7c4c40121b0f3f3e8a73a2d24500e43bedd36cd8bacba86980ec9335",
-      "locations": [
-        "logos/admin/src/read_only_panels.lg:8",
-        "logos/admin/src/read_only_panels.lg:17",
-        "logos/admin/src/read_only_panels.lg:26"
-      ],
-      "reason": "Three read-only panels intentionally repeat one scoped style while the pinned LOGOS revision lacks a semantics-preserving shared style primitive.",
-      "removalCondition": "Replace the copies only after LOGOS provides tested shared scoped styles or the panels become one parameterized Component."
-    },
-    {
-      "rule": "scoped-css-preferred-length",
-      "fingerprint": "5b0df9be2bf60d3653449636bfa2bf2f8061414f43a819198ba46ba5bfce9429",
-      "locations": [
-        "logos/public-site/src/research_ledger.lg:13"
-      ],
-      "reason": "The first publication ledger combined its full visual treatment before this repository adopted the scoped-CSS design limit.",
-      "removalCondition": "Extract the section heading, publication cards, and pipeline rail into imported Components before changing this exact CSS."
-    }
-  ]
+  "debt": []
 }
