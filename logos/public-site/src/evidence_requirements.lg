@@ -1,0 +1,35 @@
+# Public evidence requirements
+
+## Component EvidenceRequirements
+
+View:
+    <div class="evidence">
+      <div class="evidence-item"><span>Source snapshot</span><strong>Required</strong></div>
+      <div class="evidence-item"><span>Evidence bundle</span><strong>Required</strong></div>
+      <div class="evidence-item"><span>Independent review</span><strong>Required</strong></div>
+      <div class="evidence-item"><span>Decision record</span><strong>Required</strong></div>
+    </div>
+
+Style:
+    .evidence {
+        display: grid;
+        grid-template-columns: repeat(auto-fit,minmax(150px,1fr));
+        gap: 10px;
+        margin-top: 30px;
+    }
+    .evidence-item {
+        padding: 14px;
+        background: #f2efe7;
+        border-radius: 10px;
+    }
+    .evidence-item span {
+        display: block;
+        color: #758087;
+        font-size: 10px;
+    }
+    .evidence-item strong {
+        display: block;
+        margin-top: 6px;
+        color: #263d48;
+        font-size: 12px;
+    }

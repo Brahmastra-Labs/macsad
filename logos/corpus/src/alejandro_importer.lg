@@ -1,9 +1,9 @@
 # Authenticated LGX command preparation boundary
 
 Import AlejandroCatalog from "./alejandro_catalog.lg".
+Import AlejandroProvenance from "./alejandro_provenance.lg".
 Import AlejandroRevision from "./alejandro_revision.lg".
 Import AlejandroRevisionColumns from "./alejandro_revision_columns.lg".
-Import AlejandroProvenance from "./alejandro_provenance.lg".
 
 ## To prepareAlejandroProblem (manifestRaw: Text, sourceRaw: Text, ledgerRaw: Text, pins: AlejandroPins) -> Result of AlejandroRevisionDraft and Text:
     If length of text_bytes(manifestRaw) is greater than 16777216:

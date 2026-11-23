@@ -17,6 +17,7 @@ Import AlejandroProvenance from "./alejandro_provenance.lg".
             Return a new Err with error failure.
         When Ok (index):
             Inspect jsonNoExtraKeys(index, ["schema", "sourceHost", "sourceRoot", "pins"]):
+                When Ok (accepted): Let _ be accepted.
                 When Err (failure):
                     Return a new Err with error failure.
             Inspect alejandroArrayField(index, "pins"):

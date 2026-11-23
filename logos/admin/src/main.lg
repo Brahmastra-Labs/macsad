@@ -4,6 +4,10 @@ Import AdminApp from "./admin_app.lg".
 Import AdminHeader from "./admin_header.lg".
 Import AdminInvariants from "./admin_invariants.lg".
 Import AdminPolicy from "./admin_policy.lg".
+Import AdminShell from "./admin_shell.lg".
+Import BoardDraft from "./board_draft.lg".
+Import BoardHealth from "./board_health.lg".
+Import BoardLanes from "./board_lanes.lg".
 Import BoardRowDecoder from "./board_row_decoder.lg".
 Import BoardWirePolicy from "./board_wire_policy.lg".
 Import BoardWorkspace from "./board_workspace.lg".
@@ -15,6 +19,4 @@ The complete reachable closure is also imported here as a pinned-compiler
 scope-attribution compatibility lock; logical dependencies remain module-local.
 
 ## Main
-Render:
-    css "html, body, #root { width: 100%; min-height: 100%; } body { max-width: none; margin: 0; padding: 0; }"
-Mount MacsAdAdmin at "#root".
+Mount MacsAdAdmin.

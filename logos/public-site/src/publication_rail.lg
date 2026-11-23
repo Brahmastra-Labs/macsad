@@ -1,0 +1,53 @@
+# Public publication-process rail
+
+## Component PublicationRail
+
+State:
+    Let pipelineSteps be ["Question", "Attempt", "Evidence", "Review", "Publication"].
+
+View:
+    <aside class="rail">
+      <h3>Path to publication</h3>
+      <ol class="pipeline">
+        {for each step in pipelineSteps:}
+          <li><span class="step">·</span><span>{step}</span></li>
+        {end}
+      </ol>
+    </aside>
+
+Style:
+    .rail {
+        padding: 24px;
+        color: #eaf0ef;
+        background: #173d4b;
+        border-radius: 17px;
+    }
+    .rail h3 {
+        margin: 0 0 18px;
+        font: 700 18px/1.2 Georgia, serif;
+    }
+    .pipeline {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+    .pipeline li {
+        display: grid;
+        grid-template-columns: 25px 1fr;
+        gap: 10px;
+        align-items: center;
+        padding: 11px 0;
+        color: #b9cbd1;
+        border-bottom: 1px solid rgba(255,255,255,.1);
+        font-size: 12px;
+    }
+    .step {
+        width: 22px;
+        height: 22px;
+        display: grid;
+        place-items: center;
+        color: #d8ff72;
+        border: 1px solid rgba(216,255,114,.42);
+        border-radius: 999px;
+        font: 700 9px/1 ui-monospace, monospace;
+    }

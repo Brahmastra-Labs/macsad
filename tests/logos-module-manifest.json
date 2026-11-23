@@ -69,6 +69,23 @@
           "minimumProperties": 1,
           "minimumProven": 1
         }
+      ],
+      "pageSuites": [
+        {
+          "path": "pages/admin.lg",
+          "expectedTests": [
+            "administrative navigation opens the research record",
+            "local question staging retains the draft and explains persistence",
+            "board preserves all six terminal-policy lanes"
+          ],
+          "mountedTests": [
+            "administrative navigation opens the research record",
+            "local question staging retains the draft and explains persistence",
+            "board preserves all six terminal-policy lanes"
+          ],
+          "minimumProperties": 0,
+          "minimumProven": 0
+        }
       ]
     },
     {
@@ -83,6 +100,12 @@
           "severity": "warning",
           "file": "src/main.lg",
           "message": "`Import PublicationPolicy` is unused \u2014 no name from it is referenced here."
+        },
+        {
+          "code": "unused-import",
+          "severity": "warning",
+          "file": "src/main.lg",
+          "message": "`Import ResearchSelection` is unused \u2014 no name from it is referenced here."
         }
       ],
       "domBundle": true,
@@ -91,6 +114,16 @@
           "path": "src/publication_policy.lg",
           "expectedTests": [
             "Publication visibility is fail closed"
+          ],
+          "minimumProperties": 1,
+          "minimumProven": 1
+        },
+        {
+          "path": "src/research_selection.lg",
+          "expectedTests": [
+            "Public topic selection mounts its honest initial state",
+            "Public topic filters update mounted selection",
+            "Topic choices stay within the public catalog"
           ],
           "minimumProperties": 1,
           "minimumProven": 1
@@ -162,6 +195,23 @@
           ],
           "minimumProperties": 1,
           "minimumProven": 1
+        }
+      ],
+      "pageSuites": [
+        {
+          "path": "pages/lean.lg",
+          "expectedTests": [
+            "Lean form rejects an empty declaration without clearing source",
+            "Lean form navigates only after the server accepts the job",
+            "Lean form retains the submitted source when the server denies it"
+          ],
+          "mountedTests": [
+            "Lean form rejects an empty declaration without clearing source",
+            "Lean form navigates only after the server accepts the job",
+            "Lean form retains the submitted source when the server denies it"
+          ],
+          "minimumProperties": 0,
+          "minimumProven": 0
         }
       ]
     },

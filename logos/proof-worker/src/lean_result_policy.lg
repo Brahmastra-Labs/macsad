@@ -1,7 +1,7 @@
 # Lean receipt dispatch; no case acceptance or publication authority
 
-Import LeanPolicyFacts from "./lean_policy_facts.lg".
 Import LeanImportPolicy from "./lean_import_policy.lg".
+Import LeanPolicyFacts from "./lean_policy_facts.lg".
 Import LeanReplayPolicy from "./lean_replay_policy.lg".
 
 ## To leanResultStatus (facts: Seq of Text) -> Text:

@@ -1,0 +1,25 @@
+# Read-only gateway connection
+
+The existing gateway health read is the only network effect in this component.
+
+## Component BoardHealth
+State:
+    Let healthState be "Not checked".
+Actions:
+    To checkHealth:
+        Set healthState to "Checking /api/v1/health …".
+        Let onHealth be (requestId: Int) ->:
+            Set healthState to responseText().
+        Call fetchText with "/api/v1/health" and onHealth.
+View:
+    <section class="health-card">
+      <h2>Gateway connection</h2>
+      <p id="health-status" role="status">{healthState}</p>
+      <button id="check-health" on-click={checkHealth}>Check connection</button>
+    </section>
+Style:
+    .health-card { flex: 1 1 250px; max-width: 360px; padding: 14px 15px; background: #fffdf7; border: 1px solid #d9d5c9; border-radius: 12px; }
+    h2 { margin: 0 0 8px; color: #52636d; font: 700 12px/1.4 ui-monospace, monospace; }
+    p { min-height: 34px; margin: 0 0 10px; color: #1d3b48; font: 600 11px/1.45 ui-monospace, monospace; overflow-wrap: anywhere; }
+    button { padding: 8px 11px; color: #f8f6ef; background: #153d4d; border: 0; border-radius: 8px; font-weight: 700; cursor: pointer; }
+    button:focus-visible { outline: 3px solid #16758a; outline-offset: 3px; }

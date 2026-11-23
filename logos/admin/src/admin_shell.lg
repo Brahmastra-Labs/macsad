@@ -1,0 +1,56 @@
+# MaCSad admin shell
+
+Import AdminHeader from "./admin_header.lg".
+Import BoardWorkspace from "./board_workspace.lg".
+Import ReadOnlyPanels from "./read_only_panels.lg".
+
+The shell owns navigation and receives the board's policy outcomes as inputs.
+It imports no policy module, so a Page can mount it without a tested leaf.
+Its children own their state and scoped styles.
+
+## Component AdminShell (columnCount: Int) and (closedWorkAccepted: Bool)
+State:
+    Let currentView be "Board".
+Actions:
+    To navigate (destination: Text):
+        Set currentView to destination.
+View:
+    <div class="app-shell">
+      <AdminHeader/>
+      <div class="workspace">
+        <nav class="sidebar" aria-label="Workspace">
+          <p class="eyebrow">Workspace</p>
+          <button id="nav-board" on-click={navigate("Board")}>Board <span>01</span></button>
+          <button id="nav-organization" on-click={navigate("Organization")}>Organization <span>02</span></button>
+          <button id="nav-research" on-click={navigate("Research")}>Research <span>03</span></button>
+          <button id="nav-operations" on-click={navigate("Operations")}>Operations <span>04</span></button>
+          <p class="sidebar-note">This preview is read-only. A local draft is not saved research work.</p>
+        </nav>
+        <main class="main">
+          {if currentView is equal to "Board":}<BoardWorkspace columnCount={columnCount} closedWorkAccepted={closedWorkAccepted}/>{end}
+          {if currentView is equal to "Organization":}<OrganizationPanel/>{end}
+          {if currentView is equal to "Research":}<ResearchPanel/>{end}
+          {if currentView is equal to "Operations":}<OperationsPanel/>{end}
+        </main>
+      </div>
+    </div>
+Style:
+    :global(html), :global(body) { width: 100%; min-height: 100%; }
+    :global(body) { max-width: none; margin: 0; padding: 0; }
+    * { box-sizing: border-box; }
+    .app-shell { min-height: 100vh; color: #14202b; background: #f2f0e9; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+    .workspace { min-height: calc(100vh - 74px); display: flex; flex-wrap: wrap; }
+    .sidebar { flex: 1 1 224px; display: grid; align-content: start; gap: 6px; padding: 30px 18px; background: #e8e5db; border-right: 1px solid #d4d0c4; }
+    .eyebrow { margin: 0 10px 7px; color: #66737c; font: 700 10px/1.2 ui-monospace, monospace; letter-spacing: .16em; text-transform: uppercase; }
+    button { display: flex; justify-content: space-between; padding: 12px 13px; color: #253746; background: transparent; border: 1px solid transparent; border-radius: 10px; cursor: pointer; }
+    button:hover { background: #fffdf7; border-color: #d5d1c5; }
+    button span { color: #61717a; margin-left: 1rem; }
+    .sidebar-note { margin: 24px 5px 0; padding: 16px; color: #3f4e57; background: #f7f4ec; border: 1px solid #d7d2c5; border-radius: 12px; font-size: 12px; line-height: 1.55; }
+    .main { flex: 999 1 600px; min-width: 0; padding: clamp(24px,4vw,54px); overflow: hidden; }
+    button:focus-visible { outline: 3px solid #16758a; outline-offset: 3px; }
+    @media (max-width: 820px) {
+      .workspace { display: block; }
+      .sidebar { grid-template-columns: repeat(4,1fr); padding: 10px; border-right: 0; border-bottom: 1px solid #d4d0c4; }
+      .eyebrow, .sidebar-note, button span { display: none; }
+      button { justify-content: center; padding: 10px 5px; font-size: 11px; }
+    }

@@ -1,31 +1,37 @@
 # MaCSad read-only administrative areas
 
-The three informational areas remain separate components so navigation is real
-while no unimplemented mutation is implied.
+One parameterized panel owns the shared styling for the three information areas.
 
-## Component OrganizationPanel:
-    View:
-        css ".panel { max-width: 940px; padding: clamp(24px,4vw,42px); background: #fffdf8; border: 1px solid #d7d2c6; border-radius: 16px; box-shadow: 0 14px 45px rgba(16,44,59,.07); } .kicker { margin: 0 0 9px; color: #146878; font: 800 11px/1 ui-monospace, monospace; letter-spacing: .15em; text-transform: uppercase; } .panel h2 { margin: 0 0 12px; color: #123342; font: 750 30px/1.1 Georgia, serif; } .panel p { color: #5e6c73; line-height: 1.7; } .boundary { margin-top: 22px; padding: 16px; color: #3d4c55; background: #f2efe6; border-left: 3px solid #16758a; font-size: 12px; line-height: 1.6; }"
-        section [class="panel"]:
-            p [class="kicker"]: "Virtual organization"
-            h2: "Roles are capability bundles, not costumes."
-            p: "This surface will map actors, role assignments, handoff contracts, and escalation paths. The baseline keeps it read-only until identity and authorization are wired end to end."
-            div [class="boundary"]: "Sprint boundary · no actor creation, role mutation, or delegated authority is implemented yet."
+## Component InfoPanel (kicker: Text) and (heading: Text) and (description: Text) and (boundary: Text)
+View:
+    <section class="panel">
+      <p class="kicker">{kicker}</p><h2>{heading}</h2>
+      <p>{description}</p><div class="boundary">{boundary}</div>
+    </section>
+Style:
+    .panel { max-width: 940px; padding: clamp(24px,4vw,42px); background: #fffdf8; border: 1px solid #d7d2c6; border-radius: 16px; }
+    .kicker { margin: 0 0 9px; color: #146878; font: 800 11px/1 ui-monospace, monospace; letter-spacing: .15em; text-transform: uppercase; }
+    h2 { margin: 0 0 12px; color: #123342; font: 750 30px/1.1 Georgia, serif; }
+    p { color: #5e6c73; line-height: 1.7; }
+    .boundary { margin-top: 22px; padding: 16px; color: #3d4c55; background: #f2efe6; border-left: 3px solid #16758a; font-size: 12px; line-height: 1.6; }
 
-## Component ResearchPanel:
-    View:
-        css ".panel { max-width: 940px; padding: clamp(24px,4vw,42px); background: #fffdf8; border: 1px solid #d7d2c6; border-radius: 16px; box-shadow: 0 14px 45px rgba(16,44,59,.07); } .kicker { margin: 0 0 9px; color: #146878; font: 800 11px/1 ui-monospace, monospace; letter-spacing: .15em; text-transform: uppercase; } .panel h2 { margin: 0 0 12px; color: #123342; font: 750 30px/1.1 Georgia, serif; } .panel p { color: #5e6c73; line-height: 1.7; } .boundary { margin-top: 22px; padding: 16px; color: #3d4c55; background: #f2efe6; border-left: 3px solid #16758a; font-size: 12px; line-height: 1.6; }"
-        section [class="panel"]:
-            p [class="kicker"]: "Discovery record"
-            h2: "Claims travel with evidence."
-            p: "Problems, conjectures, experiments, proof attempts, artifacts, and review decisions will form a traceable research graph rooted in the watched GitHub repository."
-            div [class="boundary"]: "Sprint boundary · the theorem-prover and repository adapters are planned seams, not simulated services."
+## Component OrganizationPanel
+View:
+    <InfoPanel kicker="Virtual organization" heading="Roles and responsibilities"
+      description="Actors, role assignments, handoffs, and escalation paths belong here. This preview is read-only."
+      boundary="Actor creation, role changes, and delegation are not available in this preview."
+    />
 
-## Component OperationsPanel:
-    View:
-        css ".panel { max-width: 940px; padding: clamp(24px,4vw,42px); background: #fffdf8; border: 1px solid #d7d2c6; border-radius: 16px; box-shadow: 0 14px 45px rgba(16,44,59,.07); } .kicker { margin: 0 0 9px; color: #146878; font: 800 11px/1 ui-monospace, monospace; letter-spacing: .15em; text-transform: uppercase; } .panel h2 { margin: 0 0 12px; color: #123342; font: 750 30px/1.1 Georgia, serif; } .panel p { color: #5e6c73; line-height: 1.7; } .boundary { margin-top: 22px; padding: 16px; color: #3d4c55; background: #f2efe6; border-left: 3px solid #16758a; font-size: 12px; line-height: 1.6; }"
-        section [class="panel"]:
-            p [class="kicker"]: "System truth"
-            h2: "Boring operations are trustworthy operations."
-            p: "Deployments, worker leases, outbox delivery, budgets, and publication batches will report concrete state here. The only live call in this shell is the safe gateway health read."
-            div [class="boundary"]: "Sprint boundary · PostgreSQL is not yet connected to LOGOS, and Cloudflare credentials have not been supplied."
+## Component ResearchPanel
+View:
+    <InfoPanel kicker="Discovery record" heading="Claims travel with evidence."
+      description="Problems, conjectures, experiments, proof attempts, artifacts, and review decisions form the research record."
+      boundary="This preview does not start research runs or publish results."
+    />
+
+## Component OperationsPanel
+View:
+    <InfoPanel kicker="System truth" heading="Research operations"
+      description="Worker leases, delivery, budgets, and publication batches will report their saved state here."
+      boundary="Only the gateway connection check is live in this preview."
+    />
