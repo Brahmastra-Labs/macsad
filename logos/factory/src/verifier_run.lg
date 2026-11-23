@@ -96,12 +96,11 @@ the next; a database that does not answer is waited for, and ends a `once` run.
 
 ## To runVerifier (once: Bool) -> Outcome:
     Let tc be defaultToolchain().
-    Inspect verifierId(tc):
+    Inspect startVerifier(tc):
         When Err (e):
             Return failed(e).
         When Ok (id):
             Let base be trimChars(envOr("MACSAD_COORDINATOR", "http://coordinator:8080"), "/").
-            Show "verifier " + id's holder + ": public key sha256 " + id's publicKeySha + ", toolchain sha256 " + id's toolchainSha.
             Let mutable count be 0.
             Let mutable going be true.
             While going:

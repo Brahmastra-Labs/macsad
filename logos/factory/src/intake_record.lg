@@ -68,11 +68,13 @@ A checked statement draft stored for review, and its first review queued. A
     Return a new Err with error "no draft".
 
 ## Note
-What the intake answers: the status, and the receipt the worker reads.
+What the intake answers: the status, and the receipt the worker reads;
+`released` is a refusal that still ended its lease, to be committed.
 
 ## A IntakeResult has:
     a status, which is Int.
     a receipt, which is AttemptReceipt.
+    a released, which is Bool.
 
 ## To intakeRefusal (status: Int, outcome: Text, detail: Text) -> IntakeResult:
     Return a new IntakeResult with status status and receipt (a new AttemptReceipt with accepted false and outcome outcome and detail detail).

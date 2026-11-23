@@ -8,7 +8,9 @@ lapsed or was handed on (a stale fencing token) changes nothing. An attempt and 
 trail entry that disagree with the unit about the problem change nothing. A trail
 entry whose hash does not seal its own contents is refused. An approach already
 recorded as a dead end on this problem is refused, so no contributor pays twice for
-the same wall. Everything else is recorded, and three things follow from it:
+the same wall, and its lease is released at once: the unit goes back on the board
+for another approach instead of idling until the lease runs out. Everything else
+is recorded, and three things follow from it:
 
 - an entry written against an older head of the trail is RESEALED onto the head (a
 concurrent attempt got there first; the content is unchanged, its place moves);
@@ -33,12 +35,13 @@ concurrent attempt got there first; the content is unchanged, its place moves);
     a reseal, which is Bool.
     a recordDeadEnd, which is Bool.
     an enqueueVerify, which is Bool.
+    a releaseLease, which is Bool.
 
 ## Note
 A refusal: nothing is written.
 
 ## To refuseIntake (status: Int, outcome: Text) -> IntakeDecision:
-    Return a new IntakeDecision with accept false and status status and outcome outcome and reseal false and recordDeadEnd false and enqueueVerify false.
+    Return a new IntakeDecision with accept false and status status and outcome outcome and reseal false and recordDeadEnd false and enqueueVerify false and releaseLease false.
 
 ## Note
 The decision on one attempt.
@@ -51,11 +54,16 @@ The decision on one attempt.
     If f's entrySealed is equal to false:
         Return refuseIntake(422, "unsealed_entry").
     If f's deadEnd:
-        Return refuseIntake(409, "dead_end").
+        Let mutable wall be refuseIntake(409, "dead_end").
+        Set wall's releaseLease to true.
+        Return wall.
     Let mutable outcome be "recorded".
     If f's claimedVerified:
         Set outcome to "awaiting_verifier".
-    Return a new IntakeDecision with accept true and status 201 and outcome outcome and reseal (f's atHead is equal to false) and recordDeadEnd f's failedApproach and enqueueVerify f's claimedVerified.
+    Let mutable d be a new IntakeDecision with accept true and status 201 and outcome outcome and reseal (f's atHead is equal to false) and recordDeadEnd f's failedApproach.
+    Set d's enqueueVerify to f's claimedVerified.
+    Set d's releaseLease to false.
+    Return d.
 
 ## Note
 Every fact true but the ones named, for the tests.
@@ -77,6 +85,8 @@ Expect that d's enqueueVerify is equal to false.
 Expect that decideIntake(factsWith(false, false, true))'s outcome is equal to "stale_lease".
 Expect that decideIntake(factsWith(true, true, false))'s outcome is equal to "dead_end".
 Expect that decideIntake(factsWith(true, true, false))'s status is equal to 409.
+Expect that decideIntake(factsWith(true, true, false))'s releaseLease is equal to true.
+Expect that decideIntake(factsWith(false, true, false))'s releaseLease is equal to false.
 Let mutable f be factsWith(true, false, false).
 Set f's sameProblem to false.
 Expect that decideIntake(f)'s outcome is equal to "mismatched_problem".
@@ -102,3 +112,4 @@ For all booleans live and sameProblem and sealed and head and dead and claimed a
     Expect that d's enqueueVerify is equal to (d's accept and claimed).
     Expect that d's outcome is not equal to "solved".
     Expect that (d's accept is equal to false and (d's reseal or d's recordDeadEnd)) is equal to false.
+    Expect that d's releaseLease is equal to (live and sameProblem and sealed and dead).

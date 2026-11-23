@@ -87,7 +87,7 @@ node the atlas does not hold (`root` always exists), in one statement.
     Return join(q, " ").
 
 ## To focusSql () -> Text:
-    Let mutable q be ["SELECT coalesce(json_agg(x ORDER BY x.kind DESC, x.problems DESC, x.value), '[]')::text FROM ("].
+    Let mutable q be ["SELECT coalesce(json_agg(x ORDER BY x.kind, x.problems DESC, x.value), '[]')::text FROM ("].
     Push "SELECT p.cohort AS value, coalesce(min(n.label), p.cohort) AS label, 'cohort' AS kind, count(*) AS problems" to q.
     Push "FROM factory.problem p LEFT JOIN factory.node n ON n.id = 'cohort:' || p.cohort WHERE p.status = 'open' GROUP BY p.cohort" to q.
     Push "UNION ALL SELECT p.collection, coalesce(min(n.label), p.collection), 'collection', count(*) FROM factory.problem p" to q.

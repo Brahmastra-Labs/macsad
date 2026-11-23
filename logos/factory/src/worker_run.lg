@@ -61,7 +61,9 @@ The unit a grant hands over, worked; a grant without one stops the worker.
     Return (a new UnitStep with line "unworked" and stop true, budget).
 
 ## Note
-The worker's run, one line per unit, and what it spent.
+The worker's run, one line per unit, and what it spent. A refused dead end
+releases its unit at once, so the next lease may well be the same unit again;
+two dead ends in a row stop the run, since the model keeps finding the same wall.
 
 ## To runWorker (limit: Int) -> Outcome:
     Inspect workerSettings():
@@ -73,6 +75,7 @@ The worker's run, one line per unit, and what it spent.
             Let mutable going be true.
             Let mutable worked be 0.
             Let mutable reached be true.
+            Let mutable walls be 0.
             While going and worked is less than limit:
                 Let r be a new LeaseRequest with holder ws's holder and displayName ws's holder and kinds ws's kinds and focus ws's focus and ttlMs ws's ttlMs and budgetMicros budget's limitMicros.
                 Inspect leaseUnit(ws's base, r):
@@ -89,7 +92,12 @@ The worker's run, one line per unit, and what it spent.
                             Set budget to after.
                             Set worked to worked + 1.
                             Push step's line to lines.
-                            If step's stop:
+                            Set walls to walls + 1.
+                            If step's deadEnd is equal to false:
+                                Set walls to 0.
+                            If walls is at least 2:
+                                Push "two answers in a row repeated a known dead end; the worker stops rather than pay for a third" to lines.
+                            If step's stop or walls is at least 2:
                                 Set going to false.
             Push "{worked} unit(s) worked; spent " + formatMicros(budget's spentMicros) + " of " + formatMicros(budget's limitMicros) to lines.
             If reached is equal to false:

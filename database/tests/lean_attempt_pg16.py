@@ -58,6 +58,8 @@ INPUTS = [
     'database/tests/lean_recovery_v3_pg16.py',
     'database/migrations/0004_factory.sql',
     'database/tests/0004_factory_invariants.sql',
+    'database/migrations/0005_factory_verifier.sql',
+    'database/tests/0005_factory_verifier_invariants.sql',
 ]
 PSQL = ['psql', '--no-psqlrc', '--quiet', '--tuples-only', '--no-align',
         '--set=ON_ERROR_STOP=1', '--set=VERBOSITY=verbose']
@@ -73,7 +75,8 @@ MIGRATIONS = ('database/migrations/0001_initial_schema.sql',
 
 FORWARD_MIGRATION = 'database/migrations/0003_lean_admission_deadlines.sql'
 FACTORY_MIGRATION = 'database/migrations/0004_factory.sql'
-CURRENT_MIGRATIONS = MIGRATIONS + (FORWARD_MIGRATION, FACTORY_MIGRATION)
+VERIFIER_MIGRATION = 'database/migrations/0005_factory_verifier.sql'
+CURRENT_MIGRATIONS = MIGRATIONS + (FORWARD_MIGRATION, FACTORY_MIGRATION, VERIFIER_MIGRATION)
 
 
 def source_manifest(root, expected_migrations=MIGRATIONS):
@@ -300,6 +303,23 @@ def main():
                 h.run(PSQL + ['--file', str(staged/'database/tests/0001_invariants.sql')], factory_fresh)
                 h.run(PSQL + ['--file', str(staged/'database/tests/0004_factory_invariants.sql')], factory_fresh)
                 h.results['factory_invariants_on_fresh_v4'] = 'passed'
+                # The verifier's migration follows the same way: the upgraded v4 database takes it twice
+                # without touching v1-v4 provenance; it and a fresh v5 database hold the factory
+                # invariants of both 0004 and 0005, and the fresh one the original 0001 invariants.
+                v4_ledger = json.loads(h.ledger(upgrade))
+                copy_pinned(root, staged, VERIFIER_MIGRATION, sources)
+                h.migrate_twice(staged, upgrade, 'v4_to_v5_verifier_upgrade_repeat')
+                if json.loads(h.ledger(upgrade))[:4] != v4_ledger:
+                    raise AssertionError('verifier upgrade changed historical v1-v4 ledger provenance')
+                h.run(PSQL + ['--file', str(staged/'database/tests/0004_factory_invariants.sql')], upgrade)
+                h.run(PSQL + ['--file', str(staged/'database/tests/0005_factory_verifier_invariants.sql')], upgrade)
+                h.results['verifier_invariants_on_upgraded_v5'] = 'passed'
+                verifier_fresh = h.create('fresh')
+                h.migrate_twice(staged, verifier_fresh, 'v5_fresh_repeat')
+                h.run(PSQL + ['--file', str(staged/'database/tests/0001_invariants.sql')], verifier_fresh)
+                h.run(PSQL + ['--file', str(staged/'database/tests/0004_factory_invariants.sql')], verifier_fresh)
+                h.run(PSQL + ['--file', str(staged/'database/tests/0005_factory_verifier_invariants.sql')], verifier_fresh)
+                h.results['verifier_invariants_on_fresh_v5'] = 'passed'
         if any(digest(root / relative) != expected for relative, expected in sources.items()):
             raise AssertionError('test source changed during execution')
         outcome['passed'] = True
